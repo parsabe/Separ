@@ -12,6 +12,7 @@ import contextlib
 import hmac
 import json
 import os
+import re
 import secrets
 import shutil
 import signal
@@ -32,6 +33,7 @@ from typing import Any
 
 from . import signing
 from .calculus import evidence as calc
+from .families import classify, classify_judgement
 from .golden import load_golden_cases
 from .intent import analyze as analyze_command
 from .keys import new_device_key
@@ -207,6 +209,50 @@ def _secret_file(path: Path, make) -> str:
     return path.read_text(encoding="utf-8").strip()
 
 
+# Browser observations (v2.1, A68): what the extension may send, and the limits on it.
+BROWSER_KINDS = ("clipboard_write", "navigate", "download")
+BROWSER_MAX_TEXT = 16384
+BROWSER_MAX_URL = 4096
+BROWSER_RATE = (30, 10.0)  # at most 30 observations in 10 seconds
+_DOMAIN_RE = re.compile(
+    r"^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)*$"
+)
+
+
+class _RateLimit:
+    """At most `count` calls in any window of `seconds` (a sliding window of timestamps)."""
+
+    def __init__(self, count: int, seconds: float) -> None:
+        self.count, self.seconds = count, seconds
+        self._stamps: deque[float] = deque()
+        self._lock = threading.Lock()
+
+    def allow(self, now: float) -> bool:
+        with self._lock:
+            while self._stamps and now - self._stamps[0] >= self.seconds:
+                self._stamps.popleft()
+            if len(self._stamps) >= self.count:
+                return False
+            self._stamps.append(now)
+            return True
+
+
+def browser_action(mode: Mode, decision: Decision, kind: str) -> str:
+    """What the extension does with a decision. Observe never acts and warn never blocks (Phase
+    3); a hold asks the user, and the extension denies when the hold times out."""
+    if mode is Mode.OBSERVE or decision is Decision.ALLOW:
+        return "none"
+    if mode is Mode.WARN:
+        return "warn"
+    if decision is Decision.HOLD:
+        return "confirm"
+    return {
+        "clipboard_write": "replace_clipboard",
+        "download": "cancel_download",
+        "navigate": "block_page",
+    }[kind]
+
+
 @dataclass(frozen=True)
 class GuardOutcome:
     story_id: str
@@ -279,6 +325,9 @@ class LiveBarrier:
         self._stop_event = threading.Event()
         self._watcher_thread: threading.Thread | None = None
         self.watcher_beat = time.monotonic()  # the watcher loop's last turn (health check)
+        self._browser_rate = _RateLimit(*BROWSER_RATE)
+        self._browser_actor: Actor | None = None
+        self._browser_holds: set[str] = set()
         self.health: Any = None  # a HealthMonitor once `serve` starts one
         self._demo_depth = 0  # > 0 while a dashboard preset runs (under the lock)
 
@@ -557,7 +606,13 @@ class LiveBarrier:
         attack_type: str | None = None,
         category: str = "live",
         expected: str | None = None,
+        source_domain: str | None = None,
+        input_method: str | None = None,
     ) -> GuardOutcome:
+        """Judge a command as written. `source_domain` names where external content came from
+        (the page of a browser observation, v2.1); without it the first host in the command
+        stands in, as before. `input_method` records how the content arrived; it is context, not
+        evidence (no signal reads it)."""
         cmd = command.strip()
         if not cmd:
             raise ValueError("command must not be empty")
@@ -593,8 +648,12 @@ class LiveBarrier:
                     )  # fmt: skip
                 else:
                     in_attrs: dict[str, Any] = {"source_class": origin}
-                    if hosts:
+                    if source_domain:
+                        in_attrs["domain"] = source_domain
+                    elif hosts:
                         in_attrs["domain"] = hosts[0]
+                    if input_method:
+                        in_attrs["input_method"] = input_method
                     raw_events.append(raw(EventType.CONTENT_IN, "command_text", cmd, **in_attrs))
 
             # a preload library from a scratch location hides code inside another program
@@ -706,6 +765,108 @@ class LiveBarrier:
                 explanation=explanation,
                 output=output,
             )
+
+    # -- browser observations (v2.1, A68) ------------------------------------------------------
+
+    def browser_observation(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Judge what the browser extension saw, before anything runs.
+
+        `clipboard_write`: a page put text on the clipboard. It is judged as the command it would
+        be if pasted into a shell (the ClickFix, FileFix and TerminalFix families), with the page
+        as the external source. `navigate` and `download`: the page or file address is checked in
+        Observe against the threat lists. The text and the address reach Observe in memory only;
+        nothing raw is logged or returned. This path can never run a command: it has no `execute`
+        and the caller cannot choose the role or the origin.
+        """
+        kind = data.get("kind")
+        if kind not in BROWSER_KINDS:
+            raise ValueError(f"unknown browser observation kind {kind!r}")
+        forbidden = sorted(set(data) & {"execute", "allow_non_block_exec", "role", "origin"})
+        if forbidden:
+            raise ValueError(f"browser observations cannot set {forbidden}")
+        domain = str(data.get("domain") or "").strip().lower().rstrip(".")
+        if domain and not _DOMAIN_RE.match(domain):
+            raise ValueError("domain must be a host name")
+        if not self._browser_rate.allow(time.monotonic()):
+            # missing information never generates evidence: an observation dropped by the limit
+            # is reported as unavailable, not judged
+            return {"decision": "unavailable", "reason": "rate_limited", "action": "none"}
+        if kind == "clipboard_write":
+            text = data.get("text")
+            if not isinstance(text, str) or not text.strip():
+                raise ValueError("clipboard_write needs the clipboard text")
+            if len(text) > BROWSER_MAX_TEXT:
+                raise ValueError("clipboard text too long")
+            method = "user_selection" if data.get("user_selection") is True else "page_script"
+            out = self.guard_command(
+                text, origin="web", role="interactive_shell", execute=False,
+                attack_type="Browser clipboard", category="browser", expected=None,
+                source_domain=domain or None, input_method=method,
+            )  # fmt: skip
+            family = classify(
+                out.signals, override=out.override, sources=("web",), roles=("interactive_shell",)
+            )
+            story_id, decision, explanation = out.story_id, Decision(out.decision), out.explanation
+            log_odds = out.log_odds
+        else:
+            url = data.get("url")
+            if not isinstance(url, str) or not url or len(url) > BROWSER_MAX_URL:
+                raise ValueError(f"{kind} needs an address of at most {BROWSER_MAX_URL} characters")
+            source = "download" if kind == "download" else "web"
+            with self._lock:
+                if self._browser_actor is None:
+                    user = os.environ.get("USER") or "operator"
+                    self._browser_actor = self._make_actor("proc:browser-ext", "browser", user)
+                attrs: dict[str, Any] = {"source_class": source}
+                if domain:
+                    attrs["domain"] = domain
+                ev = RawEvent(
+                    event_id=self._next_id(), ts=datetime.now(UTC), device="dev-7f3a",
+                    type=EventType.CONTENT_IN, actor=self._browser_actor,
+                    object=RawObjectRef(class_="download" if source == "download" else "web_page",
+                                        content=url),
+                    attrs=attrs,
+                )  # fmt: skip
+                story_id, j = self._feed_raw_events([ev])
+                family = classify_judgement(j, sources=(source,), roles=("browser",))
+                decision = j.decision
+                explanation = self._explain_story(story_id, j)
+                log_odds = float(j.log_odds if j.log_odds is not None else 0.0)
+        with self._lock:
+            self._tag_story(story_id, attack_type=f"Browser: {family.name}", category="browser")
+            holds = []
+            if self.pipeline.gate is not None:
+                holds = [
+                    {"hold_id": h.hold_id, "can_continue": h.can_continue}
+                    for h in self.pipeline.gate.holds.values()
+                    if h.story_id == story_id and h.state.value == "pending"
+                ]
+                for h in holds:
+                    self._browser_holds.add(h["hold_id"])
+        mode = self.policy.mode
+        self._log_line(f"BROWSER [{kind}] -> {decision.value.upper()} ({family.id})")
+        return {
+            "kind": kind,
+            "story_id": story_id,
+            "decision": decision.value,
+            "mode": mode.value,
+            "action": browser_action(mode, decision, kind),
+            "family": family.to_dict(),
+            "summary": explanation,
+            "log_odds": round(log_odds, 2),
+            "predicted": True,
+            "holds": holds,
+            "hold_timeout_s": float(self.policy.decisions.endpoint_hold_timeout),
+        }
+
+    def answer_browser_hold(self, hold_id: str, answer: str) -> dict[str, Any]:
+        """The user's answer to a hold that the browser extension shows. Only holds that a browser
+        observation opened can be answered this way."""
+        if hold_id not in self._browser_holds:
+            raise ValueError(f"no browser hold {hold_id!r}")
+        res = self.resolve_hold(hold_id, "endpoint", answer)
+        self._browser_holds.discard(hold_id)
+        return res
 
     # -- sandbox directory watcher & quarantine ------------------------------------------------
 
@@ -1562,6 +1723,15 @@ def make_http_server(
                         allow_non_block_exec=bool(data.get("allow_non_block_exec", False)),
                     )
                     self._send_json(HTTPStatus.OK, outcome.to_dict())
+                    return
+                if self.path == "/api/browser":
+                    if data.get("kind") == "hold_answer":
+                        res = barrier.answer_browser_hold(
+                            str(data["hold_id"]), str(data.get("answer", "stop"))
+                        )
+                    else:
+                        res = barrier.browser_observation(data)
+                    self._send_json(HTTPStatus.OK, res)
                     return
                 if self.path == "/api/preset":
                     res = barrier.run_preset(str(data.get("name", "")))
