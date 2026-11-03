@@ -36,7 +36,7 @@ from .keys import new_device_key
 from .learning import ContractLearner
 from .pipeline import Pipeline
 from .pipeline.observe import normalize
-from .policy import default_policy
+from .policy import Policy, default_policy_dict
 from .pseudonym import (
     Approval,
     AuditLog,
@@ -67,6 +67,9 @@ SECRETS = {
     "ip": ["203.0.113.77"],
     "url_path": ["/lab-secret-path/login", "/admin-backup-old"],
     "program": ["lab-marker-program"],
+    # v2.1: the raw path of a decoy-file touch and the name of a decoy listener (A69)
+    "path": ["/srv/lab-marker/Finance/vault-lab.csv"],
+    "decoy": ["lab-marker-decoy"],
 }
 
 COMMON_COMMANDS = [
@@ -146,7 +149,7 @@ def raw_corpus() -> list[RawEvent]:
     c, d, h, ip, path, prog = (
         SECRETS[k] for k in ("content", "domain", "host", "ip", "url_path", "program")
     )
-    ctx = {"extra_roles": ()}
+    ctx = {"extra_roles": ("decoy_service",)}
 
     def event(n, type_, role, pid, obj_class, content, parent=None, **attrs):
         actor = {"id": pid, "role": role, "interactive": role != "web_worker", "user": "lab-user"}
@@ -235,7 +238,42 @@ def raw_corpus() -> list[RawEvent]:
             parent="p-2",
             persist_kind="startup_entry",
         ),
+        # v2.1: a decoy service takes a connection (raw source address and listener name), and a
+        # process opens a decoy file (raw path); both are canaries in the audit policy
+        event(
+            11,
+            "request_in",
+            "decoy_service",
+            "p-decoy",
+            "decoy_session",
+            c[2],
+            source_class="inbound_request",
+            decoy=SECRETS["decoy"][0],
+            ip=ip[0],
+        ),
+        event(
+            12,
+            "asset_access",
+            "other",
+            "p-3",
+            "decoy_file",
+            c[4],
+            parent="p-2",
+            path=SECRETS["path"][0],
+        ),
     ]
+
+
+def audit_policy():
+    """The reference policy in block mode, with the v2.1 decoy canaries of the corpus."""
+    data = default_policy_dict()
+    data["mode"] = "block"
+    data["canaries"] = [
+        *data.get("canaries", []),
+        {"name": "lab-decoy-file", "class": "file", "value": SECRETS["path"][0]},
+        {"name": "lab-decoy-service", "class": "service", "value": SECRETS["decoy"][0]},
+    ]
+    return Policy.parse(data)
 
 
 # -- scanning ------------------------------------------------------------------------------
@@ -357,9 +395,12 @@ class AuditResult:
 def run_audit(golden_dir: Path | None = None) -> AuditResult:
     result = AuditResult()
     key = new_device_key()
-    policy = default_policy(mode="block")
+    policy = audit_policy()
     notifier = RecordingNotifier()
     pipeline = Pipeline(policy, key, gate=True, notifier=notifier)
+    # the one named exception (A71): the raw source of a decoy hit goes to this sink, and only here
+    decoy_sink: list[tuple[str, str]] = []
+    pipeline.observe.decoy_sink = lambda name, ip, ts: decoy_sink.append((name, ip))
 
     # four-eyes vault with two registered approvers
     alice_private, alice_public = signing.generate_keypair()
@@ -454,6 +495,11 @@ def run_audit(golden_dir: Path | None = None) -> AuditResult:
             for event in ReplaySource(path, extra_roles=policy.extra_roles):
                 for out in fresh.process(event):
                     keep(out)
+
+    if decoy_sink != [("lab-decoy-service", SECRETS["ip"][0])]:
+        result.raw_findings.append(f"the decoy sink received {len(decoy_sink)} entries, not 1")
+    else:
+        result.notes.append("decoy source address reached only the proposal sink (A71)")
 
     # 1. raw content
     result.strings_scanned = len(texts)
