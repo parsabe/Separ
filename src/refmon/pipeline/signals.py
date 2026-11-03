@@ -14,8 +14,11 @@ from ..behaviour import behaviour_kind
 from ..calculus.rarity import Baseline
 from ..policy import Policy
 from ..schemas import Event, EventType
+from .identity import IdentityTracker
 from .rates import CountedRates, StatRates
 from .tag import Tagged, Tagger
+
+IDENTITY_EVENTS = frozenset({EventType.AUTH, EventType.MAIL_RULE, EventType.OAUTH_GRANT})
 
 
 @dataclass(frozen=True)
@@ -39,6 +42,7 @@ def extract(
     policy: Policy,
     rates: CountedRates | StatRates,
     baseline: Baseline | None = None,
+    identity: IdentityTracker | None = None,
 ) -> tuple[list[Signal], set[str]]:
     """Return the signals of one event and any override flags it raises."""
     ts, role = ev.ts, ev.actor.role
@@ -83,6 +87,9 @@ def extract(
         flags.add("canary")
 
     typ = ev.type
+    if identity is not None and typ in IDENTITY_EVENTS:  # v2.2 (A74): per-account baselines
+        for name in identity.signals(ev, t):
+            add(name)
     if typ is EventType.EXEC:
         # v1.1 (A46): running external command text is forbidden for every role unless its
         # contract explicitly allows it. A role whose contract says `deny` keeps the wider rule

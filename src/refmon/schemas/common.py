@@ -41,6 +41,12 @@ EVENT_ATTR_KEYS = frozenset(
         "new_file",
         "persist_kind",
         "bytes",  # size of a response_out
+        # v2.2 (A74): identity events
+        "auth_result",  # success or failure
+        "auth_method",  # password, publickey, mfa_push, token, sso ...
+        "network_class",  # policy destinations class of the source address, else a keyed bucket
+        "forward_external",  # a mailbox rule forwards to a domain outside the organisation
+        "app_approved",  # an OAuth consent is to an application on the approved list
     }
 )
 
@@ -80,6 +86,11 @@ class EventType(StrEnum):
     # process carries a request label; response_out carries sizes only, for rate tests.
     REQUEST_END = "request_end"
     RESPONSE_OUT = "response_out"
+    # v2.2 (A74): identity events from login and mail logs. An authentication attempt, a mailbox
+    # rule (forwarding), a consent to an application (OAuth).
+    AUTH = "auth"
+    MAIL_RULE = "mail_rule"
+    OAUTH_GRANT = "oauth_grant"
 
 
 class SourceClass(StrEnum):

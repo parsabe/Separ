@@ -41,6 +41,9 @@ OBSERVE_OWNED = {
     "protected_asset",
     "threat_list_hit",
     "canary_hit",
+    "network_class",  # v2.2 (A74): decided here from the raw source address
+    "forward_external",
+    "app_approved",
 }
 
 # Events whose content is text that can be obfuscated (a command, pasted or fetched content).
@@ -146,6 +149,13 @@ class Observe:
             asset = self._protected_asset(ev)
             if asset:
                 attrs["protected_asset"] = asset
+        if ev.type is EventType.AUTH:
+            attrs["network_class"] = self._network_class(raw.get("ip"))
+        if ev.type is EventType.MAIL_RULE and isinstance(raw.get("forward_to"), str):
+            attrs["forward_external"] = self._external_mail(raw["forward_to"])
+        if ev.type is EventType.OAUTH_GRANT and isinstance(raw.get("app"), str):
+            approved = {a.lower() for a in self.policy.identity.approved_apps}
+            attrs["app_approved"] = raw["app"].strip().lower() in approved
         hit = self._threat_hit(ev)
         if hit is None and fingerprint is not None:  # confirmed block-list entries (Phase 4 Tune)
             hit = self.threat_lists.hit("fingerprint", [fingerprint])
@@ -230,6 +240,8 @@ class Observe:
             if hit is None and ev.object.content is not None:
                 hit = self.threat_lists.hit("content", [ev.object.content])
             return hit
+        if ev.type is EventType.AUTH:  # v2.2: a login from a listed address (e.g. a decoy source)
+            return self.threat_lists.hit("host", [raw.get("ip")])
         if ev.type is EventType.REQUEST_IN:
             # v2.1 (A71): a request from a source address on a host list (an approved decoy
             # source) is a hit as well as a listed URL path
@@ -237,6 +249,31 @@ class Observe:
                 "host", [raw.get("ip")]
             )
         return None
+
+    def _network_class(self, ip: object) -> str:
+        """v2.2 (A74): the policy class of a login's source address, else a keyed bucket of its
+        prefix (/16 for IPv4, /32 for IPv6 by default). The address itself never leaves Observe;
+        the bucket is an HMAC under the device key, so it cannot be looked up elsewhere."""
+        if not isinstance(ip, str) or not ip:
+            return "unknown"
+        named = self._destination_class(None, ip)
+        if named != "unknown":
+            return named
+        try:
+            addr = ipaddress.ip_address(ip.strip().strip("[]"))
+        except ValueError:
+            return "unknown"
+        ident = self.policy.identity
+        v4 = isinstance(addr, ipaddress.IPv4Address)
+        bits = ident.bucket_prefix_v4 if v4 else ident.bucket_prefix_v6
+        net = ipaddress.ip_network(f"{addr}/{bits}", strict=False)
+        digest = hmac.new(self._key, f"net:{net}".encode(), hashlib.sha256).hexdigest()
+        return f"net-{digest[: ident.bucket_chars]}"
+
+    def _external_mail(self, address: str) -> bool:
+        domain = address.strip().rsplit("@", 1)[-1].lower().rstrip(">").strip()
+        internal = [d.lower().lstrip("@.") for d in self.policy.identity.internal_mail_domains]
+        return not any(domain == d or domain.endswith("." + d) for d in internal)
 
     def _canary_hit(self, ev: RawEvent) -> str | None:
         """The name of the canary this event touched, or None (C2, v2.1 A69 for the new classes)."""
@@ -277,4 +314,6 @@ def _canary_matches(cls: str, value: str, ev: RawEvent, raw: dict) -> bool:
         )
     if cls == "service":
         return ev.type is EventType.REQUEST_IN and raw.get("decoy") == value
+    if cls == "account":  # v2.2 (A76): any attempt on a decoy account, successful or not
+        return ev.type is EventType.AUTH and ev.actor.user.lower() == value.lower()
     return False

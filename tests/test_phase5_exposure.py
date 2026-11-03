@@ -165,8 +165,8 @@ def test_the_overlay_raises_only_the_exposed_roles_contract_rules_and_restricts_
     assert eff.rule_mode("R-EFF-FETCH", "web_worker") is Mode.OBSERVE  # contract rules only
     assert eff.restricted_network_roles == ["web_worker"]
     assert (
-        base.restricted_network_roles == [] and base.rules == []
-    )  # the signed policy is untouched
+        base.restricted_network_roles == [] and base.rules == default_policy().rules
+    )  # the signed policy is untouched (its own rule settings: the v2.2 identity observe rules)
 
 
 def test_nothing_is_exposed_nothing_changes():

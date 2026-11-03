@@ -7,6 +7,7 @@ import logging
 
 from ..policy import Policy
 from ..schemas import Action, Decision, Event, Mode, QuestionResult, RawEvent, Verdict
+from .identity import IdentityTracker
 from .judge import Judgement, judge
 from .link import Linker, StoryRecord
 from .observe import Observe
@@ -53,6 +54,7 @@ class Pipeline:
         self.observe = Observe(policy, key, features=features)
         self.tagger = Tagger(policy)
         self.baseline = baseline  # per-role event counts for contract rarity (C11.3)
+        self.identity = IdentityTracker(policy)  # per-account baselines (v2.2, A74)
         if rates is None:
             rates = StatRates(policy) if policy.statistical_rates else CountedRates(policy)
         self.rates = rates
@@ -71,7 +73,9 @@ class Pipeline:
         ev = self.observe(event)
         parent_known = ev.actor.parent in self.tagger.procs
         tg = self.tagger.process(ev)
-        signals, flags = extract(ev, tg, self.tagger, self.policy, self.rates, self.baseline)
+        signals, flags = extract(
+            ev, tg, self.tagger, self.policy, self.rates, self.baseline, self.identity
+        )
         rec = self.linker.assign(tg, parent_known, signals, flags)
         j = self.judge(rec)
         self.last[rec.story.story_id] = j
@@ -154,7 +158,7 @@ class Pipeline:
         if policy.engine_fallback and not self.policy.engine_fallback:
             _log_engine_fallback(policy)
         self.policy = policy
-        for stage in (self.observe, self.tagger, self.linker, self.rates, self.gate):
+        for stage in (self.observe, self.tagger, self.linker, self.rates, self.gate, self.identity):
             if stage is not None:
                 stage.policy = policy
         if self.gate is not None:

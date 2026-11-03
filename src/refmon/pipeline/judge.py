@@ -66,6 +66,11 @@ class Judgement:
 
 
 _MODE_RANK = {Mode.OBSERVE: 0, Mode.WARN: 1, Mode.BLOCK: 2}
+_DECISION_RANK = {Decision.ALLOW: 0, Decision.HOLD: 1, Decision.BLOCK: 2}
+
+
+def _cap(decision: Decision, cap: Decision) -> Decision:
+    return cap if _DECISION_RANK[decision] > _DECISION_RANK[cap] else decision
 
 
 def _actor_facts(event, policy: Policy) -> dict[str, str]:
@@ -139,6 +144,13 @@ def judge(rec: StoryRecord, tagger: Tagger, policy: Policy) -> Judgement:
         if override
         else (d.fails_3 if n >= 3 else d.fails_2 if n == 2 else d.fails_0_1)
     )
+    # v2.2 (A75): a story only login and mail logs produced is about an account, not a process:
+    # it is held ("was this you?") at most, never blocked outright; an override still blocks
+    identity_only = bool(rec.events) and all(
+        e.actor.role in policy.identity.roles for e in rec.events
+    )
+    if identity_only and override is None:
+        rule = _cap(rule, policy.identity.cap)
     effects = tuple(dict.fromkeys(e for s in signals if (e := _effect_of(s.name)) is not None))
     # The mode of a story is the strongest mode among the rules that fired; overrides and stories
     # without a firing rule use the global mode.
@@ -159,6 +171,8 @@ def judge(rec: StoryRecord, tagger: Tagger, policy: Policy) -> Judgement:
         decision=rule, mode=mode, disabled_rules=tuple(sorted(disabled)),
         protection_reasons=tuple(reasons),
     )  # fmt: skip
+    if identity_only:
+        j.detail["identity_only"] = True
     if policy.uses_calculus:
         _apply_calculus(j, policy, labeled)
     return j
@@ -181,3 +195,8 @@ def _apply_calculus(j: Judgement, policy: Policy, labeled: bool) -> None:
         override=_FORCED[j.override] if j.override else None,
     )
     j.decision, j.threshold_crossed, j.gated = outcome.decision, outcome.crossed, outcome.gated
+    if j.override is None and j.detail.get("identity_only"):
+        capped = _cap(j.decision, policy.identity.cap)
+        if capped is not j.decision:
+            j.decision = capped
+            j.detail["identity_cap"] = True  # recorded, like the contract gate (A75)

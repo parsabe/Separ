@@ -83,8 +83,9 @@ class ProtectedAsset(_Model):
 # What a canary can be (v2.1, A69): a decoy credential (matched on the content an asset access
 # reads), a decoy URL path or a decoy document's beacon path (matched on a request), a decoy file
 # (matched on the path an access or write touches) and a decoy service (matched on the name of the
-# decoy listener that took a connection). All are matched in Observe before anything is dropped.
-CANARY_CLASSES = ("credential", "url_path", "beacon", "file", "service")
+# decoy listener that took a connection), and (v2.2, A76) a decoy account (matched on the account of
+# an authentication attempt, successful or not). All are matched in Observe.
+CANARY_CLASSES = ("credential", "url_path", "beacon", "file", "service", "account")
 
 
 class Canary(_Model):
@@ -113,6 +114,25 @@ class ThreatListSpec(_Model):
     name: str
     kind: str  # host | url | content
     entries: list[str] = Field(default_factory=list)
+
+
+class Identity(_Model):
+    """v2.2 (A74, A75): login and mail stories. Counted thresholds and the lists Observe matches."""
+
+    roles: list[str] = Field(default_factory=lambda: ["identity_provider", "mail_server"])
+    # a story of only these roles is capped at hold ("was this you?"); overrides still block
+    cap: Decision = Decision.HOLD
+    min_logins: int = Field(
+        default=20, ge=1
+    )  # successful logins before an account's networks count
+    failure_burst: int = Field(default=10, ge=2)  # failed attempts for one account in the window
+    burst_window: Duration = 300.0
+    internal_mail_domains: list[str] = Field(default_factory=list)
+    approved_apps: list[str] = Field(default_factory=list)
+    # source prefix length of the keyed network bucket for an address no destinations class names
+    bucket_prefix_v4: int = Field(default=16, ge=8, le=32)
+    bucket_prefix_v6: int = Field(default=32, ge=16, le=128)
+    bucket_chars: int = Field(default=12, ge=8, le=56)  # hex digits of the keyed bucket name
 
 
 class Rates(_Model):
@@ -334,6 +354,7 @@ class Policy(_Model):
     threat_lists: list[ThreatListSpec] = Field(default_factory=list)
     user_groups: dict[str, str] = Field(default_factory=dict)
     rates: Rates = Field(default_factory=Rates)
+    identity: Identity = Field(default_factory=Identity)
     exposure: Exposure = Field(default_factory=Exposure)
     rule_packs: list[RulePackRef] = Field(default_factory=list)
     exceptions: list[Exception_] = Field(default_factory=list)
@@ -497,6 +518,15 @@ def default_policy_dict() -> dict:
             "elevation_tool",
             "deploy_tool",
             "decoy_service",
+            "identity_provider",
+            "mail_server",
+        ],
+        # v2.2 (A77): the login and mail rules start in observe mode for the identity roles only:
+        # they record until a pilot measures their false alarms (owner decision, 2026-11-03)
+        "rules": [
+            {"id": rid, "role": role, "mode": "observe"}
+            for rid in ("R-CON-SURPRISAL", "R-EFF-CREDENTIAL", "R-EFF-EXFIL", "R-EFF-PERSIST")
+            for role in ("identity_provider", "mail_server")
         ],
         "trusted_sources": [
             {
