@@ -329,6 +329,11 @@ class LiveBarrier:
         self._browser_rate = _RateLimit(*BROWSER_RATE)
         self._browser_actor: Actor | None = None
         self._browser_holds: set[str] = set()
+        self.decoy_settings: Any = None
+        self.decoy_sources: Any = None
+        self.decoy_listener: Any = None
+        self._decoy_watcher: Any = None
+        self._decoy_thread: threading.Thread | None = None
         self.health: Any = None  # a HealthMonitor once `serve` starts one
         self._demo_depth = 0  # > 0 while a dashboard preset runs (under the lock)
 
@@ -870,6 +875,168 @@ class LiveBarrier:
         res = self.resolve_hold(hold_id, "endpoint", answer)
         self._browser_holds.discard(hold_id)
         return res
+
+    # -- deception: decoy services, decoy files, source proposals (v2.1, A69-A72) ---------------
+
+    def start_decoys(self, settings: Any) -> None:
+        """Run the decoy services and the decoy-file watcher of `settings` (DecoySettings)."""
+        from cryptography.fernet import Fernet
+
+        from .deception.listener import DecoyListener
+        from .deception.proposals import SourceProposals
+        from .deception.watch import DecoyWatcher, WatchUnavailable, decoys_from_proposal
+        from .pseudonym import AuditLog, Vault
+
+        self.decoy_settings = settings
+        vault_key = _secret_file(
+            self.workdir / "decoy-vault.key", lambda: Fernet.generate_key().decode()
+        )
+        vault = Vault(
+            {}, max(2, self.policy.reporting.reidentify_requires),
+            AuditLog(self.logs_dir / "reidentify.jsonl"), key=vault_key.encode(),
+        )  # fmt: skip
+        self.decoy_sources = SourceProposals(
+            self.workdir / "proposals" / "decoy-sources.json", self.policy,
+            self.pseudonymizer, vault,
+        )  # fmt: skip
+        self.pipeline.observe.decoy_sink = self._decoy_source
+        if settings.listen.services:
+            self.decoy_listener = DecoyListener(settings.listen, self.decoy_connection)
+            self.decoy_listener.start()
+            ports = ", ".join(f"{n}:{p}" for n, p in self.decoy_listener.ports.items())
+            self._log_line(f"DECOY services listening ({ports})")
+        if settings.watch:
+            path = settings.proposal_path(self.workdir)
+            try:
+                decoys = decoys_from_proposal(json.loads(path.read_text(encoding="utf-8")))
+            except (OSError, ValueError):
+                decoys = {}
+                self._log_line("DECOY watcher: no planted decoys found (run refmon decoy plant)")
+            if decoys:
+                try:
+                    self._decoy_watcher = DecoyWatcher(decoys)
+                except WatchUnavailable as exc:
+                    self._log_line(f"DECOY watcher unavailable: {exc}")
+                else:
+                    self._decoy_thread = threading.Thread(
+                        target=self._watch_decoys, name="refmon-decoy-watch", daemon=True
+                    )
+                    self._decoy_thread.start()
+                    self._log_line(f"DECOY watcher on {self._decoy_watcher.watched} files")
+
+    def stop_decoys(self) -> None:
+        if self.decoy_listener is not None:
+            self.decoy_listener.stop()
+        if self._decoy_watcher is not None:
+            self._stop_event.set()
+            if self._decoy_thread is not None:
+                self._decoy_thread.join(timeout=2.0)
+            self._decoy_watcher.close()
+
+    def _watch_decoys(self) -> None:
+        while not self._stop_event.is_set():
+            for canary, what in self._decoy_watcher.poll(0.5):
+                self.decoy_file_touched(canary, what)
+
+    def decoy_file_touched(self, canary: str, what: str) -> None:
+        """An alert, not a verdict: inotify cannot name the process, so nothing can be contained
+        and nothing is judged (missing information never generates evidence)."""
+        self._log_line(f"DECOY FILE {what.upper()} [{canary}]")
+        minute = datetime.now(UTC).strftime("%Y%m%d%H%M")
+        self.notify(
+            Notification(
+                "alert", "critical", "Decoy file touched",
+                f"the decoy {canary} was {what}. No real work touches it, so someone is looking "
+                "for secrets on this computer. The file sensor cannot name the process, so nothing "
+                "was stopped: check who was logged in and what ran at this time.",
+                self.device_pseudonym, details={"canary": canary, "what": what},
+            ),
+            key=f"decoy-file:{canary}:{what}:{minute}",
+        )  # fmt: skip
+
+    def decoy_connection(self, service: str, ip: str, path: str | None, line: str) -> None:
+        """A decoy service took a connection: judge it as a request of the channel role
+        `decoy_service`. The raw address and path reach Observe in memory only."""
+        with self._lock:
+            if "decoy_service" not in self.policy.extra_roles:
+                self._log_line("DECOY connection ignored: the policy has no decoy_service role")
+                return
+            actor = self._make_actor(f"proc:decoy-{service}", "decoy_service", "decoy")
+            attrs: dict[str, Any] = {"source_class": "inbound_request", "decoy": service, "ip": ip}
+            if path:
+                attrs["url_path"] = path[:256]
+            ev = RawEvent(
+                event_id=self._next_id(), ts=datetime.now(UTC), device="dev-b21c",
+                type=EventType.REQUEST_IN, actor=actor,
+                object=RawObjectRef(class_="decoy_session", content=line or f"connect {service}"),
+                attrs=attrs,
+            )  # fmt: skip
+            story_id, _ = self._feed_raw_events([ev])
+            self._tag_story(story_id, attack_type=f"Decoy service: {service}", category="decoy")
+
+    def _decoy_source(self, canary: str, ip: str, ts: datetime) -> None:
+        entry = self.decoy_sources.record(canary, ip, ts)
+        if entry is None or entry.hits != 1:
+            return
+        where = "an internal address (pseudonym only)" if entry.internal else "an outside address"
+        self.notify(
+            Notification(
+                "alert", "warning", "Decoy source proposed for blocking",
+                f"{where} touched {canary}; proposal {entry.id} waits for an admin "
+                "(refmon decoy sources, refmon decoy approve-source)",
+                self.device_pseudonym, details={"proposal": entry.id, "internal": entry.internal},
+            ),
+            key=f"decoy-source:{entry.id}",
+        )  # fmt: skip
+
+    def decoy_conditions(self) -> list[tuple[str, str, str, str, str, str]]:
+        """Health conditions of the deception layer: (key, category, severity, title, message,
+        subject), merged by the health monitor."""
+        out = []
+        if self.decoy_listener is not None and not self.decoy_listener.alive:
+            out.append(
+                (
+                    "decoy_listener",
+                    "alert",
+                    "critical",
+                    "Decoy services stopped",
+                    "the decoy listeners no longer accept connections",
+                    "decoy_listener",
+                )
+            )
+        if self._decoy_watcher is not None:
+            out.append(
+                (
+                    "degraded:decoy_attribution",
+                    "degraded",
+                    "warning",
+                    "Degraded protection",
+                    "the decoy-file watcher (inotify) cannot name the process that opened a "
+                    "decoy: it alerts but cannot stop anything (an admin fanotify sensor can)",
+                    "decoy_attribution",
+                )
+            )
+        unarmed = self.decoy_unarmed()
+        if unarmed:
+            out.append(
+                (
+                    "degraded:decoy_unarmed",
+                    "degraded",
+                    "warning",
+                    "Degraded protection",
+                    "decoy services without an approved canary: "
+                    f"{', '.join(unarmed)} (refmon decoy approve-canaries)",
+                    "decoy_unarmed",
+                )
+            )
+        return out
+
+    def decoy_unarmed(self) -> list[str]:
+        """Decoy services whose connections would be no hit: no approved `service` canary."""
+        if self.decoy_settings is None:
+            return []
+        known = {c.value for c in self.policy.canaries if c.class_ == "service"}
+        return sorted(s.name for s in self.decoy_settings.listen.services if s.name not in known)
 
     # -- sandbox directory watcher & quarantine ------------------------------------------------
 
@@ -1825,6 +1992,7 @@ def serve_forever(
     hub: NotificationHub | None = None,
     rootkit_interval_s: float = 3600.0,
     open_browser: bool = False,
+    decoys: str | Path | None = None,
 ) -> int:
     from .health import HealthMonitor
     from .notify import ConsoleChannel
@@ -1833,6 +2001,10 @@ def serve_forever(
     hub.local.append(ConsoleChannel())
     barrier = LiveBarrier(workdir=workdir, hub=hub)
     barrier.start_background_watcher()
+    if decoys is not None:
+        from .deception.runtime import load_settings
+
+        barrier.start_decoys(load_settings(decoys))
     server = make_http_server(barrier, host=host, port=port)
     monitor = HealthMonitor(barrier, rootkit_interval_s=rootkit_interval_s)
     barrier.health = monitor
@@ -1897,6 +2069,7 @@ def serve_forever(
         server.server_close()
         with contextlib.suppress(OSError):
             port_file.unlink()
+        barrier.stop_decoys()
         barrier.stop_background_watcher()
         barrier.notify(
             Notification(

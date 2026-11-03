@@ -40,9 +40,9 @@ SYNTHETIC_MAIL = re.compile(
 )
 HOME = re.compile(r"/home/[a-z][a-z0-9_-]*|/Users/[A-Za-z][\w-]*|/root/")
 IPV4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
-PRIVATE_IP = re.compile(
+PRIVATE_IP = re.compile(  # private, loopback, documentation, link-local and carrier-grade NAT
     r"^(?:10\.|127\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|0\.|203\.0\.113\.|198\.51\.100\.|"
-    r"192\.0\.2\.|255\.)"
+    r"192\.0\.2\.|255\.|169\.254\.|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.)"
 )
 URL = re.compile(r"https?://[A-Za-z0-9./_?=&%#:@-]+")
 OK_URL = re.compile(
