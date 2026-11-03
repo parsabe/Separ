@@ -114,6 +114,16 @@ class Vault:
     def register(self, pseudonym: str, value: str) -> None:
         self._sealed[pseudonym] = self._fernet.encrypt(value.encode())
 
+    def seal(self, value: str) -> bytes:
+        """The value encrypted under this vault's key, for storing at rest (v2.1, A71)."""
+        return self._fernet.encrypt(value.encode())
+
+    def adopt(self, pseudonym: str, sealed: bytes) -> None:
+        """Take over a value sealed earlier under the same key (stored at rest), so it can be
+        re-identified through the same four-eyes request."""
+        self._fernet.decrypt(sealed)  # refuse a token of another key now, not at reveal time
+        self._sealed[pseudonym] = sealed
+
     def knows(self, pseudonym: str) -> bool:
         return pseudonym in self._sealed
 

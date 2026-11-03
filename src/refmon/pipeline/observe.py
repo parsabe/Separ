@@ -222,14 +222,20 @@ class Observe:
     def _threat_hit(self, ev: RawEvent) -> str | None:
         raw = ev.attrs
         if ev.type is EventType.NET_CONNECT:
-            return self.threat_lists.hit("host", [raw.get("host"), raw.get("domain")])
+            return self.threat_lists.hit(
+                "host", [raw.get("host"), raw.get("domain"), raw.get("ip")]
+            )
         if ev.type is EventType.CONTENT_IN:
             hit = self.threat_lists.hit("host", [raw.get("domain")])
             if hit is None and ev.object.content is not None:
                 hit = self.threat_lists.hit("content", [ev.object.content])
             return hit
         if ev.type is EventType.REQUEST_IN:
-            return self.threat_lists.hit("url", [raw.get("url_path")])
+            # v2.1 (A71): a request from a source address on a host list (an approved decoy
+            # source) is a hit as well as a listed URL path
+            return self.threat_lists.hit("url", [raw.get("url_path")]) or self.threat_lists.hit(
+                "host", [raw.get("ip")]
+            )
         return None
 
     def _canary_hit(self, ev: RawEvent) -> str | None:
