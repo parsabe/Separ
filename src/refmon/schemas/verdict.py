@@ -71,6 +71,8 @@ class Verdict(BaseModel):
     # Block threshold crossed, but no Contract signal and no override: capped at hold
     # (docs/design-decisions.md, D13).
     contract_gate: bool = False
+    # v2.2 (A75): a story only identity roles produced, capped at the identity cap (hold)
+    identity_cap: bool = False
 
     @property
     def fail_count(self) -> int:

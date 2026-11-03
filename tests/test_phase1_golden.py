@@ -18,6 +18,8 @@ ids = [c.scenario for c in CASES]
 by_id = pytest.mark.parametrize("case", CASES, ids=ids)
 
 KNOWN_GAPS = {"S05", "S22"}
+# v2.2 (A75): a login story has no origin label (a login never creates one) and is held at most
+LOGIN_CAPPED = {"S57", "S58"}
 
 
 def test_every_non_adaptive_scenario_of_the_catalog_has_a_golden_file():
@@ -57,7 +59,7 @@ def test_malicious_files_fail_three_questions_or_have_their_override(case):
     if expected.kind is not ScenarioKind.MALICIOUS:
         return
     result = summary(run_case(case))
-    if case.scenario in KNOWN_GAPS:
+    if case.scenario in KNOWN_GAPS | LOGIN_CAPPED:
         assert result["fails"] < 3
     else:
         assert result["fails"] == 3 or result["override"] is not None

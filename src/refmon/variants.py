@@ -738,6 +738,18 @@ def remote_only(events) -> bool:
     return bool(events) and all(e.actor.role in REMOTE_ONLY_ROLES for e in events)
 
 
+# v2.2 (A75): a story that only login and mail logs produced is about an account. It carries no
+# origin label (a login never creates one), its dangerous action is a login or a mail rule, and it
+# is capped at hold; while its rules are in observe mode (A77) the hold pauses nothing.
+IDENTITY_ROLES = frozenset({"identity_provider", "mail_server"})
+
+
+def identity_only(events) -> bool:
+    """True when every event of the stream is an identity event of an account."""
+    events = list(events)
+    return bool(events) and all(e.actor.role in IDENTITY_ROLES for e in events)
+
+
 def blocks_acting_on_nothing(results: list[Result]) -> list[Result]:
     return [
         r

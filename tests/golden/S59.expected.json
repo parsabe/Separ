@@ -1,0 +1,18 @@
+{
+  "title": "Password spraying reaches a decoy account",
+  "kind": "malicious",
+  "platform": "server",
+  "decision": "block",
+  "rule_decision": "block",
+  "decided_in_phase": "1",
+  "override": "canary",
+  "known_gap": false,
+  "notes": "v2.2 (A76): a canary of class account; an override still blocks a login story.",
+  "scenario": "S59",
+  "actions": [
+    {
+      "type": "kill_process_tree",
+      "process": "acct:svc-backup-old"
+    }
+  ]
+}

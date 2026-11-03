@@ -212,3 +212,23 @@ def test_the_cap_is_policy(cap):
     f.ev("mail_rule", role="mail_server", forward_to="drop@box.example.invalid")
     f.ev("oauth_grant", role="mail_server", app="MailSyncPro", gap=5)
     assert f.last().decision.value in (cap, "allow")
+
+
+def test_once_enforced_a_held_login_story_pauses_the_account_session():
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).parent))
+    from golden_more import s57
+    from refmon.schemas import Action
+
+    def actions(mode):
+        data = default_policy_dict()
+        data["mode"] = "block"
+        data["rules"] = [r | {"mode": mode} for r in data["rules"]]
+        pipe = Pipeline(Policy.parse(data), gate=True)
+        return [(a.type.value, a.target.ref) for e in s57()[0] for a in pipe.process(e)
+                if isinstance(a, Action)]  # fmt: skip
+
+    assert actions("observe") == []  # observe first (A77): recorded, nothing paused
+    assert actions("block") == [("hold", "acct:ana")]  # after the pilot: the account's session

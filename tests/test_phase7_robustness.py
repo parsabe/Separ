@@ -215,7 +215,12 @@ def test_a_hold_pauses_nothing_only_when_every_process_behind_it_is_a_channel_ro
     from refmon.pipeline import Pipeline
 
     channel = set(POLICY.non_carrier_roles)
-    nothing = [r for r in v.malicious(results) if r.outcome == "hold_pauses_nothing"]
+    # a login story's hold pauses nothing while its rules are in observe mode (v2.2, A77)
+    nothing = [
+        r
+        for r in v.malicious(results)
+        if r.outcome == "hold_pauses_nothing" and not v.identity_only(r.variant.events)
+    ]
     for r in nothing:
         pipe = Pipeline(POLICY)
         for event in r.variant.events:

@@ -13,7 +13,7 @@ from refmon.golden import ExpectedVerdict, GoldenCase, ScenarioKind
 from refmon.policy import default_policy
 from refmon.replay import ReplaySource
 from refmon.schemas import EVENT_ATTR_KEYS, Decision, EventType, Override, SourceClass
-from refmon.variants import remote_only
+from refmon.variants import identity_only, remote_only
 from scenario_run import cases
 
 CASES = cases()
@@ -127,6 +127,8 @@ def test_blocked_and_allowed_scenarios_have_consistent_expectations(case: Golden
 def test_malicious_streams_start_from_untrusted_external_input(case: GoldenCase):
     if case.scenario == "S05":
         return  # typed by hand: no external input is visible, which is the known gap
+    if identity_only(stream(case)):
+        return  # a login story: a login never creates an origin label (v2.2, A75)
     sources = [
         e
         for e in stream(case)
@@ -146,6 +148,8 @@ def test_malicious_scenarios_reach_their_dangerous_action(case: GoldenCase):
     }  # fmt: skip
     if remote_only(stream(case)):
         return  # a decoy-listener story: the dangerous action happened elsewhere (A70)
+    if identity_only(stream(case)):
+        dangerous = {EventType.AUTH, EventType.MAIL_RULE, EventType.OAUTH_GRANT}  # v2.2 (A74)
     assert {e.type for e in stream(case)} & dangerous
 
 

@@ -1,0 +1,19 @@
+{
+  "title": "Stolen password from a new network, then a rule that forwards mail outside",
+  "kind": "malicious",
+  "platform": "server",
+  "decision": "hold",
+  "rule_decision": "hold",
+  "decided_in_phase": "1",
+  "questions_failed": [
+    "contract",
+    "effect"
+  ],
+  "effects": [
+    "exfil",
+    "persist"
+  ],
+  "known_gap": false,
+  "notes": "v2.2 (A74, A75): unseen network + forwarding outside; capped at hold.",
+  "scenario": "S58"
+}

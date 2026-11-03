@@ -1,0 +1,18 @@
+{
+  "title": "MFA push fatigue: a burst of denied pushes, then a login from a new network",
+  "kind": "malicious",
+  "platform": "server",
+  "decision": "hold",
+  "rule_decision": "hold",
+  "decided_in_phase": "1",
+  "questions_failed": [
+    "contract",
+    "effect"
+  ],
+  "effects": [
+    "credential"
+  ],
+  "known_gap": false,
+  "notes": "v2.2 (A74, A75): contract_surprisal (unseen network, mature account) + effect_credential (burst) cross the block threshold; a story only identity roles produced is capped at hold ('was this you?'). No origin label: a login never creates one.",
+  "scenario": "S57"
+}

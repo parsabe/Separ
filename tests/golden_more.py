@@ -576,6 +576,81 @@ def s56() -> Result:
     return s.events, [], []
 
 
+# -- hacked accounts: login and mail stories (v2.2, A74-A77) -------------------------------------
+
+IDP = "dev-idp1"
+
+
+def _acct(user, role="identity_provider"):
+    return actor(f"acct:{user}", role, user)
+
+
+def _habit(s, user, days=24):
+    """An account's usual logins: campus and home, one a day (each its own story, all allowed)."""
+    a = _acct(user)
+    for i in range(days):
+        net = "internal_network" if i % 2 else "net-home0001"
+        s.add(86_400_000, "auth", a, "login", f"{user}.habit{i}", auth_result="success",
+              auth_method="password", network_class=net)  # fmt: skip
+
+
+def s57() -> Result:
+    # MFA push fatigue: a burst of denied pushes, then the tired user accepts; from a new network
+    s = Stream(IDP)
+    _habit(s, "ana")
+    a = _acct("ana")
+    s.add(86_400_000, "auth", a, "login", "s57.push0", auth_result="failure",
+          auth_method="mfa_push", network_class="net-elsewhere1")  # fmt: skip
+    for i in range(1, 11):
+        s.add(20_000, "auth", a, "login", f"s57.push{i}", auth_result="failure",
+              auth_method="mfa_push", network_class="net-elsewhere1")  # fmt: skip
+    s.add(20_000, "auth", a, "login", "s57.accept", auth_result="success",
+          auth_method="mfa_push", network_class="net-elsewhere1")  # fmt: skip
+    return s.events, [], []  # observe mode first (A77): the hold pauses nothing yet
+
+
+def s58() -> Result:
+    # a stolen password from a new network, then a rule that forwards all mail outside
+    s = Stream(IDP)
+    _habit(s, "ben")
+    s.add(86_400_000, "auth", _acct("ben"), "login", "s58.login", auth_result="success",
+          auth_method="password", network_class="net-elsewhere2")  # fmt: skip
+    s.add(90_000, "mail_rule", _acct("ben", "mail_server"), "mailbox_rule", "s58.rule",
+          forward_external=True)  # fmt: skip
+    return s.events, [], []  # observe mode first (A77): the hold pauses nothing yet
+
+
+def s59() -> Result:
+    # password spraying across accounts reaches a decoy account (canary class account)
+    s = Stream(IDP)
+    for i, user in enumerate(("cara", "dev", "eli", "svc-backup-old", "fay")):
+        s.add(2_000 if i else 0, "auth", _acct(user), "login", f"s59.try{i}",
+              auth_result="failure", auth_method="password", network_class="net-spray001",
+              **({"canary_hit": True} if user == "svc-backup-old" else {}))  # fmt: skip
+    # the block falls back to the producer (A52): the decoy account's sessions are ended
+    return s.events, ["acct:svc-backup-old"], ["acct:svc-backup-old"]
+
+
+def s60() -> Result:
+    # an ordinary month of logins from campus and home
+    s = Stream(IDP)
+    _habit(s, "gil", days=30)
+    return s.events, [], []
+
+
+def s61() -> Result:
+    # a user mistypes the password twice, then logs in from home as usual
+    s = Stream(IDP)
+    _habit(s, "hal")
+    a = _acct("hal")
+    for i in range(2):
+        s.add(86_400_000 if i == 0 else 8_000, "auth", a, "login", f"s61.typo{i}",
+              auth_result="failure", auth_method="password", network_class="net-home0001")  # fmt: skip
+    s.add(8_000, "auth", a, "login", "s61.ok", auth_result="success", auth_method="password",
+          network_class="net-home0001")  # fmt: skip
+    return s.events, [], []
+
+
 SCENARIOS = {
     "S03": s03, "S04": s04, "S05": s05, "S06": s06, "S07": s07, "S08": s08, "S12": s12, "S15": s15,
     "S17": s17, "S18": s18, "S19": s19, "S20": s20, "S21": s21, "S22": s22, "S23": s23, "S24": s24,
@@ -583,6 +658,7 @@ SCENARIOS = {
     "S32": s32, "S33": s33, "S34": s34, "S35": s35, "S36": s36, "S37": s37, "S38": s38, "S39": s39,
     "S40": s40, "S44": s44, "S45": s45, "S46": s46, "S47": s47, "S48": s48, "S49": s49, "S50": s50,
     "S53": s53, "S54": s54, "S55": s55, "S56": s56,
+    "S57": s57, "S58": s58, "S59": s59, "S60": s60, "S61": s61,
 }  # fmt: skip
 
 ORIGIN, C, E = "origin", "contract", "effect"
@@ -664,6 +740,14 @@ META = {
               notes="v2.1 (A69): a beacon canary on the decoy HTTP listener. The document left the network and was opened elsewhere."),
     "S56": _m("Backup job reads the decoy directory (its role is on the canaries' ignore list)", "benign", "server", "allow", [], [],
               notes="v2.1 (A69): ignore_roles is applied in Observe, so the post-Observe events carry no canary hit."),
+    "S57": _m("MFA push fatigue: a burst of denied pushes, then a login from a new network", "malicious", "server", "hold", [C, E], ["credential"],
+              notes="v2.2 (A74, A75): contract_surprisal (unseen network, mature account) + effect_credential (burst) cross the block threshold; a story only identity roles produced is capped at hold ('was this you?'). No origin label: a login never creates one."),
+    "S58": _m("Stolen password from a new network, then a rule that forwards mail outside", "malicious", "server", "hold", [C, E], ["exfil", "persist"],
+              notes="v2.2 (A74, A75): unseen network + forwarding outside; capped at hold."),
+    "S59": _m("Password spraying reaches a decoy account", "malicious", "server", "block", [], [], override="canary",
+              notes="v2.2 (A76): a canary of class account; an override still blocks a login story."),
+    "S60": _m("A month of ordinary logins from campus and home", "benign", "server", "allow", [], []),
+    "S61": _m("A user mistypes the password twice, then logs in from home as usual", "benign", "server", "allow", [], []),
 }  # fmt: skip
 
 

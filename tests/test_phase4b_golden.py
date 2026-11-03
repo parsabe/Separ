@@ -20,6 +20,8 @@ from scenario_run import ROOT, cases, run_case, summary
 CASES = cases()
 by_id = pytest.mark.parametrize("case", CASES, ids=[c.scenario for c in CASES])
 KNOWN_GAPS = {"S05", "S22"}
+# v2.2 (A75): login stories are held at most ("was this you?"), by the owner's decision
+LOGIN_CAPPED = {"S57", "S58"}
 
 
 def test_the_default_policy_uses_the_calculus_and_the_statistical_rate_tests():
@@ -85,7 +87,8 @@ def test_the_threshold_a_verdict_crossed_is_consistent_with_its_log_odds(case):
             assert v.threshold_crossed is None
         elif v.threshold_crossed == "block":
             assert v.log_odds >= block
-            assert (v.decision is Decision.BLOCK) == (not v.contract_gate)
+            # held below a crossed block threshold: the contract gate, or the login cap (A75)
+            assert (v.decision is Decision.BLOCK) == (not v.contract_gate and not v.identity_cap)
         elif v.threshold_crossed == "hold":
             assert hold <= v.log_odds < block and v.decision is Decision.HOLD
         else:
@@ -98,7 +101,8 @@ def test_the_contract_gate_is_recorded_exactly_where_it_applied():
     # gated for a moment (S18 and S21 before their Contract signal arrives); only these end there.
     assert gated == {"S22", "S49", "S50"}
     transient = {c.scenario for c in CASES if any(v.contract_gate for v in verdicts_of(c))}
-    assert transient - gated <= {"S18", "S21"}
+    # S57: the failure burst alone is gated until the login from a new network adds the Contract signal
+    assert transient - gated <= {"S18", "S21", "S57"}
 
 
 def test_the_worked_check_numbers_of_the_specification():
@@ -112,7 +116,7 @@ def test_the_worked_check_numbers_of_the_specification():
 @by_id
 def test_malicious_files_are_not_missed_except_the_documented_gaps(case):
     expected = case.expected
-    if expected.kind is not ScenarioKind.MALICIOUS or case.scenario in KNOWN_GAPS:
+    if expected.kind is not ScenarioKind.MALICIOUS or case.scenario in KNOWN_GAPS | LOGIN_CAPPED:
         return
     assert summary(run_case(case), "decision")["decision"] is Decision.BLOCK
 

@@ -221,6 +221,7 @@ class Pipeline:
             users=tuple(sorted({e.actor.user for e in rec.events})),
             prior_log_odds=j.prior_log_odds, log_odds=j.log_odds, contributions=j.contributions,
             threshold_crossed=j.threshold_crossed, contract_gate=j.gated,
+            identity_cap=bool(j.detail.get("identity_cap")),
             virtual_patch=j.protection_reasons,
         )  # fmt: skip
 
