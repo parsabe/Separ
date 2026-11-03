@@ -1,0 +1,30 @@
+{
+  "title": "Downloaded unsigned tool opens a planted decoy file and connects out",
+  "kind": "malicious",
+  "platform": "endpoint",
+  "decision": "block",
+  "rule_decision": "block",
+  "decided_in_phase": "1",
+  "questions_failed": [
+    "origin",
+    "contract",
+    "effect"
+  ],
+  "effects": [
+    "fetch"
+  ],
+  "override": "canary",
+  "known_gap": false,
+  "notes": "v2.1 (A69): a file canary, matched in Observe on the path. With an attributing sensor (fanotify) the process is known and contained; the unprivileged inotify watcher only alerts.",
+  "scenario": "S53",
+  "actions": [
+    {
+      "type": "kill_process_tree",
+      "process": "p-5301"
+    },
+    {
+      "type": "cut_network",
+      "process": "p-5301"
+    }
+  ]
+}

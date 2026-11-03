@@ -1,0 +1,15 @@
+{
+  "title": "Decoy document's beacon image is fetched from outside",
+  "kind": "malicious",
+  "platform": "server",
+  "decision": "block",
+  "rule_decision": "block",
+  "decided_in_phase": "1",
+  "questions_failed": [
+    "origin"
+  ],
+  "override": "canary",
+  "known_gap": false,
+  "notes": "v2.1 (A69): a beacon canary on the decoy HTTP listener. The document left the network and was opened elsewhere.",
+  "scenario": "S55"
+}

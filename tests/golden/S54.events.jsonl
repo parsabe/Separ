@@ -1,0 +1,1 @@
+{"event_id":"e-000001","ts":"2026-10-28T10:02:15.120000Z","device":"dev-b21c","type":"request_in","actor":{"id":"p-5400","role":"decoy_service","interactive":false,"user":"decoy"},"object":{"class":"decoy_session","fingerprint":"hmac:f58937ba88ff92d8998a2c4eec3da8a8455c893b800b22e413685c10a076a679"},"attrs":{"source_class":"inbound_request","canary_hit":true}}

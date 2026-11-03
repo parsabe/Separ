@@ -26,6 +26,10 @@ CASES = load_golden_cases(GOLDEN_DIR)
 MALICIOUS = [c for c in CASES if c.expected.kind is ScenarioKind.MALICIOUS]
 
 
+def stream_of(case):
+    return ReplaySource(case.events_path, extra_roles=POLICY.extra_roles)
+
+
 @pytest.fixture(scope="module")
 def generated():
     return v.generate(CASES, POLICY)
@@ -61,7 +65,10 @@ def test_the_weights_are_still_those_of_the_specification():
 def test_every_malicious_golden_file_gets_a_baseline_and_variants(generated):
     by = Counter(x.scenario for x in generated if x.kind == "malicious")
     assert set(by) == {c.scenario for c in MALICIOUS}
-    assert all(n >= 3 for n in by.values()), by  # S14, S17 and S27 have only a few events
+    # S14, S17 and S27 have only a few events; a decoy-listener story (one request, A70) only one
+    remote = {c.scenario for c in MALICIOUS if v.remote_only(stream_of(c))}
+    assert remote == {"S54", "S55"}
+    assert all(n >= 3 for s, n in by.items() if s not in remote), by
     assert sum(by.values()) > 500
 
 

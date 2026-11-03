@@ -535,12 +535,54 @@ def s50() -> Result:
     return s.events, ["p-5000"], ["p-5000"]
 
 
+# -- decoys and honeytokens (v2.1, A69-A72) ---------------------------------------------------
+
+
+def s53() -> Result:
+    # a downloaded, unsigned tool opens a planted decoy .env and connects out
+    s, ln, ch = _file_launch("s53", "download", 5300)
+    s.add(4000, "exec", ln, "executable_file", "s53.program", signed=False)
+    s.add(900, "asset_access", ch, "decoy_file", "s53.decoy_env", canary_hit=True)
+    s.add(600, "net_connect", ch, "network_endpoint", "s53.dest", destination_class="unknown")
+    return s.events, ["p-5301"], ["p-5301"]
+
+
+def s54() -> Result:
+    # an outside host connects to a decoy service; the listener is a channel and is not contained
+    decoy = actor("p-5400", "decoy_service", "decoy")
+    s = Stream(SERVER)
+    s.add(0, "request_in", decoy, "decoy_session", "s54.session", source_class="inbound_request",
+          canary_hit=True)  # fmt: skip
+    return s.events, [], []
+
+
+def s55() -> Result:
+    # a decoy document was taken and opened elsewhere: its beacon image is fetched from outside
+    decoy = actor("p-5500", "decoy_service", "decoy")
+    s = Stream(SERVER)
+    s.add(0, "request_in", decoy, "http_request", "s55.beacon", source_class="inbound_request",
+          canary_hit=True)  # fmt: skip
+    return s.events, [], []
+
+
+def s56() -> Result:
+    # the nightly backup reads the decoy directory; its role is on the canaries' ignore list, so
+    # Observe reports no hit (fanotify sensor: the role of the reading process is known)
+    bk = actor("p-5600", "backup_job", "svc-backup")
+    s = Stream(SERVER)
+    for i in range(3):
+        s.add(200, "asset_access", bk, "decoy_file", f"s56.decoy{i}")
+    s.add(400, "net_connect", bk, "network_endpoint", "s56.backup", destination_class="backup_host")
+    return s.events, [], []
+
+
 SCENARIOS = {
     "S03": s03, "S04": s04, "S05": s05, "S06": s06, "S07": s07, "S08": s08, "S12": s12, "S15": s15,
     "S17": s17, "S18": s18, "S19": s19, "S20": s20, "S21": s21, "S22": s22, "S23": s23, "S24": s24,
     "S25": s25, "S26a": s26a, "S26b": s26b, "S26c": s26c, "S27": s27, "S30": s30, "S31": s31,
     "S32": s32, "S33": s33, "S34": s34, "S35": s35, "S36": s36, "S37": s37, "S38": s38, "S39": s39,
     "S40": s40, "S44": s44, "S45": s45, "S46": s46, "S47": s47, "S48": s48, "S49": s49, "S50": s50,
+    "S53": s53, "S54": s54, "S55": s55, "S56": s56,
 }  # fmt: skip
 
 ORIGIN, C, E = "origin", "contract", "effect"
@@ -614,6 +656,14 @@ META = {
     "S48": _m("Patch tool (contract allows tampering) stops services, among them a security service", "benign", "server", "allow", [], []),
     "S49": _m("Signed vendor installer downloaded from the internet persists (role other, no contract)", "benign", "endpoint", "hold", [ORIGIN, E], ["persist"]),
     "S50": _m("Backup job (contract allows mass change) changes many files in a story with an external origin label", "benign", "server", "hold", [ORIGIN, E], ["mass_change"]),
+    "S53": _m("Downloaded unsigned tool opens a planted decoy file and connects out", "malicious", "endpoint", "block", [ORIGIN, C, E], ["fetch"], override="canary",
+              notes="v2.1 (A69): a file canary, matched in Observe on the path. With an attributing sensor (fanotify) the process is known and contained; the unprivileged inotify watcher only alerts."),
+    "S54": _m("Outside host connects to a decoy service", "malicious", "server", "block", [ORIGIN], [], override="canary",
+              notes="v2.1 (A70): decoy_service is a channel role, so the block contains nothing local (the listener keeps listening); the source address becomes a block-list proposal (A71)."),
+    "S55": _m("Decoy document's beacon image is fetched from outside", "malicious", "server", "block", [ORIGIN], [], override="canary",
+              notes="v2.1 (A69): a beacon canary on the decoy HTTP listener. The document left the network and was opened elsewhere."),
+    "S56": _m("Backup job reads the decoy directory (its role is on the canaries' ignore list)", "benign", "server", "allow", [], [],
+              notes="v2.1 (A69): ignore_roles is applied in Observe, so the post-Observe events carry no canary hit."),
 }  # fmt: skip
 
 

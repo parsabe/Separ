@@ -421,6 +421,10 @@ signature: <detached signature>
 | S45 | AI agent runs a command from its allowlist (no external input)                                                          | benign    | allow                                                       |
 | S49 | Signed vendor installer downloaded from the internet persists (role `other`, no contract)                               | benign    | hold                                                        |
 | S50 | Backup job (role `backup_job`, contract allows mass change) changes many files beyond the Poisson threshold in a story that carries an external origin label | benign    | hold                                                        |
+| S53 | Downloaded unsigned tool opens a planted decoy file and connects out (v2.1)                                             | malicious | block (canary override)                                     |
+| S54 | Outside host connects to a decoy service; the listener is a channel and is not contained (v2.1)                         | malicious | block (canary override), source proposed for blocking       |
+| S55 | Decoy document's beacon image is fetched from outside (v2.1)                                                            | malicious | block (canary override)                                     |
+| S56 | Backup job reads the decoy directory; its role is on the canaries' `ignore_roles` (v2.1)                                | benign    | allow                                                       |
 
 ### C9. Test layers
 
@@ -547,6 +551,7 @@ Weights and structural rules (such as the contract gate) are fixed before any ca
 | v1.6, after v1.5: a block with no labeled process acts on the producers of its signals also in a story with an origin label, sparing channel roles and the user's shell. Evaluated on seed 545728926, design-decisions.md A63 | v1.5 evaluation, design finding F11 |
 | v1.7, after v1.6: external content hands every live label of its fingerprint to the ingesting process, as an exec already did. Evaluated on seed 616687759, design-decisions.md A64 | randomised property test of tests/test_v13.py |
 | v2.0, after v1.7: trust from a trusted root source is lineage, carried by the ingesting process and its children and fading like a label (narrower than one: not acquired by a channel role, no files, cancelled by any live external label); a fallback that reaches a channel role which started a program acts on that program. Evaluated on seed 171139148, design-decisions.md A65 and A66, docs/v2.0-evaluation.md | v1.7 evaluation, design finding F10 |
+| v2.1, after v2.0: browser observations are judged before execution (a clipboard write by a page is judged as the command it would be if pasted, through the existing calculus; no new signal); canary classes `file`, `service` and `beacon` with `ignore_roles`, matched in Observe; the channel role `decoy_service`; the raw source of a decoy hit goes only to a block-list proposal (external: raw, owner-only, expiring; internal: pseudonym plus sealed value, four-eyes); host lists also match the source address of a request. No weight changed. Evaluated on seed 395331504, design-decisions.md A68 to A72, docs/v2.1-evaluation.md | user request: browser protection and deception (honeytokens, decoy services, tarpit) |
 | Clarifications made before the freeze, none a new rule or weight: the S17-S20 no-label variants expect block; an allowance removes the Effect only in a story with no external origin label, with scenario S50; `signed` is true, false or `unknown`, and unknown raises no signal; the principle that missing information never generates evidence | check 3 (check 4 found nothing else changed) |
 
 **Worked check with these defaults**
@@ -586,6 +591,7 @@ Every attack family must keep at least one malicious and one benign scenario in 
 | Defense evasion, log tampering                           | any                                | universal: no tampering                   | tamper                                         | S20                      | S48         |
 | Data theft                                               | any                                | —                                         | exfil; CUSUM                                   | S22 (partial, known gap) | S44         |
 | AI agents running injected instructions                  | agent_input                        | agent external_content_exec               | fetch, hide                                    | S12                      | S45         |
+| Decoys and honeytokens (secret hunting, scanning, stolen documents) | any                     | —                                         | canary override (file, service, beacon)        | S53, S54, S55            | S56         |
 | Unpatched, workaround-only and end-of-life software      | —                                  | Exposure stage escalation                 | —                                              | S16, S28, S29            | —           |
 
 Rows marked "add one" need a benign counterpart before Phase 7; creating them is part of Phase 1.

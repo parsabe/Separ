@@ -726,8 +726,24 @@ def split(results: list[Result]) -> dict[str, int]:
     }
 
 
+# v2.1 (A70): a story that only a decoy listener produced is an attack from somewhere else. Nothing
+# ran on this device, so a block has nothing local to contain: its action is the block-list
+# proposal of the source (deception/proposals.py). The listener itself is never contained.
+REMOTE_ONLY_ROLES = frozenset({"decoy_service"})
+
+
+def remote_only(events) -> bool:
+    """True when every event of the stream was produced by a decoy listener."""
+    events = list(events)
+    return bool(events) and all(e.actor.role in REMOTE_ONLY_ROLES for e in events)
+
+
 def blocks_acting_on_nothing(results: list[Result]) -> list[Result]:
-    return [r for r in malicious(results) if r.outcome == "block" and not r.acts]
+    return [
+        r
+        for r in malicious(results)
+        if r.outcome == "block" and not r.acts and not remote_only(r.variant.events)
+    ]
 
 
 BENIGN_GROUPS = (

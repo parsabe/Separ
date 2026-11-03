@@ -1,0 +1,11 @@
+{
+  "title": "Backup job reads the decoy directory (its role is on the canaries' ignore list)",
+  "kind": "benign",
+  "platform": "server",
+  "decision": "allow",
+  "rule_decision": "allow",
+  "decided_in_phase": "1",
+  "known_gap": false,
+  "notes": "v2.1 (A69): ignore_roles is applied in Observe, so the post-Observe events carry no canary hit.",
+  "scenario": "S56"
+}

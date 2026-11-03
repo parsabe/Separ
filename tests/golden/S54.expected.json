@@ -1,0 +1,15 @@
+{
+  "title": "Outside host connects to a decoy service",
+  "kind": "malicious",
+  "platform": "server",
+  "decision": "block",
+  "rule_decision": "block",
+  "decided_in_phase": "1",
+  "questions_failed": [
+    "origin"
+  ],
+  "override": "canary",
+  "known_gap": false,
+  "notes": "v2.1 (A70): decoy_service is a channel role, so the block contains nothing local (the listener keeps listening); the source address becomes a block-list proposal (A71).",
+  "scenario": "S54"
+}

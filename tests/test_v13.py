@@ -193,7 +193,7 @@ def named(generated, scenario, name):
 
 def test_every_benign_golden_file_gets_a_baseline_and_variants(generated):
     benign = [x for x in generated if x.kind == "benign"]
-    assert {x.scenario for x in benign} == {c.scenario for c in BENIGN} and len(BENIGN) == 19
+    assert {x.scenario for x in benign} == {c.scenario for c in BENIGN} and len(BENIGN) == 20
     assert len(benign) > 150
     assert {x.kind for x in generated} == {"malicious", "benign"}
     assert all(x.adds == () for x in generated if x.kind == "malicious")

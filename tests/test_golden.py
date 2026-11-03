@@ -13,6 +13,7 @@ from refmon.golden import ExpectedVerdict, GoldenCase, ScenarioKind
 from refmon.policy import default_policy
 from refmon.replay import ReplaySource
 from refmon.schemas import EVENT_ATTR_KEYS, Decision, EventType, Override, SourceClass
+from refmon.variants import remote_only
 from scenario_run import cases
 
 CASES = cases()
@@ -115,7 +116,8 @@ def test_expected_actions_point_at_things_in_the_stream(case: GoldenCase):
 @by_id
 def test_blocked_and_allowed_scenarios_have_consistent_expectations(case: GoldenCase):
     expected = case.expected
-    if expected.decision is Decision.BLOCK:
+    if expected.decision is Decision.BLOCK and not remote_only(stream(case)):
+        # (a decoy-listener story has nothing local to contain: v2.1, A70)
         assert expected.actions, "a block must say what gets contained"
     if expected.decision is Decision.ALLOW:
         assert expected.actions == ()
@@ -142,6 +144,8 @@ def test_malicious_scenarios_reach_their_dangerous_action(case: GoldenCase):
         EventType.NET_CONNECT, EventType.FILE_WRITE, EventType.PERSIST, EventType.PRIV_CHANGE,
         EventType.ASSET_ACCESS, EventType.SECURITY_TAMPER, EventType.RESPONSE_OUT, EventType.EXEC,
     }  # fmt: skip
+    if remote_only(stream(case)):
+        return  # a decoy-listener story: the dangerous action happened elsewhere (A70)
     assert {e.type for e in stream(case)} & dangerous
 
 
