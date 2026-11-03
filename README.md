@@ -21,7 +21,7 @@ types that do not exist yet.
 
 Refmon is a **research reference monitor**. What exists and works today:
 
-- the full decision pipeline with a signed policy, verified by 50 golden scenarios, seeded mutation
+- the full decision pipeline with a signed policy, verified by 55 golden scenarios, seeded mutation
   matrices (886 variants in the last round) and over 2,100 automated tests;
 - an **interactive CLI attack lab** (`refmon lab`): 35 harmless attack and benign templates, each
   judged by the live pipeline *before* it may run, with saved logs and an automatic analysis;
@@ -318,6 +318,24 @@ listener itself is never contained, and the source address becomes a *proposal*:
 A touched decoy file is an alert: the unprivileged watcher cannot name the process. Guide:
 [docs/deception.md](docs/deception.md).
 
+## Sensors and hacked accounts (v2.2)
+
+**Connecting sensors without code.** Administrators connect the sensors they run (Tetragon,
+Falco, sshd, Keycloak, Shibboleth, Microsoft 365, Postfix/Dovecot) with a YAML mapping file, and
+`refmon serve --ingest ingest.yaml` judges their events like any other. `refmon ingest check`
+tries a mapping on real output without printing any of it.
+
+**Hacked accounts.** Refmon judges login and mail logs per account, using weights that were
+already approved:
+- a login from a network the account never used;
+- a burst of failed logins or MFA pushes;
+- mail forwarding to outside;
+- consent to an unknown application;
+- any attempt on a decoy account.
+
+A login story is held at most ("was this you?"), and the account is never locked. These rules
+start in observe mode until a pilot. Guide: [docs/admin-integration.md](docs/admin-integration.md).
+
 ## Rootkit scanner
 
 ```bash
@@ -354,7 +372,7 @@ make reproduce                                            # regenerate every res
 
 Over 2,100 tests: unit tests per rule, contract, effect and override; Hypothesis property tests
 (labels never lost, no raw content after Observe, Contain never touches an unlabeled object, ...);
-replay of the 50 golden scenarios; the privacy audit; rootkit, live-barrier, CLI, attack-lab, browser and deception
+replay of the 55 golden scenarios; the privacy audit; rootkit, live-barrier, CLI, attack-lab, browser and deception
 tests. One test is an expected failure (`xfail`): a documented limit of the S19 stand-in.
 `make reproduce` (several minutes) generates the variants of the active pre-registered seed,
 replays them in the tagged versions that seed was recorded for (`v1.7` and `v2.0`), checks that the
@@ -365,7 +383,7 @@ or personal data is in the tree or the history.
 
 ## Results
 
-**Golden catalog:** 50/50 scenarios reach their expected decision (46 until v2.0; S53–S56 are the decoy scenarios of v2.1).
+**Golden catalog:** 55/55 scenarios reach their expected decision (46 until v2.0; S53–S56 are the decoy scenarios of v2.1, S57–S61 the hacked-account scenarios of v2.2).
 
 ![Golden catalog and the v2.0 outcome split](docs/img/fig_outcomes.png)
 
@@ -557,7 +575,9 @@ commits.
 | `src/refmon/deception/` | v2.1: `plant` (decoy files), `watch` (inotify), `listener` (decoy services, tarpit), `proposals` (source proposals), `runtime`, `cli` |
 | `src/refmon/` (v2.1) | `browser_host.py` (native-messaging host), `families.py` (attack family names for pop-ups) |
 | `browser/` | the browser extension and its admin README |
-| `tests/` | unit, property, replay, live, rootkit, lab, browser and deception tests; `tests/golden/` holds the 50 scenarios |
+| `src/refmon/ingest/` | v2.2: `mapping` (the mapping language), `runtime` (files, sockets, runner), `cli`, `mappings/` (templates) |
+| `src/refmon/pipeline/identity.py` | v2.2: per-account login baselines |
+| `tests/` | unit, property, replay, live, rootkit, lab, browser and deception tests; `tests/golden/` holds the 55 scenarios |
 | `scripts/` | `reproduce.py`, `generate_variants.py`, `dump_matrix.py`, `compare_versions.py`, `check_publishable.py`, `push_to_github.sh` |
 | `docs/` | `results.md`, `attack-lab.md`, `design-decisions.md`, `progress.md`, `review-list.md`, `variant-seeds.md`, `v1.x`/`v2.0-evaluation.md`, `phase-8-plan.md`, `evaluation/` (per-variant results of every seed, the lab reference run), `img/` (README charts) |
 | `documentation/` | the LaTeX paper (`main.tex`, `main.pdf`), `make_figures.py` and `figures/`, the diagram book (`diagrams.tex`, `diagrams/`) |
@@ -593,3 +613,7 @@ variant matrix and the lab reference run give identical decisions):
 variants of the existing scenarios changes outcome against v2.0. Contained: 629/637 malicious
 (98.7 %); neutral false blocks: 0/158. The 33 malicious variants of the new decoy scenarios S53–S55
 are all blocked: [docs/v2.1-evaluation.md](docs/v2.1-evaluation.md).
+
+`v2.2` (branch `v2.2-ingest-identity`, on top of v2.1, not tagged yet) adds the sensor ingest kit and
+hacked-account detection (A73 to A77) with no new weight. On seed 255158241, none of the 925 shared
+variants changes outcome against v2.1: [docs/v2.2-evaluation.md](docs/v2.2-evaluation.md).

@@ -382,3 +382,45 @@ Not done or not checkable here:
 Planned next, not started: v2.2 (an admin integration kit, i.e. `refmon ingest` with mapping
 files for Falco, Tetragon, auditd, the Kubernetes audit log and IdP/mail logs, plus identity
 events with session hold) and v2.3 (container and IaC roles and behaviours).
+
+## v2.2: sensor ingest for the admins, and hacked accounts (2026-11-03, branch `v2.2-ingest-identity`)
+
+Built on v2.1, which is not merged yet. Seed 255158241 was recorded before the first change.
+
+Owner decisions, taken before the identity code:
+- **Weights:** reuse the approved weights, no new numbers.
+- **Login cap:** a login story is held at most, and the account is never locked.
+- **Observe first:** the identity rules record only, until a pilot.
+- **Sources:** templates for SSH, Shibboleth/Keycloak, M365 and Postfix/Dovecot.
+
+What was built:
+- **Ingest kit (A73).** A no-code mapping language and `refmon serve --ingest` (files followed
+  across rotation, owner-only sockets).
+  - Capability reporting, and a *Sensor stopped* alert.
+  - `refmon ingest list` and `refmon ingest check`, which prints shapes, never content.
+  - Templates for Tetragon, Falco, sshd, Keycloak, Shibboleth, M365 and Postfix/Dovecot, each
+    tested on a synthetic sample.
+- **Identity (A74 to A77).**
+  - New event types `auth`, `mail_rule` and `oauth_grant`.
+  - Observe reduces a login's source address to a class or a keyed prefix bucket.
+  - A per-account baseline, using only reused weights.
+  - The login cap, recorded on the verdict.
+  - Decoy accounts (canary class `account`).
+  - Observe-mode rule settings for the identity roles only.
+- **Catalog.** S57–S61, a C13 family *Hacked accounts*, and the v2.2 row of the freeze table.
+- **Findings fixed while building:**
+  - A new network that raised a signal was never learned, so a user who moved would have been
+    held forever. Fixed: the network is parked and learned after a quiet window.
+  - A mapped attribute longer than 64 characters (a SAML URN) would have broken the post-Observe
+    event. Fixed: allowlisted attributes are cleaned to identifiers.
+- **Evaluation** (docs/v2.2-evaluation.md):
+  - none of the 925 shared variants changed against v2.1;
+  - contained 663/671 (98.8 %); neutral false blocks 0/163;
+  - the 8 allowed variants are documented gaps;
+  - S59 blocks; the S57/S58 holds pause nothing yet, by design (observe mode).
+
+Not done:
+- Login-specific variant dimensions.
+- Linking a login to the processes that follow it.
+- Running the templates against real sensor output.
+- v2.3 (containers, Kubernetes, Terraform).
