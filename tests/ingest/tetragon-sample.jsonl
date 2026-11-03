@@ -1,0 +1,4 @@
+{"process_exec":{"process":{"exec_id":"bGFiMDE6MTAwMDE6MjAwMQ==","pid":2001,"uid":33,"binary":"/usr/bin/curl","arguments":"-s http://stage.lab-marker.example.invalid/x","parent_exec_id":"bGFiMDE6MTAwMDA6MTAwMQ=="},"parent":{"exec_id":"bGFiMDE6MTAwMDA6MTAwMQ==","pid":1001,"uid":33,"binary":"/usr/sbin/php-fpm8.2","parent_exec_id":"bGFiMDE6MTox"}},"node_name":"lab01","time":"2026-11-03T10:00:00.100000000Z"}
+{"process_kprobe":{"process":{"exec_id":"bGFiMDE6MTAwMDE6MjAwMQ==","pid":2001,"uid":33,"binary":"/usr/bin/curl","parent_exec_id":"bGFiMDE6MTAwMDA6MTAwMQ=="},"function_name":"tcp_connect","args":[{"sock_arg":{"family":"AF_INET","type":"SOCK_STREAM","protocol":"IPPROTO_TCP","saddr":"10.0.0.5","daddr":"203.0.113.66","sport":40100,"dport":443}}]},"node_name":"lab01","time":"2026-11-03T10:00:00.400000000Z"}
+{"process_exit":{"process":{"exec_id":"bGFiMDE6MTAwMDE6MjAwMQ==","pid":2001},"status":0},"node_name":"lab01","time":"2026-11-03T10:00:01Z"}
+not json at all

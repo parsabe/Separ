@@ -1,0 +1,117 @@
+# Falco -> Refmon (starting template; check the field names against your Falco version).
+#
+# Falco must write JSON (falco.yaml: json_output: true) and send it to Refmon, preferably to the
+# Unix socket of ingest.yaml (program_output: {enabled: true, program: "socat - UNIX-CONNECT:/run/refmon/falco.sock"}).
+# Falco reports only what its rules match, so this sensor gives Refmon the events of those rules,
+# not every process: it does not provide full process ancestry (see `provides`). Make your rules
+# print the fields used below, e.g. with
+#   append_output: [{match: {source: syscall}, extra_fields: [proc.pid, proc.ppid, proc.pname,
+#                    proc.name, proc.cmdline, user.name, container.id, fd.name, fd.sip, fd.sport,
+#                    evt.arg.flags]}]
+#
+# The role of a process comes from its program name (the table below). Adjust it to your servers:
+# a role decides which contract applies (CLAUDE.md C4).
+name: falco
+description: Falco alerts (syscall source) as exec, connect and file-write events
+format: json
+provides: []
+device: {from: hostname, default: falco-host}
+tables:
+  roles:
+    nginx: web_worker
+    httpd: web_worker
+    apache2: web_worker
+    php-fpm: web_worker
+    php-cgi: web_worker
+    uwsgi: web_worker
+    gunicorn: web_worker
+    node: node_app_server
+    java: app_server
+    postgres: db_server
+    mysqld: db_server
+    mariadbd: db_server
+    bash: interactive_shell
+    sh: interactive_shell
+    zsh: interactive_shell
+    dash: interactive_shell
+    python: script_host
+    perl: script_host
+    cron: scheduler
+    crond: scheduler
+    systemd: system_service
+    sshd: system_service
+rules:
+  - name: exec
+    match:
+      "output_fields[evt.type]": {in: [execve, execveat]}
+      "output_fields[proc.cmdline]": {exists: true}
+    event:
+      type: exec
+      ts: {from: time}
+      # the starter is the actor of an exec; the new program shows up as the actor of its own events
+      actor:
+        id: "{output_fields[proc.ppid]}@{output_fields[container.id]}"
+        role: {from: "output_fields[proc.pname]", basename: true, strip_version: true, map: roles, default: other}
+        user: {from: "output_fields[user.name]", default: unknown}
+      object:
+        class: command_text
+        content: {from: "output_fields[proc.cmdline]"}
+      attrs:
+        program: {from: "output_fields[proc.name]"}
+
+  - name: connect
+    match:
+      "output_fields[evt.type]": connect
+      "output_fields[fd.sip]": {exists: true}
+    event:
+      type: net_connect
+      ts: {from: time}
+      actor:
+        id: "{output_fields[proc.pid]}@{output_fields[container.id]}"
+        parent: "{output_fields[proc.ppid]}@{output_fields[container.id]}"
+        role: {from: "output_fields[proc.name]", basename: true, strip_version: true, map: roles, default: other}
+        user: {from: "output_fields[user.name]", default: unknown}
+      object:
+        class: network_endpoint
+        content: "{output_fields[fd.sip]}:{output_fields[fd.sport]}"
+      attrs:
+        ip: {from: "output_fields[fd.sip]"}
+        host: {from: "output_fields[fd.sip.name]"}
+
+  - name: file-write
+    match:
+      "output_fields[evt.type]": {in: [open, openat, openat2]}
+      "output_fields[fd.name]": {exists: true}
+    event:
+      type: file_write
+      ts: {from: time}
+      actor:
+        id: "{output_fields[proc.pid]}@{output_fields[container.id]}"
+        parent: "{output_fields[proc.ppid]}@{output_fields[container.id]}"
+        role: {from: "output_fields[proc.name]", basename: true, strip_version: true, map: roles, default: other}
+        user: {from: "output_fields[user.name]", default: unknown}
+      object:
+        class: file
+        content: {from: "output_fields[fd.name]"}
+      attrs:
+        # path classes, decided here from the raw path (adjust to your layout)
+        path_group:
+          from: "output_fields[fd.name]"
+          classify:
+            - {regex: "^/var/www/.*/(cache|tmp)/", value: cache}
+            - {regex: "^/var/lib/php/sessions/", value: sessions}
+            - {regex: "^/var/www/.*/uploads/", value: uploads_non_executable}
+            - {regex: "^/etc/", value: system_config}
+            - {regex: "^/tmp/|^/var/tmp/|^/dev/shm/", value: temp_dir}
+          default: other_path
+        web_root:
+          from: "output_fields[fd.name]"
+          classify: [{regex: "^/var/www/", value: main_site}]
+        new_file:
+          from: "output_fields[evt.arg.flags]"
+          classify: [{regex: O_CREAT, value: true}]
+          as: bool
+        executable:
+          from: "output_fields[fd.name]"
+          classify: [{regex: "\\.(php|phtml|jsp|aspx?|cgi|pl|py|sh)$", value: true}]
+          as: bool

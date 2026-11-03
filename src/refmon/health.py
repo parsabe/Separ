@@ -150,9 +150,10 @@ class HealthMonitor:
                 "new files in the sandbox and the web root are no longer checked or quarantined",
                 "sandbox_watcher",
             )  # fmt: skip
-        decoys = getattr(self.barrier, "decoy_conditions", None)
-        for key, category, severity, title, message, subject in decoys() if decoys else ():
-            out[key] = Condition(key, category, severity, title, message, subject)
+        for name in ("decoy_conditions", "ingest_conditions"):  # v2.1 deception, v2.2 ingest
+            extra = getattr(self.barrier, name, None)
+            for key, category, severity, title, message, subject in extra() if extra else ():
+                out[key] = Condition(key, category, severity, title, message, subject)
         rootkit = rootkit_condition(self.barrier)  # the newest scan, also one started by hand
         if rootkit is not None:
             out[rootkit.key] = rootkit

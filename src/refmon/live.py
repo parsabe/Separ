@@ -329,6 +329,7 @@ class LiveBarrier:
         self._browser_rate = _RateLimit(*BROWSER_RATE)
         self._browser_actor: Actor | None = None
         self._browser_holds: set[str] = set()
+        self.ingest_runners: list[Any] = []
         self.decoy_settings: Any = None
         self.decoy_sources: Any = None
         self.decoy_listener: Any = None
@@ -1037,6 +1038,47 @@ class LiveBarrier:
             return []
         known = {c.value for c in self.policy.canaries if c.class_ == "service"}
         return sorted(s.name for s in self.decoy_settings.listen.services if s.name not in known)
+
+    # -- sensor ingest (v2.2, A73) -------------------------------------------------------------
+
+    def start_ingest(self, cfg: Any) -> None:
+        """Run the external sensors of `cfg` (ingest.runtime.IngestConfig) inside the daemon."""
+        from .ingest.runtime import build_runners
+
+        self.ingest_runners = build_runners(
+            cfg, self.ingest_event, extra_roles=tuple(self.policy.extra_roles)
+        )
+        for runner in self.ingest_runners:
+            runner.start()
+            self._log_line(f"INGEST sensor {runner.name} started")
+
+    def stop_ingest(self) -> None:
+        for runner in self.ingest_runners:
+            runner.stop()
+
+    def ingest_event(self, raw: RawEvent) -> None:
+        """One mapped sensor event: judged like every other. Raw values reach Observe in memory."""
+        with self._lock:
+            story_id, _ = self._feed_raw_events([raw])
+            if story_id not in self._story_meta:
+                self._tag_story(story_id, attack_type="Sensor story", category="sensor")
+
+    def ingest_capabilities(self) -> tuple[str, ...]:
+        """What the running sensors supply (their mappings' `provides`), for degraded protection."""
+        out: set[str] = set()
+        for runner in self.ingest_runners:
+            if runner.alive:
+                out |= set(runner.mapper.mapping.provides)
+        return tuple(sorted(out))
+
+    def ingest_conditions(self) -> list[tuple[str, str, str, str, str, str]]:
+        out = []
+        for runner in self.ingest_runners:
+            if not runner.alive:
+                out.append((f"ingest:{runner.name}", "alert", "critical", "Sensor stopped",
+                            f"the sensor {runner.name} no longer feeds Refmon; what it covered "
+                            "is not judged", f"ingest:{runner.name}"))  # fmt: skip
+        return out
 
     # -- sandbox directory watcher & quarantine ------------------------------------------------
 
@@ -1993,8 +2035,9 @@ def serve_forever(
     rootkit_interval_s: float = 3600.0,
     open_browser: bool = False,
     decoys: str | Path | None = None,
+    ingest: str | Path | None = None,
 ) -> int:
-    from .health import HealthMonitor
+    from .health import LIVE_CAPABILITIES, HealthMonitor
     from .notify import ConsoleChannel
 
     hub = hub if hub is not None else NotificationHub()
@@ -2005,8 +2048,15 @@ def serve_forever(
         from .deception.runtime import load_settings
 
         barrier.start_decoys(load_settings(decoys))
+    if ingest is not None:
+        from .ingest.runtime import load_config
+
+        barrier.start_ingest(load_config(ingest))
     server = make_http_server(barrier, host=host, port=port)
-    monitor = HealthMonitor(barrier, rootkit_interval_s=rootkit_interval_s)
+    capabilities = tuple(sorted({*LIVE_CAPABILITIES, *barrier.ingest_capabilities()}))
+    monitor = HealthMonitor(
+        barrier, rootkit_interval_s=rootkit_interval_s, capabilities=capabilities
+    )
     barrier.health = monitor
     actual_port = server.server_address[1]
     # v2.1: the browser host finds this daemon through its port file, so every user of a shared
@@ -2070,6 +2120,7 @@ def serve_forever(
         with contextlib.suppress(OSError):
             port_file.unlink()
         barrier.stop_decoys()
+        barrier.stop_ingest()
         barrier.stop_background_watcher()
         barrier.notify(
             Notification(

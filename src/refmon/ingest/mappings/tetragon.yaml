@@ -1,0 +1,78 @@
+# Cilium Tetragon -> Refmon (starting template; check the field names against your Tetragon version).
+#
+# Tetragon writes JSON events (export file, or `tetra getevents -o json`). process_exec events
+# cover every new process, so this sensor gives Refmon process ancestry. Outbound connections need
+# a TracingPolicy that hooks tcp_connect with a sock argument (the Tetragon "network observability"
+# example); with it, `network_connections` is provided too.
+#
+# Actor ids are Tetragon's exec_id, so a process is the same actor in its exec and in its later
+# events. In Kubernetes, the pod's container image tells more about a role than the binary name:
+# replace the role tables with {from: "process_exec.process.pod.container.image.name", map: ...}.
+name: tetragon
+description: Tetragon process_exec and tcp_connect kprobe events
+format: json
+provides: [process_ancestry, network_connections]
+device: {from: node_name, default: tetragon-node}
+tables:
+  roles:
+    nginx: web_worker
+    httpd: web_worker
+    php-fpm: web_worker
+    uwsgi: web_worker
+    gunicorn: web_worker
+    node: node_app_server
+    java: app_server
+    postgres: db_server
+    mysqld: db_server
+    bash: interactive_shell
+    sh: interactive_shell
+    zsh: interactive_shell
+    dash: interactive_shell
+    python: script_host
+    perl: script_host
+    crond: scheduler
+    cron: scheduler
+    systemd: system_service
+    sshd: system_service
+    containerd-shim: system_service
+    runc: system_service
+rules:
+  - name: exec
+    match:
+      "process_exec.process.binary": {exists: true}
+      "process_exec.parent.exec_id": {exists: true}
+    event:
+      type: exec
+      ts: {from: time}
+      # the starter (parent) is the actor of an exec (CLAUDE.md C2 convention)
+      actor:
+        id: {from: process_exec.parent.exec_id}
+        parent: {from: process_exec.parent.parent_exec_id}
+        role: {from: process_exec.parent.binary, basename: true, strip_version: true, map: roles, default: other}
+        user: {from: process_exec.parent.uid, default: unknown}
+      object:
+        class: command_text
+        content:
+          first:
+            - "{process_exec.process.binary} {process_exec.process.arguments}"
+            - {from: process_exec.process.binary}
+      attrs:
+        program: {from: process_exec.process.binary, basename: true}
+
+  - name: connect
+    match:
+      "process_kprobe.function_name": tcp_connect
+      "process_kprobe.args.0.sock_arg.daddr": {exists: true}
+    event:
+      type: net_connect
+      ts: {from: time}
+      actor:
+        id: {from: process_kprobe.process.exec_id}
+        parent: {from: process_kprobe.process.parent_exec_id}
+        role: {from: process_kprobe.process.binary, basename: true, strip_version: true, map: roles, default: other}
+        user: {from: process_kprobe.process.uid, default: unknown}
+      object:
+        class: network_endpoint
+        content: "{process_kprobe.args.0.sock_arg.daddr}:{process_kprobe.args.0.sock_arg.dport}"
+      attrs:
+        ip: {from: process_kprobe.args.0.sock_arg.daddr}

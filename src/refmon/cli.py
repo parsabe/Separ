@@ -17,6 +17,7 @@
     refmon browser-host [--workdir DIR]        native-messaging host for the browser extension
     refmon browser-install [--system]          install the host manifests for Firefox/Chromium
     refmon decoy plant|approve-canaries|refresh|sources|approve-source   deception (decoys.yaml)
+    refmon ingest list|check                   connect external sensors (mapping files)
 
 Nothing here runs unattended: a person holds the key and names themselves as approver.
 """
@@ -133,6 +134,7 @@ def main(argv: list[str] | None = None) -> int:
     srv.add_argument("--port", type=int, default=8765)
     srv.add_argument("--workdir", default=None)
     srv.add_argument("--decoys", default=None, help="decoys.yaml: run decoy services and watcher")
+    srv.add_argument("--ingest", default=None, help="ingest.yaml: external sensors (mapping files)")
     _notify_args(srv)
     srv.add_argument(
         "--rootkit-interval",
@@ -175,8 +177,10 @@ def main(argv: list[str] | None = None) -> int:
     hl.add_argument("--json", action="store_true", dest="as_json")
     _notify_args(hl)
     from .deception.cli import add_parser as add_decoy_parser
+    from .ingest.cli import add_parser as add_ingest_parser
 
     add_decoy_parser(sub)
+    add_ingest_parser(sub)
     bh = sub.add_parser(
         "browser-host",
         description="Native-messaging host started by the browser itself (not by hand): relays "
@@ -365,7 +369,12 @@ def _run(args: argparse.Namespace) -> int:
             hub=hub,
             rootkit_interval_s=args.rootkit_interval,
             decoys=args.decoys,
+            ingest=args.ingest,
         )
+    elif args.command == "ingest":
+        from .ingest.cli import run as run_ingest
+
+        return run_ingest(args)
     elif args.command == "decoy":
         from .deception.cli import run as run_decoy
 
