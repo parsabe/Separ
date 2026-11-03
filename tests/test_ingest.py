@@ -335,7 +335,9 @@ IDENTITY_SAMPLES = {
     "postfix-dovecot.yaml": ("mail-sample.jsonl", ["mapped", "mapped", "mapped", "unmatched"]),
 }
 ALL_SAMPLES = {**IDENTITY_SAMPLES, "falco.yaml": ("falco-sample.jsonl", None),
-               "tetragon.yaml": ("tetragon-sample.jsonl", None)}  # fmt: skip
+               "tetragon.yaml": ("tetragon-sample.jsonl", None),
+               "k8s-audit.yaml": ("k8s-audit-sample.jsonl", None),
+               "tetragon-k8s": ("tetragon-k8s-sample.jsonl", None)}  # fmt: skip
 
 
 @pytest.mark.parametrize("template", sorted(IDENTITY_SAMPLES))
@@ -357,6 +359,7 @@ def test_every_template_sample_passes_observe_and_judge_without_error():
     SAML URN would otherwise break the Event); nothing raw survives."""
     pipe = Pipeline(default_policy())
     for template, (sample, _) in sorted(ALL_SAMPLES.items()):
+        template = "tetragon.yaml" if template == "tetragon-k8s" else template
         for ev, _ in mapped(template, sample):
             if ev is not None:
                 pipe.process(ev)
@@ -367,6 +370,10 @@ def test_every_template_sample_passes_observe_and_judge_without_error():
         "203.0.113.2",
         "box.example.invalid",
         "MailSyncPro",
+        "serviceaccount/token",
+        "terraform.tfstate",
+        "169.254.169.254",
+        "db-creds",
     ):  # account names are actor identifiers, pseudonymised when a verdict leaves (Phase 4)
         assert raw not in dumped
     assert len(pipe.judgements()) >= 5
@@ -392,3 +399,53 @@ def test_m365_forwarding_outside_is_held_and_inside_is_not():
     assert j.decision.value == "hold" and set(j.effects) == {"exfil", "persist"}
     pipe.process(inside)
     assert pipe.observe.buffer[-1].attrs == {"forward_external": False}
+
+
+# -- containers, Kubernetes and IaC (v2.3, A78) ------------------------------------------------------
+
+
+def judged_alone(template, sample):
+    pol = default_policy()
+    out = []
+    for ev, outcome in mapped(template, sample):
+        if ev is None:
+            out.append(outcome)
+            continue
+        pipe = Pipeline(pol)
+        pipe.process(ev)
+        j = list(pipe.judgements().values())[-1]
+        out.append((ev.actor.role, j.decision.value))
+    return out
+
+
+def test_k8s_audit_template_follows_the_role_contracts():
+    assert judged_alone("k8s-audit.yaml", "k8s-audit-sample.jsonl") == [
+        ("k8s_api_client", "hold"),  # exec into a pod: outside an ordinary client's contract
+        ("k8s_api_client", "block"),  # a privileged pod mounting the host's root
+        ("k8s_api_client", "block"),  # a new cluster role binding
+        ("ci_deployer", "hold"),  # a DaemonSet: effect_persist has no role allowance (F13)
+        ("k8s_admin", "allow"),  # an admin reads a secret
+        ("k8s_admin", "allow"),  # an admin execs into a pod
+        "unmatched",  # an ordinary read
+        "unmatched",  # a refused request (403) is not an action
+    ]
+
+
+def test_tetragon_container_and_terraform_records_follow_the_contracts():
+    assert judged_alone("tetragon.yaml", "tetragon-k8s-sample.jsonl") == [
+        ("web_worker", "block"),  # the role comes from the nginx image; it reads its SA token
+        ("web_worker", "block"),  # and calls the cloud metadata service
+        ("iac_tool", "allow"),  # terraform runs its provider (versioned name -> terraform-provider)
+        ("iac_tool", "allow"),  # and reads its state
+        ("iac_tool", "hold"),  # a local-exec provisioner starts a shell
+        ("interactive_shell", "hold"),  # which connects to an unknown host
+    ]
+
+
+def test_a_terraform_local_exec_that_fetches_is_one_blocked_story():
+    pipe = Pipeline(default_policy())
+    for ev, _ in mapped("tetragon.yaml", "tetragon-k8s-sample.jsonl")[2:]:
+        pipe.process(ev)
+    best = pipe.best()
+    assert best.decision.value == "block"
+    assert {s.name for s in best.signals} >= {"contract_exec_violation", "effect_fetch"}

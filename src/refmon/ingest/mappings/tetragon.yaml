@@ -6,8 +6,11 @@
 # example); with it, `network_connections` is provided too.
 #
 # Actor ids are Tetragon's exec_id, so a process is the same actor in its exec and in its later
-# events. In Kubernetes, the pod's container image tells more about a role than the binary name:
-# replace the role tables with {from: "process_exec.process.pod.container.image.name", map: ...}.
+# events. In Kubernetes the pod's container image names the role first (the `images` classify
+# table), the binary second (the `roles` table). v2.3 (A78): Terraform/OpenTofu are `iac_tool`, a
+# provider binary counts as the program `terraform-provider`, and a third rule maps file reads of
+# service-account tokens, kubeconfigs, Terraform state and cloud credentials (it needs a
+# TracingPolicy on security_file_permission or fd_install with a file argument).
 name: tetragon
 description: Tetragon process_exec and tcp_connect kprobe events
 format: json
@@ -36,6 +39,8 @@ tables:
     sshd: system_service
     containerd-shim: system_service
     runc: system_service
+    terraform: iac_tool
+    tofu: iac_tool
 rules:
   - name: exec
     match:
@@ -48,7 +53,17 @@ rules:
       actor:
         id: {from: process_exec.parent.exec_id}
         parent: {from: process_exec.parent.parent_exec_id}
-        role: {from: process_exec.parent.binary, basename: true, strip_version: true, map: roles, default: other}
+        role:
+          first:
+            - &images
+              from: process_exec.parent.pod.container.image.name
+              classify:
+                - {regex: "(^|/)(nginx|httpd|apache|php)", value: web_worker}
+                - {regex: "(^|/)(node)", value: node_app_server}
+                - {regex: "(^|/)(postgres|mysql|mariadb)", value: db_server}
+                - {regex: "(^|/)(hashicorp/terraform|opentofu)", value: iac_tool}
+                - {regex: ".", value: container_workload}
+            - {from: process_exec.parent.binary, basename: true, strip_version: true, map: roles, default: other}
         user: {from: process_exec.parent.uid, default: unknown}
       object:
         class: command_text
@@ -57,7 +72,10 @@ rules:
             - "{process_exec.process.binary} {process_exec.process.arguments}"
             - {from: process_exec.process.binary}
       attrs:
-        program: {from: process_exec.process.binary, basename: true}
+        program:
+          first:
+            - {from: process_exec.process.binary, basename: true, classify: [{regex: "^terraform-provider-", value: terraform-provider}, {regex: "^tofu-provider-", value: tofu-provider}]}
+            - {from: process_exec.process.binary, basename: true}
 
   - name: connect
     match:
@@ -69,10 +87,40 @@ rules:
       actor:
         id: {from: process_kprobe.process.exec_id}
         parent: {from: process_kprobe.process.parent_exec_id}
-        role: {from: process_kprobe.process.binary, basename: true, strip_version: true, map: roles, default: other}
+        role: &kprobe_role
+          first:
+            - {from: process_kprobe.process.pod.container.image.name, classify: [{regex: "(^|/)(nginx|httpd|apache|php)", value: web_worker}, {regex: "(^|/)(node)", value: node_app_server}, {regex: "(^|/)(hashicorp/terraform|opentofu)", value: iac_tool}, {regex: ".", value: container_workload}]}
+            - {from: process_kprobe.process.binary, basename: true, strip_version: true, map: roles, default: other}
         user: {from: process_kprobe.process.uid, default: unknown}
       object:
         class: network_endpoint
         content: "{process_kprobe.args.0.sock_arg.daddr}:{process_kprobe.args.0.sock_arg.dport}"
       attrs:
         ip: {from: process_kprobe.args.0.sock_arg.daddr}
+
+  - name: sensitive-file-read
+    match:
+      "process_kprobe.function_name": {in: [security_file_permission, fd_install]}
+      "process_kprobe.args.0.file_arg.path": {regex: "serviceaccount/token$|/\\.kube/config$|\\.tfstate(\\.backup)?$|/\\.aws/credentials$|/\\.config/gcloud/"}
+    event:
+      type: asset_access
+      ts: {from: time}
+      actor:
+        id: {from: process_kprobe.process.exec_id}
+        parent: {from: process_kprobe.process.parent_exec_id}
+        role: *kprobe_role
+        user: {from: process_kprobe.process.uid, default: unknown}
+      object:
+        class:
+          from: process_kprobe.args.0.file_arg.path
+          classify: [{regex: "serviceaccount/token$|/\\.aws/credentials$|/\\.config/gcloud/", value: key_material}]
+          default: file
+        content: {from: process_kprobe.args.0.file_arg.path}
+      attrs:
+        path_group:
+          from: process_kprobe.args.0.file_arg.path
+          classify:
+            - {regex: "serviceaccount/token$", value: sa_token}
+            - {regex: "/\\.kube/config$", value: kubeconfig}
+            - {regex: "\\.tfstate(\\.backup)?$", value: tfstate}
+            - {regex: "/\\.aws/credentials$|/\\.config/gcloud/", value: cloud_credentials}

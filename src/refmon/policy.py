@@ -368,7 +368,7 @@ class Policy(_Model):
     # Roles whose contract says exec is exceptional (C11 weight contract_web_worker_exec).
     strict_exec_roles: list[str] = Field(default_factory=lambda: ["web_worker", "node_app_server"])
     credential_classes: list[str] = Field(
-        default_factory=lambda: ["credential_store", "key_material"]
+        default_factory=lambda: ["credential_store", "key_material", "k8s_secret"]
     )
     reporting: Reporting = Field(default_factory=Reporting)
     tune: Tune = Field(default_factory=Tune)
@@ -520,6 +520,12 @@ def default_policy_dict() -> dict:
             "decoy_service",
             "identity_provider",
             "mail_server",
+            # v2.3 (A78): containers, Kubernetes and infrastructure as code
+            "k8s_api_client",
+            "k8s_admin",
+            "ci_deployer",
+            "container_workload",
+            "iac_tool",
         ],
         # v2.2 (A77): the login and mail rules start in observe mode for the identity roles only:
         # they record until a pilot measures their false alarms (owner decision, 2026-11-03)
@@ -569,10 +575,40 @@ def default_policy_dict() -> dict:
                 "internal": True,
                 "match": {"cidr": ["10.0.0.0/8", "192.168.0.0/16"]},
             },
+            # v2.3 (A78): the cloud instance metadata service hands out credentials; no role
+            # lists it, so any connection there is a fetch
+            {
+                "name": "cloud_metadata",
+                "trusted": False,
+                "match": {"cidr": ["169.254.169.254/32", "fd00:ec2::254/128"]},
+            },
+            {
+                "name": "k8s_api",
+                "trusted": False,
+                "match": {
+                    "host": ["kubernetes.default.svc", "kubernetes.default.svc.cluster.local"]
+                },
+            },
+            {
+                "name": "iac_registry",
+                "trusted": True,
+                "match": {"host": ["registry.terraform.io", "registry.opentofu.org"]},
+            },
+            {
+                "name": "cloud_api",
+                "trusted": True,
+                "match": {"host": ["cloud-api.example.internal"]},
+            },
         ],
         "protected_assets": [
             {"name": "browser-passwords", "class": "credential_store"},
             {"name": "app-config-secrets", "class": "path_group", "value": "app_secrets"},
+            # v2.3 (A78)
+            {"name": "k8s-service-account-token", "class": "path_group", "value": "sa_token"},
+            {"name": "kube-config", "class": "path_group", "value": "kubeconfig"},
+            {"name": "terraform-state", "class": "path_group", "value": "tfstate"},
+            {"name": "cloud-credentials", "class": "path_group", "value": "cloud_credentials"},
+            {"name": "k8s-secrets", "class": "k8s_secret"},
         ],
         "canaries": [
             {"name": "fake-db-credentials", "class": "credential", "value": "canary-db-password"},
@@ -584,11 +620,40 @@ def default_policy_dict() -> dict:
             {"name": "print_helper", "match": {"program": ["lpr", "cups-print"]}},
             {"name": "build_tool", "match": {"program": ["npm-build", "make"]}},
             {"name": "agent_tools", "match": {"program": ["git-status", "list-files"]}},
+            # v2.3 (A78): what Terraform/OpenTofu normally starts (mappings reduce a provider's
+            # versioned file name to terraform-provider)
+            {"name": "iac_provider", "match": {"program": ["terraform-provider", "tofu-provider"]}},
+            {"name": "iac_helpers", "match": {"program": ["git", "ssh"]}},
         ],
         "threat_lists": [
             {"name": "known-bad-hosts", "kind": "host", "entries": ["bad.example.invalid"]}
         ],
         "contracts": {
+            # v2.3 (A78): defaults the admins adjust in their signed policy
+            "k8s_api_client": {
+                "may_exec": [],  # exec into a pod is not ordinary API use
+                "may_persist": False,  # DaemonSets, CronJobs, admission webhooks
+                "may_change_privilege": False,  # privileged pods, RBAC bindings
+                "may_read_assets": [],  # Kubernetes secrets
+            },
+            "k8s_admin": {
+                "may_persist": True,
+                "may_change_privilege": True,
+                "may_read_assets": ["k8s-secrets", "kube-config"],
+            },
+            "ci_deployer": {
+                "may_exec": [],
+                "may_persist": True,
+                "may_change_privilege": False,
+                "may_read_assets": [],
+            },
+            "container_workload": {"may_read_assets": [], "may_change_privilege": False},
+            "iac_tool": {
+                "may_exec": ["iac_provider", "iac_helpers"],
+                "may_connect": ["iac_registry", "cloud_api"],
+                "may_read_assets": ["terraform-state", "cloud-credentials"],
+                "may_persist": False,
+            },
             "web_worker": {
                 "may_exec": [],
                 "may_write": ["cache", "sessions", "uploads_non_executable"],

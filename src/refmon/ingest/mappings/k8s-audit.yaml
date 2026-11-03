@@ -1,0 +1,125 @@
+# Kubernetes API audit log -> Refmon (starting template; audit.k8s.io/v1 events, one JSON per line).
+#
+# Use an audit policy with at least level Metadata for pods/exec, secrets, (cluster)rolebindings,
+# daemonsets, cronjobs and admission webhooks, and level Request for pods (the privileged and
+# hostPath checks read requestObject). Send the log backend's file, or the webhook backend's output,
+# to the Refmon socket. Only completed, successful requests are mapped.
+#
+# Who is who: the role of a request comes from the user and its groups (the classify tables
+# below). Adjust them: cluster admins -> k8s_admin, CI service accounts -> ci_deployer, Kubernetes'
+# own components -> system_service, everyone else -> k8s_api_client. An API request never creates an
+# origin label (the client is authenticated, like an SSH login).
+#
+# A CI service account that deploys DaemonSets or CronJobs raises `effect_persist` (a persist has no
+# role allowance in the specification): give it a scoped, expiring policy exception for
+# R-EFF-PERSIST (docs/admin-integration.md, design finding F13).
+name: k8s-audit
+description: Kubernetes audit events (exec, privileged pods, RBAC, persistence, secrets)
+format: json
+provides: []
+device: {const: k8s-cluster}  # the audit event does not name its cluster: set yours
+tables:
+  persist_kinds:
+    daemonsets: daemonset
+    cronjobs: cronjob
+    mutatingwebhookconfigurations: admission_webhook
+    validatingwebhookconfigurations: admission_webhook
+rules:
+  - name: exec-into-pod
+    match:
+      stage: ResponseComplete
+      verb: create
+      objectRef.resource: pods
+      objectRef.subresource: {in: [exec, attach]}
+      responseStatus.code: {regex: "^(1|2)\\d\\d$"}
+    event:
+      type: exec
+      ts: {from: stageTimestamp}
+      actor: &actor
+        id: {from: user.username, prefix: "k8s:"}
+        role:
+          first:
+            - {from: user.groups, classify: [{regex: "system:masters", value: k8s_admin}]}
+            - from: user.username
+              classify:
+                - {regex: "^system:serviceaccount:(ci|cicd|gitlab|argocd|flux)", value: ci_deployer}
+                - {regex: "^system:(kube-|node:|serviceaccount:kube-system:)", value: system_service}
+            - k8s_api_client
+        user: {from: user.username, regex: "([^:]+)$"}
+      object: {class: command_text, content: {from: requestURI}}
+      attrs:
+        program: {from: requestURI, regex: "command=([^&]+)"}
+
+  - name: privileged-pod
+    match:
+      stage: ResponseComplete
+      verb: create
+      objectRef.resource: pods
+      requestObject.spec.containers.0.securityContext.privileged: true
+    event:
+      type: priv_change
+      ts: {from: stageTimestamp}
+      actor: *actor
+      object: {class: privileged_pod, content: "{objectRef.namespace}/{requestObject.metadata.name}"}
+
+  - name: host-namespace-or-root-mount-pod
+    match:
+      stage: ResponseComplete
+      verb: create
+      objectRef.resource: pods
+      requestObject.spec.volumes.0.hostPath.path: "/"
+    event:
+      type: priv_change
+      ts: {from: stageTimestamp}
+      actor: *actor
+      object: {class: privileged_pod, content: "{objectRef.namespace}/{requestObject.metadata.name}"}
+
+  - name: host-pid-pod
+    match:
+      stage: ResponseComplete
+      verb: create
+      objectRef.resource: pods
+      requestObject.spec.hostPID: true
+    event:
+      type: priv_change
+      ts: {from: stageTimestamp}
+      actor: *actor
+      object: {class: privileged_pod, content: "{objectRef.namespace}/{requestObject.metadata.name}"}
+
+  - name: rbac-binding
+    match:
+      stage: ResponseComplete
+      verb: {in: [create, update, patch]}
+      objectRef.resource: {in: [clusterrolebindings, rolebindings]}
+      responseStatus.code: {regex: "^2\\d\\d$"}
+    event:
+      type: priv_change
+      ts: {from: stageTimestamp}
+      actor: *actor
+      object: {class: rbac_binding, content: "{objectRef.resource}/{objectRef.name}"}
+
+  - name: persistence
+    match:
+      stage: ResponseComplete
+      verb: create
+      objectRef.resource: {in: [daemonsets, cronjobs, mutatingwebhookconfigurations, validatingwebhookconfigurations]}
+      responseStatus.code: {regex: "^2\\d\\d$"}
+    event:
+      type: persist
+      ts: {from: stageTimestamp}
+      actor: *actor
+      object: {class: startup_item, content: "{objectRef.resource}/{objectRef.namespace}/{objectRef.name}"}
+      attrs:
+        persist_kind: {from: objectRef.resource, map: persist_kinds, default: k8s_object}
+
+  - name: read-secrets
+    match:
+      stage: ResponseComplete
+      verb: {in: [get, list, watch]}
+      objectRef.resource: secrets
+      responseStatus.code: {regex: "^2\\d\\d$"}
+    event:
+      type: asset_access
+      ts: {from: stageTimestamp}
+      actor: *actor
+      object: {class: k8s_secret, content: "{objectRef.namespace}/{objectRef.name}"}
