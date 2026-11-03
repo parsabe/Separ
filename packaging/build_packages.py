@@ -24,10 +24,10 @@ HOMEPAGE = "https://github.com/parsabe/Refmon"
 SUMMARY = "Behavioral Reference Monitor & Live Attack Barrier"
 DESCRIPTION = (
     "Refmon detects, contains and explains attacks on endpoints and servers\n"
-    " by judging behaviour rather than static signatures. It provides\n"
-    " real-time CLI mediation tools (refmon guard, refmon lab) and an\n"
-    " interactive Reference Monitor GUI (refmon gui) similar to Wireshark\n"
-    " for behavioral incident analysis."
+    "by judging behaviour rather than static signatures. It provides\n"
+    "real-time CLI mediation tools (refmon guard, refmon lab) and an\n"
+    "interactive Reference Monitor GUI (refmon gui) similar to Wireshark\n"
+    "for behavioral incident analysis."
 )
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -131,6 +131,13 @@ def build_deb() -> Path:
     debian_dir = deb_staging / "DEBIAN"
     debian_dir.mkdir(parents=True, exist_ok=True)
 
+    # Format Debian extended description (each line indented with single space)
+    desc_lines = []
+    for line in DESCRIPTION.strip().splitlines():
+        s = line.strip()
+        desc_lines.append(f" {s}" if s else " .")
+    deb_description = f"Description: {SUMMARY}\n" + "\n".join(desc_lines)
+
     control_content = f"""Package: {PKG_NAME}
 Version: {VERSION}
 Section: utils
@@ -140,8 +147,7 @@ Installed-Size: {installed_size_kb}
 Maintainer: {MAINTAINER}
 Homepage: {HOMEPAGE}
 Depends: python3 (>= 3.10), python3-pydantic, python3-yaml, python3-cryptography
-Description: {SUMMARY}
-{DESCRIPTION}
+{deb_description}
 """
     (debian_dir / "control").write_text(control_content, encoding="utf-8")
     (debian_dir / "control").chmod(0o644)
@@ -168,9 +174,20 @@ exit 0
     (debian_dir / "md5sums").write_text("".join(md5_lines), encoding="utf-8")
     (debian_dir / "md5sums").chmod(0o644)
 
-    # Build control.tar.gz
+    # Build control.tar.gz (must use GNU tar format, no PAX extended headers)
     control_tar = deb_staging / "control.tar.gz"
-    with tarfile.open(control_tar, "w:gz") as tar:
+    with tarfile.open(control_tar, "w:gz", format=tarfile.GNU_FORMAT) as tar:
+        root_ti = tarfile.TarInfo(name="./")
+        root_ti.type = tarfile.DIRTYPE
+        root_ti.mode = 0o755
+        root_ti.uid = 0
+        root_ti.gid = 0
+        root_ti.uname = "root"
+        root_ti.gname = "root"
+        root_ti.mtime = int(debian_dir.stat().st_mtime)
+        root_ti.pax_headers = {}
+        tar.addfile(root_ti)
+
         for entry in ("control", "postinst", "md5sums"):
             p = debian_dir / entry
             if p.is_file():
@@ -179,21 +196,38 @@ exit 0
                 ti.gid = 0
                 ti.uname = "root"
                 ti.gname = "root"
+                ti.mtime = int(p.stat().st_mtime)
+                ti.pax_headers = {}
                 with p.open("rb") as f:
                     tar.addfile(ti, f)
 
-    # Build data.tar.gz
+    # Build data.tar.gz (must use GNU tar format, no PAX extended headers)
     data_tar = deb_staging / "data.tar.gz"
-    with tarfile.open(data_tar, "w:gz") as tar:
+    with tarfile.open(data_tar, "w:gz", format=tarfile.GNU_FORMAT) as tar:
+        root_ti = tarfile.TarInfo(name="./")
+        root_ti.type = tarfile.DIRTYPE
+        root_ti.mode = 0o755
+        root_ti.uid = 0
+        root_ti.gid = 0
+        root_ti.uname = "root"
+        root_ti.gname = "root"
+        root_ti.mtime = int(data_dir.stat().st_mtime)
+        root_ti.pax_headers = {}
+        tar.addfile(root_ti)
+
         for root, dirs, files in os.walk(data_dir):
             for d in sorted(dirs):
                 full_d = Path(root) / d
                 rel_d = full_d.relative_to(data_dir)
                 ti = tar.gettarinfo(str(full_d), arcname=f"./{rel_d}")
+                ti.type = tarfile.DIRTYPE
+                ti.mode = 0o755
                 ti.uid = 0
                 ti.gid = 0
                 ti.uname = "root"
                 ti.gname = "root"
+                ti.mtime = int(full_d.stat().st_mtime)
+                ti.pax_headers = {}
                 tar.addfile(ti)
             for f in sorted(files):
                 full_f = Path(root) / f
@@ -203,6 +237,8 @@ exit 0
                 ti.gid = 0
                 ti.uname = "root"
                 ti.gname = "root"
+                ti.mtime = int(full_f.stat().st_mtime)
+                ti.pax_headers = {}
                 with full_f.open("rb") as fp:
                     tar.addfile(ti, fp)
 
