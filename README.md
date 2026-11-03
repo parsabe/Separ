@@ -21,7 +21,7 @@ types that do not exist yet.
 
 Refmon is a **research reference monitor**. What exists and works today:
 
-- the full decision pipeline with a signed policy, verified by 55 golden scenarios, seeded mutation
+- the full decision pipeline with a signed policy, verified by 60 golden scenarios, seeded mutation
   matrices (886 variants in the last round) and over 2,100 automated tests;
 - an **interactive CLI attack lab** (`refmon lab`): 35 harmless attack and benign templates, each
   judged by the live pipeline *before* it may run, with saved logs and an automatic analysis;
@@ -336,6 +336,13 @@ already approved:
 A login story is held at most ("was this you?"), and the account is never locked. These rules
 start in observe mode until a pilot. Guide: [docs/admin-integration.md](docs/admin-integration.md).
 
+**Containers, Kubernetes and Terraform (v2.3).** Role contracts for API clients, admins, CI,
+container workloads and Terraform. Cloud metadata, service-account tokens, Terraform state and
+Kubernetes secrets are treated as credentials. There are templates for the Kubernetes audit log
+and for Tetragon (a container's role comes from its image). Privileged pods, RBAC abuse, token
+theft and malicious `local-exec` provisioners are caught with the approved weights; no new rule
+was added.
+
 ## Rootkit scanner
 
 ```bash
@@ -372,7 +379,7 @@ make reproduce                                            # regenerate every res
 
 Over 2,100 tests: unit tests per rule, contract, effect and override; Hypothesis property tests
 (labels never lost, no raw content after Observe, Contain never touches an unlabeled object, ...);
-replay of the 55 golden scenarios; the privacy audit; rootkit, live-barrier, CLI, attack-lab, browser and deception
+replay of the 60 golden scenarios; the privacy audit; rootkit, live-barrier, CLI, attack-lab, browser and deception
 tests. One test is an expected failure (`xfail`): a documented limit of the S19 stand-in.
 `make reproduce` (several minutes) generates the variants of the active pre-registered seed,
 replays them in the tagged versions that seed was recorded for (`v1.7` and `v2.0`), checks that the
@@ -383,7 +390,7 @@ or personal data is in the tree or the history.
 
 ## Results
 
-**Golden catalog:** 55/55 scenarios reach their expected decision (46 until v2.0; S53–S56 are the decoy scenarios of v2.1, S57–S61 the hacked-account scenarios of v2.2).
+**Golden catalog:** 60/60 scenarios reach their expected decision (46 until v2.0; S53–S56 decoys (v2.1), S57–S61 hacked accounts (v2.2), S62–S66 containers, Kubernetes and IaC (v2.3)).
 
 ![Golden catalog and the v2.0 outcome split](docs/img/fig_outcomes.png)
 
@@ -577,7 +584,7 @@ commits.
 | `browser/` | the browser extension and its admin README |
 | `src/refmon/ingest/` | v2.2: `mapping` (the mapping language), `runtime` (files, sockets, runner), `cli`, `mappings/` (templates) |
 | `src/refmon/pipeline/identity.py` | v2.2: per-account login baselines |
-| `tests/` | unit, property, replay, live, rootkit, lab, browser and deception tests; `tests/golden/` holds the 55 scenarios |
+| `tests/` | unit, property, replay, live, rootkit, lab, browser and deception tests; `tests/golden/` holds the 60 scenarios |
 | `scripts/` | `reproduce.py`, `generate_variants.py`, `dump_matrix.py`, `compare_versions.py`, `check_publishable.py`, `push_to_github.sh` |
 | `docs/` | `results.md`, `attack-lab.md`, `design-decisions.md`, `progress.md`, `review-list.md`, `variant-seeds.md`, `v1.x`/`v2.0-evaluation.md`, `phase-8-plan.md`, `evaluation/` (per-variant results of every seed, the lab reference run), `img/` (README charts) |
 | `documentation/` | the LaTeX paper (`main.tex`, `main.pdf`), `make_figures.py` and `figures/`, the diagram book (`diagrams.tex`, `diagrams/`) |
@@ -617,3 +624,8 @@ are all blocked: [docs/v2.1-evaluation.md](docs/v2.1-evaluation.md).
 `v2.2` (branch `v2.2-ingest-identity`, on top of v2.1, not tagged yet) adds the sensor ingest kit and
 hacked-account detection (A73 to A77) with no new weight. On seed 255158241, none of the 925 shared
 variants changes outcome against v2.1: [docs/v2.2-evaluation.md](docs/v2.2-evaluation.md).
+
+`v2.3` (branch `v2.3-containers-iac`, on top of v2.2, not tagged) adds container, Kubernetes and IaC
+vocabulary and templates (A78, A79), no rule and no weight. On seed 837115701, none of the 933
+shared variants changes against v2.2, and the 43 malicious variants of S62–S64 are all contained:
+[docs/v2.3-evaluation.md](docs/v2.3-evaluation.md).

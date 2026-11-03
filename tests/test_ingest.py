@@ -449,3 +449,19 @@ def test_a_terraform_local_exec_that_fetches_is_one_blocked_story():
     best = pipe.best()
     assert best.decision.value == "block"
     assert {s.name for s in best.signals} >= {"contract_exec_violation", "effect_fetch"}
+
+
+def test_a_scoped_exception_lets_ci_deploy_daemonsets_f13():
+    from refmon.policy import Policy, default_policy_dict
+
+    data = default_policy_dict()
+    data["exceptions"] = [{"id": "X-CI-01", "reason": "CI deploys node agents",
+                           "scope": {"role": "ci_deployer"}, "disables": ["R-EFF-PERSIST"],
+                           "expires": "2099-12-31"}]  # fmt: skip
+    daemonset = mapped("k8s-audit.yaml", "k8s-audit-sample.jsonl")[3][0]
+    pipe = Pipeline(Policy.parse(data))
+    pipe.process(daemonset)
+    assert pipe.best().decision.value == "allow"
+    other = mapped("k8s-audit.yaml", "k8s-audit-sample.jsonl")[1][0]  # not in scope: still blocked
+    pipe.process(other)
+    assert pipe.best().decision.value == "block"

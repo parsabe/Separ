@@ -138,12 +138,47 @@ How it decides:
   account has been quiet for `rates.long_window`, so a user who moved is held once, not forever.
   Limit: an attacker who waits out that window is learned too.
 
-## 6. Not covered yet
+## 6. Containers, Kubernetes and Terraform (v2.3)
+
+| Template | What it maps |
+|---|---|
+| `k8s-audit.yaml` | `pods/exec`, privileged pods, pods mounting the host root or sharing its process table, RBAC bindings, DaemonSets, CronJobs and admission webhooks, reads of secrets |
+| `tetragon.yaml` | the role of a container from its **image**; Terraform/OpenTofu as `iac_tool` and their providers; reads of service-account tokens, kubeconfigs, Terraform state and cloud credentials |
+
+The default policy's contracts for these roles (CLAUDE.md C4 style) are starting points. Adjust
+them in your signed policy:
+
+| Role | May | May not (a Contract signal) |
+|---|---|---|
+| `k8s_api_client` (everyone not listed below) | ordinary API use | exec into pods, create DaemonSets, CronJobs or webhooks, privileged pods or RBAC bindings, read secrets |
+| `k8s_admin` (group `system:masters` in the template) | all of that | — |
+| `ci_deployer` (service accounts of CI namespaces) | create workloads | exec into pods, change privilege, read secrets |
+| `container_workload` (any container image the table does not name) | its work | read protected assets (tokens, credentials), change privilege |
+| `iac_tool` (terraform, tofu) | run providers, git and ssh; reach the registry and the cloud API; read its state and cloud credentials | start anything else (a `local-exec` provisioner), connect elsewhere, persist |
+
+Things to know:
+- **The cloud metadata service** (169.254.169.254) is listed in no contract, so every connection
+  there is a `fetch`. A container that asks it for credentials is caught by what it does, not by
+  what it is.
+- **Name your own cloud API hosts** in the `cloud_api` destination (the default is a placeholder).
+- **CI that deploys DaemonSets or CronJobs** is held: a persist has no role allowance in the
+  specification (finding F13). Give the CI role a scoped, expiring exception:
+
+```yaml
+exceptions:
+  - {id: X-CI-01, reason: "CI deploys node agents", scope: {role: ci_deployer},
+     disables: [R-EFF-PERSIST], expires: 2027-06-30}
+```
+
+- **`local-exec` provisioners that your modules legitimately use** are a contract violation by
+  default. Name the programs they run as an executable class and add it to `iac_tool.may_exec`.
+
+## 7. Not covered yet
 
 - **Linking sources.** A login and the processes that follow it on the same server are separate
   stories: the sensors use different ids (an SSH session's pid against Tetragon's exec ids).
-- **Containers.** Kubernetes and container roles, and Terraform, are planned for v2.3. The
-  Tetragon template already carries the pod's container image, ready to become the role.
+- **A container escape without an API call** (a kernel exploit) is seen only by what the process
+  does next on the host.
 - **Field names.** The templates have not been run against real Falco, Tetragon, Keycloak,
   Shibboleth, M365 or Dovecot output here; only against synthetic samples. Step 3 is how you check
   them.

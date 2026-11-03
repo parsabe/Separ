@@ -21,9 +21,10 @@ gaps:
       Seed 171139148 (v2.0): also S05, a command typed by hand (no origin label at all, the known
       gap of the catalog) whose connection goes to the trusted class; nothing fails.
       v2.3: also S64 (Terraform local-exec) with the entry changed to a launcher, which carries no
-      label and has no exec contract, and the fetch sent to the trusted class.
+      label and has no exec contract, and the fetch sent to the trusted class. Seed 837115701
+      (v2.3, and v2.2 alike): also S12 combo-12, the agent replaced by a launcher entry.
     match: {destination: popular_trusted}
-    scenarios: [S05, S07, S13, S18, S25, S64]
+    scenarios: [S05, S07, S12, S13, S18, S25, S64]
   - id: G2
     finding: F3
     reason: >

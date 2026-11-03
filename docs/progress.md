@@ -424,3 +424,35 @@ Not done:
 - Linking a login to the processes that follow it.
 - Running the templates against real sensor output.
 - v2.3 (containers, Kubernetes, Terraform).
+
+## v2.3: containers, Kubernetes and Terraform (2026-11-03, branch `v2.3-containers-iac`)
+
+Built on v2.2, which is not merged yet. Seed 837115701 was recorded before the first change. No
+new rule and no new weight: every container, Kubernetes and Terraform behaviour is an existing
+event type and an approved signal (A78).
+
+- **Policy defaults:**
+  - roles and contracts for API clients, admins, CI, container workloads and Terraform;
+  - cloud metadata as a destination no contract lists;
+  - protected assets for service-account tokens, kubeconfigs, Terraform state and cloud
+    credentials, plus Kubernetes secrets as a credential class.
+- **Templates:**
+  - Kubernetes audit;
+  - Tetragon: role from the container image, Terraform providers, sensitive file reads.
+- **Catalog.** S62–S66, a C13 family *Containers, Kubernetes and IaC*, and the v2.3 row of the
+  freeze table. API-client stories carry no origin label (A79).
+- **Evaluation** (docs/v2.3-evaluation.md):
+  - none of the 933 shared variants changed against v2.2;
+  - contained 654/670 (97.6 %); neutral false blocks 0/161;
+  - S62–S64: 43/43 contained.
+- **Design findings:**
+  - **F13.** A persist has no role allowance in the specification, so a CI service account that
+    deploys a DaemonSet or CronJob is held (`effect_persist` alone). Answer without a rule
+    change: a scoped, expiring policy exception for R-EFF-PERSIST and the CI role.
+  - **F14.** The variant generator labels an `entry` mutation as neutral even when it replaces the
+    role whose contract makes the story benign. S65's admin replaced by a shell no longer may read
+    secrets, so 9 of its 14 "neutral" variants hold. That is right for the mutated story; it is
+    the generator's labelling table that should know such roles. Recorded, not fixed (changing the
+    labelling changes the measurement).
+  - The allowed variants of the new seed are G1 to G4, now also S12 and S64 under G1 (a launcher
+    entry and a trusted destination).
