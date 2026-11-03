@@ -376,8 +376,8 @@ Not done or not checkable here:
 - fanotify decoy attribution: needs root.
 - Making 395331504 the active seed of `make reproduce`: that needs a `v2.1` tag, which is the
   owner's decision. Three lines to change are listed in docs/v2.1-evaluation.md.
-- The two intermediate branch commits 2c7bad6 and f78c38c still hold placeholder URLs that the
-  history scan of `check_publishable.py` reports. The tree is clean; a squash merge removes them.
+- The intermediate branch commits that still held placeholder URLs were rewritten before the
+  first push (same final tree), so the history scan of `check_publishable.py` is clean.
 
 Planned next, not started: v2.2 (an admin integration kit, i.e. `refmon ingest` with mapping
 files for Falco, Tetragon, auditd, the Kubernetes audit log and IdP/mail logs, plus identity
@@ -456,3 +456,21 @@ event type and an approved signal (A78).
     labelling changes the measurement).
   - The allowed variants of the new seed are G1 to G4, now also S12 and S64 under G1 (a launcher
     entry and a trusted destination).
+
+## Release of v2.1 to v2.3 (2026-11-03)
+
+On the owner's request:
+- **History rewritten.** The unpushed branches were rewritten with `git filter-branch`. Each
+  commit got the fixes the final tree already had (placeholder URLs, a public address, a root home path),
+  so the history scan of `check_publishable.py` is clean; the final tree is unchanged.
+- **Merged and tagged.** `master` was fast-forwarded to v2.3, and the annotated tags `v2.1`, `v2.2`
+  and `v2.3` were set at the tips of their branches.
+- **Active seed switched.** The active seed is now 837115701 (`refmon.variants.SEED`,
+  `SEED_VERSIONS = {837115701: (v2.2, v2.3)}`); 395331504 and 255158241 are retired.
+- **`make reproduce` adapted.** Each version replays the variants of the scenarios its own catalog
+  has, and the comparison covers the shared ones.
+- **Push script.** `scripts/push_to_github.sh` now pushes the tags v1.7 to v2.3.
+- **Known gap G5 removed.** G5 (S27 with its oversized responses minutes apart, 0.02 nats under
+  the hold threshold on seed 171139148, gap 508 s) covers no variant of seed 837115701: the gaps
+  this seed draws keep S27 held. Following `variants.stale`, the entry goes. The limit itself
+  stays: a slow enough leak inside the story window can still fall just under the hold threshold.

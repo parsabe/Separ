@@ -15,8 +15,8 @@ Earlier evaluations on retired seeds are listed at the end.
 <!-- BEGIN GENERATED: versions -->
 | tag | commit | |
 |---|---|---|
-| v1.7 | d77b756 | A60 to A64: lineage-aware trust, incidents end, bounded state, producers act, every live label handed over |
-| v2.0 | 0bdf46c | A65, A66: trust as lineage (F10), relay containment |
+| v2.2 | 1adae36 | A73 to A77: sensor ingest kit, hacked accounts (approved weights, login cap) |
+| v2.3 | dc284bd | A78, A79: containers, Kubernetes and IaC vocabulary and templates |
 <!-- END GENERATED: versions -->
 
 `v1.0` is frozen. Each later version changes structural rules in response to the findings of the
@@ -46,112 +46,112 @@ labelled, before any replay, its mutation as adding a Contract violation or an E
 in [variant-seeds.md](variant-seeds.md)); the **neutral** variants are the false-alarm test.
 
 <!-- BEGIN GENERATED: matrix -->
-Seed 171139148; sha256 of the generated variants file `841cf30ebc7b1fdcf5a0192c7ad96819dc961444bbc1e5e7a1f862e5d24440b5`.
+Seed 837115701; sha256 of the generated variants file `bb794a51f350f32ee6bcccd783ac458db69c3dbc3c6ad97f87fd897ebc700503`.
 
-886 variants, identical event streams in every run (hash checked).
+933 variants, identical event streams in every run (hash checked).
 
 ## Malicious variants
 
 **All**
 
-| | v1.7 | v2.0 |
+| | v2.2 | v2.3 |
 |---|---:|---:|
-| variants | 635 | 635 |
-| block | 483 | 483 |
-| effective hold | 142 | 142 |
-| uncontained (allow + hold pauses nothing) | 10 | 10 |
-| - allow | 10 | 10 |
-| - hold pauses nothing | 0 | 0 |
+| variants | 670 | 670 |
+| block | 516 | 516 |
+| effective hold | 138 | 138 |
+| uncontained (allow + hold pauses nothing) | 16 | 16 |
+| - allow | 9 | 9 |
+| - hold pauses nothing | 7 | 7 |
+| blocks that act on nothing | 2 | 2 |
+
+**Variants the seed decides (339): the independent test**
+
+| | v2.2 | v2.3 |
+|---|---:|---:|
+| variants | 339 | 339 |
+| block | 238 | 238 |
+| effective hold | 87 | 87 |
+| uncontained (allow + hold pauses nothing) | 14 | 14 |
+| - allow | 9 | 9 |
+| - hold pauses nothing | 5 | 5 |
 | blocks that act on nothing | 0 | 0 |
 
-**Variants the seed decides (324): the independent test**
+**Variants that are the same for every seed (331): a regression check, not fresh evidence**
 
-| | v1.7 | v2.0 |
+| | v2.2 | v2.3 |
 |---|---:|---:|
-| variants | 324 | 324 |
-| block | 223 | 223 |
-| effective hold | 91 | 91 |
-| uncontained (allow + hold pauses nothing) | 10 | 10 |
-| - allow | 10 | 10 |
-| - hold pauses nothing | 0 | 0 |
-| blocks that act on nothing | 0 | 0 |
-
-**Variants that are the same for every seed (311): a regression check, not fresh evidence**
-
-| | v1.7 | v2.0 |
-|---|---:|---:|
-| variants | 311 | 311 |
-| block | 260 | 260 |
+| variants | 331 | 331 |
+| block | 278 | 278 |
 | effective hold | 51 | 51 |
-| uncontained (allow + hold pauses nothing) | 0 | 0 |
+| uncontained (allow + hold pauses nothing) | 2 | 2 |
 | - allow | 0 | 0 |
-| - hold pauses nothing | 0 | 0 |
-| blocks that act on nothing | 0 | 0 |
+| - hold pauses nothing | 2 | 2 |
+| blocks that act on nothing | 2 | 2 |
 
 ## Benign variants
 
-**Benign, neutral (158)**
+**Benign, neutral (161)**
 
-| | v1.7 | v2.0 |
+| | v2.2 | v2.3 |
 |---|---:|---:|
-| variants | 158 | 158 |
-| allow | 132 | 137 |
-| hold | 24 | 21 |
-| block | 2 | 0 |
-| block rate (the false block rate for neutral variants) | 1.3% | 0.0% |
-| worse than the unmodified file | 5 | 0 |
-
-**Benign, adds a contract violation (50)**
-
-| | v1.7 | v2.0 |
-|---|---:|---:|
-| variants | 50 | 50 |
-| allow | 17 | 17 |
-| hold | 3 | 3 |
-| block | 30 | 30 |
-| block rate (the false block rate for neutral variants) | 60.0% | 60.0% |
+| variants | 161 | 161 |
+| allow | 141 | 141 |
+| hold | 20 | 20 |
+| block | 0 | 0 |
+| block rate (the false block rate for neutral variants) | 0.0% | 0.0% |
 | worse than the unmodified file | 0 | 0 |
 
-**Benign, adds an effect (43)**
+**Benign, adds a contract violation (64)**
 
-| | v1.7 | v2.0 |
+| | v2.2 | v2.3 |
 |---|---:|---:|
-| variants | 43 | 43 |
+| variants | 64 | 64 |
+| allow | 15 | 15 |
+| hold | 6 | 6 |
+| block | 43 | 43 |
+| block rate (the false block rate for neutral variants) | 67.2% | 67.2% |
+| worse than the unmodified file | 0 | 0 |
+
+**Benign, adds an effect (38)**
+
+| | v2.2 | v2.3 |
+|---|---:|---:|
+| variants | 38 | 38 |
 | allow | 0 | 0 |
-| hold | 38 | 38 |
-| block | 5 | 5 |
-| block rate (the false block rate for neutral variants) | 11.6% | 11.6% |
+| hold | 35 | 35 |
+| block | 3 | 3 |
+| block rate (the false block rate for neutral variants) | 7.9% | 7.9% |
 | worse than the unmodified file | 0 | 0 |
 
 **All benign variants**
 
-| | v1.7 | v2.0 |
+| | v2.2 | v2.3 |
 |---|---:|---:|
-| variants | 251 | 251 |
-| allow | 149 | 154 |
-| hold | 65 | 62 |
-| block | 37 | 35 |
-| block rate (the false block rate for neutral variants) | 14.7% | 13.9% |
-| worse than the unmodified file | 5 | 0 |
+| variants | 263 | 263 |
+| allow | 156 | 156 |
+| hold | 61 | 61 |
+| block | 46 | 46 |
+| block rate (the false block rate for neutral variants) | 17.5% | 17.5% |
+| worse than the unmodified file | 0 | 0 |
 <!-- END GENERATED: matrix -->
 
 ### Rates with intervals, and version comparisons
 
 <!-- BEGIN GENERATED: stats -->
-| rate (Wilson 95 % interval) | v1.7 | v2.0 |
+| rate (Wilson 95 % interval) | v2.2 | v2.3 |
 |---|---:|---:|
-| malicious variants caught (block or hold) | 625/635 = 98.4% [97.1%, 99.1%] | 625/635 = 98.4% [97.1%, 99.1%] |
-| malicious variants blocked | 483/635 = 76.1% [72.6%, 79.2%] | 483/635 = 76.1% [72.6%, 79.2%] |
-| malicious variants contained (block or effective hold) | 625/635 = 98.4% [97.1%, 99.1%] | 625/635 = 98.4% [97.1%, 99.1%] |
-| neutral benign variants blocked (false block rate) | 2/158 = 1.3% [0.3%, 4.5%] | 0/158 = 0.0% [0.0%, 2.4%] |
+| malicious variants caught (block or hold) | 661/670 = 98.7% [97.5%, 99.3%] | 661/670 = 98.7% [97.5%, 99.3%] |
+| malicious variants blocked | 516/670 = 77.0% [73.7%, 80.0%] | 516/670 = 77.0% [73.7%, 80.0%] |
+| malicious variants contained (block or effective hold) | 654/670 = 97.6% [96.2%, 98.5%] | 654/670 = 97.6% [96.2%, 98.5%] |
+| neutral benign variants blocked (false block rate) | 0/161 = 0.0% [0.0%, 2.3%] | 0/161 = 0.0% [0.0%, 2.3%] |
 
 McNemar's exact test on the same malicious variants (only first / only second = variants that only the first / only the second version gets right):
 
 | comparison | metric | only first | only second | p |
 |---|---|---:|---:|---:|
-| v1.7 vs v2.0 | caught | 0 | 0 | 1 |
-| v1.7 vs v2.0 | contained | 0 | 0 | 1 |
-| v1.7 vs v2.0 | blocked | 0 | 0 | 1 |
+| v2.2 vs v2.3 | caught | 0 | 0 | 1 |
+| v2.2 vs v2.3 | contained | 0 | 0 | 1 |
+| v2.2 vs v2.3 | blocked | 0 | 0 | 1 |
 <!-- END GENERATED: stats -->
 
 The Wilson intervals treat variants as independent. They are not: the variants of one scenario are
@@ -166,7 +166,7 @@ catalog scenarios that are known gaps by design, and their expected decision is 
 partial detection the specification names.
 
 <!-- BEGIN GENERATED: golden -->
-| scenario | kind | expected | v1.7 | v2.0 |
+| scenario | kind | expected | v2.2 | v2.3 |
 |---|---|---|---|---|
 | S01 | malicious | block | block | block |
 | S02 | malicious | block | block | block |
@@ -214,11 +214,25 @@ partial detection the specification names.
 | S48 | benign | allow | allow | allow |
 | S49 | benign | hold | hold | hold |
 | S50 | benign | hold | hold | hold |
+| S53 | malicious | block | block | block |
+| S54 | malicious | block | block | block |
+| S55 | malicious | block | block | block |
+| S56 | benign | allow | allow | allow |
+| S57 | malicious | hold | hold | hold |
+| S58 | malicious | hold | hold | hold |
+| S59 | malicious | block | block | block |
+| S60 | benign | allow | allow | allow |
+| S61 | benign | allow | allow | allow |
+| S62 | malicious | block | — | block |
+| S63 | malicious | block | — | block |
+| S64 | malicious | block | — | block |
+| S65 | benign | allow | — | allow |
+| S66 | benign | allow | — | allow |
 
-| | v1.7 | v2.0 |
+| | v2.2 | v2.3 |
 |---|---:|---:|
-| scenarios reaching the expected `decision` (of 46) | 46 | 46 |
-| same `decision` as v1.7 | 46 | 46 |
+| scenarios reaching the expected `decision` (of 60) | 55 | 60 |
+| same `decision` as v2.2 (of the 55 scenarios every version has) | 55 | 55 |
 <!-- END GENERATED: golden -->
 
 ## 4. Coverage map
@@ -244,9 +258,12 @@ Every attack family keeps at least one malicious and one benign scenario (CLAUDE
 | Defense evasion, log tampering | S20✓ | S48✓ |
 | Data theft | S22✓ | S44✓ |
 | AI agents running injected instructions | S12✓ | S45✓ |
+| Decoys and honeytokens (secret hunting, scanning, stolen documents) | S53✓, S54✓, S55✓ | S56✓ |
+| Hacked accounts (stolen passwords, MFA fatigue, mail forwarding, app consent) | S57✓, S58✓, S59✓ | S60✓, S61✓ |
+| Containers, Kubernetes and infrastructure as code (container escape, RBAC abuse, token theft, malicious IaC modules) | S62✓, S63✓, S64✓ | S65✓, S66✓ |
 | Unpatched, workaround-only and end-of-life software | S16✓, S28✓, S29✓ | - |
 
-✓ the scenario reaches its expected `decision` in v2.0 (S16, S28 and S29 are policy-over-time tests in tests/test_phase5_exposure.py).
+✓ the scenario reaches its expected `decision` in v2.3 (S16, S28 and S29 are policy-over-time tests in tests/test_phase5_exposure.py).
 <!-- END GENERATED: coverage -->
 
 ## 5. Privacy audit
@@ -260,9 +277,9 @@ approval.
 <!-- BEGIN GENERATED: audit -->
 ```
 Privacy audit
-  strings scanned          264
+  strings scanned          304
   raw content findings     0
-  fingerprints attacked    349
+  fingerprints attacked    497
   reversal attempts        2119
   reversals                0
   control (key known)      6 reversed (attack code works)
@@ -277,7 +294,7 @@ Privacy audit
 ## 6. Tests
 
 <!-- BEGIN GENERATED: tests -->
-`1925 passed, 1 xfailed`
+`2355 passed, 4 skipped, 1 xfailed`
 <!-- END GENERATED: tests -->
 
 The suite includes property tests (labels never lost along process chains, no raw content in any
@@ -387,10 +404,10 @@ regenerated; `make publishable` runs it alone). The content is clean. These are 
 
 <!-- BEGIN GENERATED: publishable -->
 ```
-tracked files scanned: 315, history: every ref
+tracked files scanned: 432, history: every ref
 findings in the working tree: 0
 findings in the history (added lines of every commit of every ref): 0
-replay events checked as post-Observe events: 378, rejected: 0
+replay events checked as post-Observe events: 528, rejected: 0
 identities recorded by git as author or committer: 3 (masked here so that this output can be published)
   G***b <n***y@g***b.com>
   P***A <1***e@u***b.com>

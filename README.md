@@ -565,7 +565,7 @@ scripts/push_to_github.sh --dry-run    # checks, and what would be pushed; pushe
 scripts/push_to_github.sh              # checks, shows, asks [y/N], then pushes
 ```
 
-It pushes `master` and the tags `v1.7` and `v2.0` only, never force-pushes, and first runs lint,
+It pushes `master` and the tags `v1.7` to `v2.3` only, never force-pushes, and first runs lint,
 the tests and the publishability check. It never logs in or asks for a password: it uses the
 credentials git on this machine already has (an SSH key in ssh-agent, or a credential helper) and
 stops with a message if there are none. Pushing publishes the author name and e-mail of the
@@ -597,7 +597,7 @@ commits.
 structural rules only in response to a documented finding,
 and is evaluated on a fresh variant seed recorded before the change
 ([docs/variant-seeds.md](docs/variant-seeds.md));
-the weights have not changed since `v1.0`. The git tags `v1.7` and `v2.0` hold the code of those
+the weights have not changed since `v1.0`. The git tags `v1.7`, `v2.0`, `v2.1`, `v2.2` and `v2.3` hold the code of those
 versions (checked by exact replay of the committed results). The code of `v1.0` to `v1.6` was lost
 when the history was squashed; their per-variant results stay in `docs/evaluation/` as a record.
 `v2.0` scopes trust to process lineage (A65) and lets a
@@ -615,17 +615,17 @@ variant matrix and the lab reference run give identical decisions):
   without its code; the misleading tags `v1.0` to `v1.3` were deleted;
 - the paper's charts and the updated diagram book; `scripts/push_to_github.sh`.
 
-`v2.1` (branch `v2.1-browser-deception`, not tagged yet) adds browser protection and deception
+`v2.1` (tag `v2.1`) adds browser protection and deception
 (A68 to A72) without any new signal or weight. On its recorded seed 395331504, none of the 883
 variants of the existing scenarios changes outcome against v2.0. Contained: 629/637 malicious
 (98.7 %); neutral false blocks: 0/158. The 33 malicious variants of the new decoy scenarios S53–S55
 are all blocked: [docs/v2.1-evaluation.md](docs/v2.1-evaluation.md).
 
-`v2.2` (branch `v2.2-ingest-identity`, on top of v2.1, not tagged yet) adds the sensor ingest kit and
+`v2.2` (tag `v2.2`) adds the sensor ingest kit and
 hacked-account detection (A73 to A77) with no new weight. On seed 255158241, none of the 925 shared
 variants changes outcome against v2.1: [docs/v2.2-evaluation.md](docs/v2.2-evaluation.md).
 
-`v2.3` (branch `v2.3-containers-iac`, on top of v2.2, not tagged) adds container, Kubernetes and IaC
+`v2.3` (tag `v2.3`) adds container, Kubernetes and IaC
 vocabulary and templates (A78, A79), no rule and no weight. On seed 837115701, none of the 933
 shared variants changes against v2.2, and the 43 malicious variants of S62–S64 are all contained:
 [docs/v2.3-evaluation.md](docs/v2.3-evaluation.md).

@@ -42,8 +42,11 @@ from refmon.evalstats import mcnemar_exact, wilson_interval  # noqa: E402
 
 # The versions each seed was recorded to evaluate (docs/variant-seeds.md). A new active seed must
 # be added here before `make reproduce` runs on it.
-SEED_VERSIONS: dict[int, tuple[str, ...]] = {171139148: ("v1.7", "v2.0")}
+SEED_VERSIONS: dict[int, tuple[str, ...]] = {837115701: ("v2.2", "v2.3")}
 NOTES = {
+    "v2.1": "A68 to A72: browser protection, decoys, tarpit, source proposals",
+    "v2.2": "A73 to A77: sensor ingest kit, hacked accounts (approved weights, login cap)",
+    "v2.3": "A78, A79: containers, Kubernetes and IaC vocabulary and templates",
     "v1.7": "A60 to A64: lineage-aware trust, incidents end, bounded state, producers act, "
     "every live label handed over",
     "v2.0": "A65, A66: trust as lineage (F10), relay containment",
@@ -108,11 +111,20 @@ def replay_all(tmp: Path, seed: int) -> tuple[dict[str, Path], str]:
     sh([*generate, "--seed", str(seed), "--out", str(variants_file)])
     digest = hashlib.sha256(variants_file.read_bytes()).hexdigest()
     procs, dumps = {}, {}
+    rows = variants_file.read_text(encoding="utf-8").splitlines()
     for tag in TAGS:
         tree = tmp / "trees" / tag
         extract(tag, tree)
         dumps[tag] = out / f"{tag}.jsonl"
-        command = [PY, "scripts/dump_matrix.py", "--variants", str(variants_file)]
+        # v2.3: a version replays the variants of the scenarios its own catalog has (an older
+        # version cannot read the event types or roles of a newer scenario); the comparison then
+        # covers the scenarios every version shares
+        known = scenarios_of(tree)
+        mine = out / f"variants-{tag}.jsonl"
+        mine.write_text(
+            "".join(r + "\n" for r in rows if json.loads(r)["scenario"] in known), encoding="utf-8"
+        )
+        command = [PY, "scripts/dump_matrix.py", "--variants", str(mine)]
         procs[tag] = subprocess.Popen(
             [*command, "--out", str(dumps[tag])],
             cwd=ROOT,
@@ -128,6 +140,19 @@ def replay_all(tmp: Path, seed: int) -> tuple[dict[str, Path], str]:
     return dumps, digest
 
 
+def scenarios_of(tree: Path) -> set[str]:
+    return {
+        p.name.removesuffix(".expected.json")
+        for p in (tree / "tests" / "golden").glob("*.expected.json")
+    }
+
+
+def shared(runs: dict[str, dict]) -> dict[str, dict]:
+    """Only the variants every version replayed (the newest versions have more scenarios)."""
+    keys = set.intersection(*(set(r) for r in runs.values()))
+    return {tag: {k: v for k, v in r.items() if k in keys} for tag, r in runs.items()}
+
+
 def golden_table(tmp: Path) -> tuple[str, dict[str, dict]]:
     per = {}
     for tag in TAGS:
@@ -135,7 +160,7 @@ def golden_table(tmp: Path) -> tuple[str, dict[str, dict]]:
         command = [PY, "scripts/golden_decisions.py", "--golden", str(tree / "tests" / "golden")]
         text = sh(command, {"PYTHONPATH": str(tree / "src")})
         per[tag] = json.loads(text)
-    ids = sorted(per[FIRST])
+    ids = sorted(per[LAST])  # a scenario an older version does not have shows as —
     lines = [
         "| scenario | kind | expected | " + " | ".join(TAGS) + " |",
         "|---|---|---|" + "---|" * len(TAGS),
@@ -144,19 +169,30 @@ def golden_table(tmp: Path) -> tuple[str, dict[str, dict]]:
         exp = per[LAST][sid]["expected"]
         cells = []
         for tag in TAGS:
+            if sid not in per[tag]:
+                cells.append("—")
+                continue
             got = per[tag][sid]["decision"]
             cells.append(got if got == exp else f"**{got}**")
         lines.append(f"| {sid} | {per[LAST][sid]['kind']} | {exp} | " + " | ".join(cells) + " |")
     total = len(ids)
     summary = ["", "| | " + " | ".join(TAGS) + " |", "|---|" + "---:|" * len(TAGS)]
-    ok = [sum(per[t][s]["decision"] == per[LAST][s]["expected"] for s in ids) for t in TAGS]
+    ok = [
+        sum(s in per[t] and per[t][s]["decision"] == per[LAST][s]["expected"] for s in ids)
+        for t in TAGS
+    ]
     summary.append(
         f"| scenarios reaching the expected `decision` (of {total}) | "
         + " | ".join(map(str, ok))
         + " |"
     )
-    same = [sum(per[t][s]["decision"] == per[FIRST][s]["decision"] for s in ids) for t in TAGS]
-    summary.append(f"| same `decision` as {FIRST} | " + " | ".join(map(str, same)) + " |")
+    common = [s for s in ids if all(s in per[t] for t in TAGS)]
+    same = [sum(per[t][s]["decision"] == per[FIRST][s]["decision"] for s in common) for t in TAGS]
+    summary.append(
+        f"| same `decision` as {FIRST} (of the {len(common)} scenarios every version has) | "
+        + " | ".join(map(str, same))
+        + " |"
+    )
     return "\n".join(lines + summary), per
 
 
@@ -271,7 +307,8 @@ def main(argv=None) -> int:
         tmp = Path(name)
         print(f"seed {seed}: generating and replaying the variants in {', '.join(TAGS)} ...")
         dumps, digest = replay_all(tmp, seed)
-        runs = {tag: cv.load(str(path)) for tag, path in dumps.items()}
+        full = {tag: cv.load(str(path)) for tag, path in dumps.items()}
+        runs = shared(full)
         report = cv.report(runs)
         tables = report.split("## Changes")[0]
         evaluation = ROOT / "docs" / "evaluation"
@@ -283,7 +320,7 @@ def main(argv=None) -> int:
                 committed.write_text(path.read_text(), encoding="utf-8")
                 verdict.append(f"{tag}: written")
             else:
-                same = cv.load(str(committed)) == runs[tag]
+                same = cv.load(str(committed)) == full[tag]
                 verdict.append(
                     f"{tag}: {'identical to' if same else 'DIFFERENT from'} docs/evaluation"
                 )

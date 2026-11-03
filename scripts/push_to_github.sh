@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Push the local `master` branch and the version tags that hold their code (v1.7, v2.0) to GitHub.
+# Push the local `master` branch and the version tags that hold their code (v1.7 to v2.3) to GitHub.
 #
 #   scripts/push_to_github.sh              checks, shows what would be pushed, asks, pushes
 #   scripts/push_to_github.sh --dry-run    everything except the push itself (git push --dry-run)
@@ -9,12 +9,12 @@
 # stores one. It uses only what git on this machine already has (an SSH key loaded in ssh-agent, or a
 # credential helper). If git would have to ask for credentials, the push fails with a message instead
 # of prompting. It never force-pushes, never pushes another branch (`attack-lab`, the branch `v2.0`),
-# and never pushes any tag but v1.7 and v2.0, the tags that hold their versions (docs/progress.md).
+# and never pushes any tag but v1.7 to v2.3, the tags that hold their versions (docs/progress.md).
 set -euo pipefail
 
 REMOTE="${REMOTE:-origin}"
 BRANCH="master"
-TAGS=(v1.7 v2.0)
+TAGS=(v1.7 v2.0 v2.1 v2.2 v2.3)
 DRY_RUN=0
 SKIP_CHECKS=0
 PUSH_TAGS=1
