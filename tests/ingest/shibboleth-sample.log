@@ -1,0 +1,2 @@
+198.51.100.12|20261103T100000Z|saml2-sso-browser|ana|sp.example.org|_abc|urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport|authn/Password|uid,mail|_n1|urn:oasis:names:tc:SAML:2.0:nameid-format:transient|true|false|true|POST|POST|idp.example.org|_s1|_s2|urn:oasis:names:tc:SAML:2.0:status:Success|Mozilla/5.0
+|20261103T100500Z|profile|||

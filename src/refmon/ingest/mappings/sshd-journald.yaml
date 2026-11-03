@@ -1,0 +1,67 @@
+# OpenSSH logins via journald -> Refmon auth events (starting template; check the messages of your sshd).
+#
+#   journalctl -o json -f _COMM=sshd _COMM=sshd-session | socat - UNIX-CONNECT:/run/refmon/sshd.sock
+#
+# The account is the actor (acct:<user>, role identity_provider): its login networks are its baseline.
+# An SSH login never creates an origin label (an admin's own commands are not "from outside").
+name: sshd-journald
+description: sshd accepted, failed and invalid-user logins from journald JSON
+format: json
+provides: []
+device: {from: _HOSTNAME, default: ssh-host}
+tables:
+  methods:
+    publickey: publickey
+    password: password
+    keyboard-interactive/pam: password
+    gssapi-with-mic: kerberos
+rules:
+  - name: accepted
+    match:
+      _COMM: {in: [sshd, sshd-session]}
+      MESSAGE: {regex: "^Accepted \\S+ for \\S+ from \\S+"}
+    event:
+      type: auth
+      ts: {from: __REALTIME_TIMESTAMP}
+      actor:
+        id: {from: MESSAGE, regex: "^Accepted \\S+ for (\\S+) from", prefix: "acct:"}
+        role: identity_provider
+        user: {from: MESSAGE, regex: "^Accepted \\S+ for (\\S+) from"}
+      object: {class: login, content: {from: MESSAGE}}
+      attrs:
+        auth_result: success
+        auth_method: {from: MESSAGE, regex: "^Accepted (\\S+) for", map: methods, default: other}
+        ip: {from: MESSAGE, regex: " from (\\S+) port "}
+
+  - name: failed
+    match:
+      _COMM: {in: [sshd, sshd-session]}
+      MESSAGE: {regex: "^Failed \\S+ for "}
+    event:
+      type: auth
+      ts: {from: __REALTIME_TIMESTAMP}
+      actor:
+        id: {from: MESSAGE, regex: "^Failed \\S+ for (?:invalid user )?(\\S+) from", prefix: "acct:"}
+        role: identity_provider
+        user: {from: MESSAGE, regex: "^Failed \\S+ for (?:invalid user )?(\\S+) from"}
+      object: {class: login, content: {from: MESSAGE}}
+      attrs:
+        auth_result: failure
+        auth_method: {from: MESSAGE, regex: "^Failed (\\S+) for", map: methods, default: other}
+        ip: {from: MESSAGE, regex: " from (\\S+) port "}
+
+  - name: invalid-user
+    match:
+      _COMM: {in: [sshd, sshd-session]}
+      MESSAGE: {regex: "^Invalid user \\S+ from "}
+    event:
+      type: auth
+      ts: {from: __REALTIME_TIMESTAMP}
+      actor:
+        id: {from: MESSAGE, regex: "^Invalid user (\\S+) from", prefix: "acct:"}
+        role: identity_provider
+        user: {from: MESSAGE, regex: "^Invalid user (\\S+) from"}
+      object: {class: login, content: {from: MESSAGE}}
+      attrs:
+        auth_result: failure
+        ip: {from: MESSAGE, regex: " from (\\S+)"}

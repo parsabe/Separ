@@ -1,0 +1,76 @@
+# Microsoft 365 unified audit log -> Refmon identity events (starting template; check your records).
+#
+# One JSON record per line, as the Office 365 Management Activity API returns them (an export job
+# writes them to the Refmon socket). Mapped: sign-ins and failed sign-ins, inbox rules that forward
+# or redirect mail, and consents to applications.
+name: m365-audit
+description: M365 UserLoggedIn / UserLoginFailed, New-/Set-InboxRule forwarding, app consent
+format: json
+provides: []
+device: {from: OrganizationId, default: m365}
+rules:
+  - name: sign-in
+    match:
+      Operation: {in: [UserLoggedIn, UserLoginFailed]}
+      UserId: {exists: true}
+    event:
+      type: auth
+      ts: {from: CreationTime}
+      actor:
+        id: {from: UserId, regex: "^([^@]+)", prefix: "acct:"}
+        role: identity_provider
+        user: {from: UserId, regex: "^([^@]+)"}
+      object: {class: login, content: "{Operation} {UserId}"}
+      attrs:
+        auth_result: {from: Operation, map: {UserLoggedIn: success, UserLoginFailed: failure}}
+        auth_method: sso
+        ip: {from: ClientIP}
+
+  - name: inbox-forward
+    match:
+      Operation: {in: [New-InboxRule, Set-InboxRule]}
+    event:
+      type: mail_rule
+      ts: {from: CreationTime}
+      actor:
+        id: {from: UserId, regex: "^([^@]+)", prefix: "acct:"}
+        role: mail_server
+        user: {from: UserId, regex: "^([^@]+)"}
+      object: {class: mailbox_rule, content: "{Operation} {UserId}"}
+      attrs:
+        forward_to:
+          first:
+            - {from: Parameters, find: {key: Name, equals: ForwardTo, take: Value}}
+            - {from: Parameters, find: {key: Name, equals: RedirectTo, take: Value}}
+            - {from: Parameters, find: {key: Name, equals: ForwardAsAttachmentTo, take: Value}}
+
+  - name: mailbox-forwarding
+    match:
+      Operation: Set-Mailbox
+    event:
+      type: mail_rule
+      ts: {from: CreationTime}
+      actor:
+        id: {from: UserId, regex: "^([^@]+)", prefix: "acct:"}
+        role: mail_server
+        user: {from: UserId, regex: "^([^@]+)"}
+      object: {class: mailbox_rule, content: "{Operation} {UserId}"}
+      attrs:
+        forward_to:
+          from: Parameters
+          find: {key: Name, equals: ForwardingSmtpAddress, take: Value}
+          regex: "^(?:smtp:)?(.+)$"
+
+  - name: consent
+    match:
+      Operation: {regex: "^Consent to application"}
+    event:
+      type: oauth_grant
+      ts: {from: CreationTime}
+      actor:
+        id: {from: UserId, regex: "^([^@]+)", prefix: "acct:"}
+        role: identity_provider
+        user: {from: UserId, regex: "^([^@]+)"}
+      object: {class: app_consent, content: "{Operation} {ObjectId}"}
+      attrs:
+        app: {from: ObjectId}

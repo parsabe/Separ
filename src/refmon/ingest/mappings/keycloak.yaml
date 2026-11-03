@@ -1,0 +1,45 @@
+# Keycloak login events -> Refmon auth events (starting template; check against your Keycloak version).
+#
+# Enable the jboss-logging event listener for the realm (Realm settings -> Events -> Event listeners)
+# with "Save events" for LOGIN and LOGIN_ERROR. Each event is logged as one line of key=value pairs:
+#   ... type=LOGIN, realmId=uni, clientId=portal, userId=..., ipAddress=198.51.100.10, username=ana ...
+# Send the server log (or only the org.keycloak.events category) to the Refmon socket.
+name: keycloak
+description: Keycloak LOGIN and LOGIN_ERROR events from the jboss-logging event listener
+format: kv
+provides: []
+device: {from: realmId, default: keycloak}
+rules:
+  - name: login
+    match:
+      type: LOGIN
+      username: {exists: true}
+    event:
+      type: auth
+      # the time is the log line's prefix; set Keycloak's log time zone to UTC (read as UTC)
+      ts: {from: _line, regex: "^(\\d{4}-\\d\\d-\\d\\d[ T]\\d\\d:\\d\\d:\\d\\d(?:[.,]\\d+)?)"}
+      actor:
+        id: {from: username, regex: "^([^@]+)", prefix: "acct:"}
+        role: identity_provider
+        user: {from: username, regex: "^([^@]+)"}
+      object: {class: login, content: "{clientId} {username}"}
+      attrs:
+        auth_result: success
+        auth_method: {from: auth_method, default: sso}
+        ip: {from: ipAddress}
+
+  - name: login-error
+    match:
+      type: LOGIN_ERROR
+    event:
+      type: auth
+      ts: {from: _line, regex: "^(\\d{4}-\\d\\d-\\d\\d[ T]\\d\\d:\\d\\d:\\d\\d(?:[.,]\\d+)?)"}
+      actor:
+        id: {first: [{from: username, regex: "^([^@]+)"}, {from: userId}, unknown-user], prefix: "acct:"}
+        role: identity_provider
+        user: {first: [{from: username, regex: "^([^@]+)"}, {from: userId}], default: unknown}
+      object: {class: login, content: {first: ["{clientId} {error}", {from: error}]}}
+      attrs:
+        auth_result: failure
+        auth_method: {from: auth_method, default: sso}
+        ip: {from: ipAddress}

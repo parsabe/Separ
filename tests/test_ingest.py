@@ -320,3 +320,75 @@ def test_list_shows_the_templates(capsys):
     assert cli_main(["ingest", "list"]) == 0
     out = capsys.readouterr().out
     assert "falco.yaml" in out and "tetragon.yaml" in out
+
+
+# -- the identity templates (v2.2, A74) ---------------------------------------------------------------
+
+IDENTITY_SAMPLES = {
+    "sshd-journald.yaml": (
+        "sshd-sample.jsonl",
+        ["mapped", "mapped", "mapped", "unmatched", "unmatched"],
+    ),
+    "keycloak.yaml": ("keycloak-sample.log", ["mapped", "mapped", "unmatched"]),
+    "shibboleth-idp.yaml": ("shibboleth-sample.log", ["mapped", "unmatched"]),
+    "m365-audit.yaml": ("m365-sample.jsonl", ["mapped"] * 5 + ["unmatched"]),
+    "postfix-dovecot.yaml": ("mail-sample.jsonl", ["mapped", "mapped", "mapped", "unmatched"]),
+}
+ALL_SAMPLES = {**IDENTITY_SAMPLES, "falco.yaml": ("falco-sample.jsonl", None),
+               "tetragon.yaml": ("tetragon-sample.jsonl", None)}  # fmt: skip
+
+
+@pytest.mark.parametrize("template", sorted(IDENTITY_SAMPLES))
+def test_identity_templates_map_their_samples_to_one_actor_per_account(template):
+    sample, want = IDENTITY_SAMPLES[template]
+    out = mapped(template, sample)
+    assert [o for _, o in out] == want
+    for ev, _ in out:
+        if ev is None:
+            continue
+        assert ev.actor.id == f"acct:{ev.actor.user}"  # one account, one actor, across sources
+        assert ev.actor.role in ("identity_provider", "mail_server")
+        if ev.type.value == "auth":
+            assert ev.attrs["auth_result"] in ("success", "failure") and "ip" in ev.attrs
+
+
+def test_every_template_sample_passes_observe_and_judge_without_error():
+    """Every allowlisted attribute of a mapped event is a valid identifier after Observe (a long
+    SAML URN would otherwise break the Event); nothing raw survives."""
+    pipe = Pipeline(default_policy())
+    for template, (sample, _) in sorted(ALL_SAMPLES.items()):
+        for ev, _ in mapped(template, sample):
+            if ev is not None:
+                pipe.process(ev)
+    dumped = "".join(e.to_json_line() for e in pipe.observe.buffer)
+    for raw in (
+        *RAW,
+        "198.51.100.1",
+        "203.0.113.2",
+        "box.example.invalid",
+        "MailSyncPro",
+    ):  # account names are actor identifiers, pseudonymised when a verdict leaves (Phase 4)
+        assert raw not in dumped
+    assert len(pipe.judgements()) >= 5
+
+
+def test_keycloak_takes_its_time_from_the_line_prefix():
+    (ev, _), *_ = mapped("keycloak.yaml", "keycloak-sample.log")
+    assert ev.ts.isoformat() == "2026-11-03T10:00:00+00:00"
+
+
+def test_m365_forwarding_outside_is_held_and_inside_is_not():
+    from refmon.policy import Policy, default_policy_dict
+
+    data = default_policy_dict()
+    data["identity"] = {"internal_mail_domains": ["example.org"]}
+    pipe = Pipeline(Policy.parse(data))
+    out = mapped("m365-audit.yaml", "m365-sample.jsonl")
+    rules = [ev for ev, _ in out if ev is not None and ev.type.value == "mail_rule"]
+    outside, inside = rules
+    pipe.process(outside)
+    assert pipe.observe.buffer[-1].attrs == {"forward_external": True}
+    j = list(pipe.judgements().values())[-1]
+    assert j.decision.value == "hold" and set(j.effects) == {"exfil", "persist"}
+    pipe.process(inside)
+    assert pipe.observe.buffer[-1].attrs == {"forward_external": False}

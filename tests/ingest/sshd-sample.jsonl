@@ -1,0 +1,5 @@
+{"_COMM":"sshd","_HOSTNAME":"lab03","__REALTIME_TIMESTAMP":"1762160000000000","MESSAGE":"Accepted publickey for ana from 198.51.100.10 port 50122 ssh2: ED25519 SHA256:labkey"}
+{"_COMM":"sshd-session","_HOSTNAME":"lab03","__REALTIME_TIMESTAMP":"1762160010000000","MESSAGE":"Failed password for invalid user oracle from 203.0.113.200 port 40000 ssh2"}
+{"_COMM":"sshd","_HOSTNAME":"lab03","__REALTIME_TIMESTAMP":"1762160011000000","MESSAGE":"Invalid user admin from 203.0.113.200 port 40002"}
+{"_COMM":"sshd","_HOSTNAME":"lab03","__REALTIME_TIMESTAMP":"1762160012000000","MESSAGE":"Connection closed by 203.0.113.200 port 40002 [preauth]"}
+{"_COMM":"cron","_HOSTNAME":"lab03","MESSAGE":"Accepted publickey for x from 1 port 2"}

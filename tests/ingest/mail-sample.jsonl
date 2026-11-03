@@ -1,0 +1,4 @@
+{"_COMM":"imap-login","_HOSTNAME":"mail01","__REALTIME_TIMESTAMP":"1762160100000000","MESSAGE":"imap-login: Login: user=<ana>, method=PLAIN, rip=198.51.100.14, lip=10.0.0.25, mpid=4242, TLS, session=<lab>"}
+{"_COMM":"imap-login","_HOSTNAME":"mail01","__REALTIME_TIMESTAMP":"1762160101000000","MESSAGE":"imap-login: Disconnected (auth failed, 1 attempts in 2 secs): user=<ana>, method=PLAIN, rip=203.0.113.203, lip=10.0.0.25, TLS, session=<lab2>"}
+{"_COMM":"smtpd","_HOSTNAME":"mail01","__REALTIME_TIMESTAMP":"1762160102000000","MESSAGE":"warning: unknown[203.0.113.204]: SASL LOGIN authentication failed: authentication failure, sasl_username=ana@example.org"}
+{"_COMM":"smtpd","_HOSTNAME":"mail01","__REALTIME_TIMESTAMP":"1762160103000000","MESSAGE":"connect from unknown[203.0.113.204]"}

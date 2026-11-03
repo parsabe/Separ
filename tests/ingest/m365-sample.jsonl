@@ -1,0 +1,6 @@
+{"CreationTime":"2026-11-03T09:00:00","Operation":"UserLoggedIn","Workload":"AzureActiveDirectory","UserId":"ana@example.org","ClientIP":"198.51.100.13","OrganizationId":"lab-tenant","ResultStatus":"Success"}
+{"CreationTime":"2026-11-03T09:00:10","Operation":"UserLoginFailed","Workload":"AzureActiveDirectory","UserId":"ana@example.org","ClientIP":"203.0.113.202","OrganizationId":"lab-tenant"}
+{"CreationTime":"2026-11-03T09:05:00","Operation":"New-InboxRule","Workload":"Exchange","UserId":"ana@example.org","OrganizationId":"lab-tenant","Parameters":[{"Name":"Name","Value":"lab-rule"},{"Name":"ForwardTo","Value":"drop@box.example.invalid"}]}
+{"CreationTime":"2026-11-03T09:06:00","Operation":"Set-Mailbox","Workload":"Exchange","UserId":"ana@example.org","OrganizationId":"lab-tenant","Parameters":[{"Name":"ForwardingSmtpAddress","Value":"smtp:ana@lab.example.org"}]}
+{"CreationTime":"2026-11-03T09:07:00","Operation":"Consent to application.","Workload":"AzureActiveDirectory","UserId":"ana@example.org","ObjectId":"MailSyncPro","OrganizationId":"lab-tenant"}
+{"CreationTime":"2026-11-03T09:08:00","Operation":"FileAccessed","Workload":"SharePoint","UserId":"ana@example.org"}

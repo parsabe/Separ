@@ -1,0 +1,61 @@
+# Dovecot and Postfix logins via journald -> Refmon auth events (starting template).
+#
+#   journalctl -o json -f _COMM=dovecot _COMM=imap-login _COMM=pop3-login _COMM=smtpd \
+#       | socat - UNIX-CONNECT:/run/refmon/mail.sock
+#
+# The messages differ between versions and configurations; the regexes below follow the common
+# forms "imap-login: Login: user=<ana>, method=PLAIN, rip=..." and Postfix's
+# "warning: unknown[198.51.100.10]: SASL LOGIN authentication failed: ..., sasl_username=ana".
+name: postfix-dovecot
+description: Dovecot IMAP/POP logins and auth failures, Postfix SASL failures
+format: json
+provides: []
+device: {from: _HOSTNAME, default: mail-host}
+rules:
+  - name: dovecot-login
+    match:
+      MESSAGE: {regex: "-login: Login: user=<[^>]+>.*rip="}
+    event:
+      type: auth
+      ts: {from: __REALTIME_TIMESTAMP}
+      actor:
+        id: {from: MESSAGE, regex: "user=<([^>@]+)", prefix: "acct:"}
+        role: mail_server
+        user: {from: MESSAGE, regex: "user=<([^>@]+)"}
+      object: {class: login, content: {from: MESSAGE}}
+      attrs:
+        auth_result: success
+        auth_method: {from: MESSAGE, regex: "method=([A-Za-z0-9_-]+)", lower: true, default: password}
+        ip: {from: MESSAGE, regex: "rip=([0-9a-fA-F:.]+)"}
+
+  - name: dovecot-auth-failed
+    match:
+      MESSAGE: {regex: "-login: (?:Disconnected|Aborted login).*auth failed.*rip="}
+    event:
+      type: auth
+      ts: {from: __REALTIME_TIMESTAMP}
+      actor:
+        id: {first: [{from: MESSAGE, regex: "user=<([^>@]+)"}, unknown-user], prefix: "acct:"}
+        role: mail_server
+        user: {from: MESSAGE, regex: "user=<([^>@]+)", default: unknown}
+      object: {class: login, content: {from: MESSAGE}}
+      attrs:
+        auth_result: failure
+        auth_method: {from: MESSAGE, regex: "method=([A-Za-z0-9_-]+)", lower: true, default: password}
+        ip: {from: MESSAGE, regex: "rip=([0-9a-fA-F:.]+)"}
+
+  - name: postfix-sasl-failed
+    match:
+      MESSAGE: {regex: "SASL \\S+ authentication failed"}
+    event:
+      type: auth
+      ts: {from: __REALTIME_TIMESTAMP}
+      actor:
+        id: {first: [{from: MESSAGE, regex: "sasl_username=([^@\\s]+)"}, unknown-user], prefix: "acct:"}
+        role: mail_server
+        user: {from: MESSAGE, regex: "sasl_username=([^@\\s]+)", default: unknown}
+      object: {class: login, content: {from: MESSAGE}}
+      attrs:
+        auth_result: failure
+        auth_method: smtp_sasl
+        ip: {from: MESSAGE, regex: "\\[([0-9a-fA-F:.]+)\\]"}

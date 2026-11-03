@@ -1,0 +1,33 @@
+# Shibboleth IdP audit log -> Refmon auth events (starting template).
+#
+# idp-audit.log is one line per completed SSO, its columns set by the audit format in
+# conf/audit.xml. `fields` below must list the column names IN THE ORDER OF YOUR FORMAT. The list
+# here follows a common IdP 4/5 default, "%a|%ST|%T|%u|%SP|%i|%ac|%t|%attr|%n|%f|%SSO|%XX|%XA|%b|%bb|%e|%S|%SS|%s|%UA";
+# compare it with your audit.xml before use. The audit log records successful logins only; failed
+# attempts are in idp-process.log (not mapped here).
+name: shibboleth-idp
+description: Shibboleth IdP audit log (successful SSO), pipe-separated
+format: delimited
+delimiter: "|"
+fields: [client_ip, timestamp, profile, user, sp, request_id, authn_method, flow, attributes,
+         name_id, name_id_format, sso, signed_req, encrypted, binding_in, binding_out, entity,
+         session_id, session_index, status, user_agent]
+provides: []
+device: {const: shibboleth-idp}
+rules:
+  - name: sso
+    match:
+      user: {regex: "\\S"}
+      client_ip: {regex: "\\S"}
+    event:
+      type: auth
+      ts: {from: timestamp}
+      actor:
+        id: {from: user, prefix: "acct:"}
+        role: identity_provider
+        user: {from: user}
+      object: {class: login, content: "{sp} {user}"}
+      attrs:
+        auth_result: success
+        auth_method: {from: authn_method, regex: "([A-Za-z0-9]+)$", default: sso}
+        ip: {from: client_ip}

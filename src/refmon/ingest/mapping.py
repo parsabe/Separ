@@ -44,7 +44,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from ..schemas import EventType, RawEvent
+from ..schemas import EVENT_ATTR_KEYS, EventType, RawEvent
 
 _ID_BAD = re.compile(r"[^A-Za-z0-9_.:@-]")
 _TEMPLATE = re.compile(r"\{([^{}]+)\}")
@@ -158,6 +158,9 @@ class ValueSpec(BaseModel):
     lower: bool = False
     basename: bool = False
     strip_version: bool = False  # php-fpm8.2 -> php-fpm, python3.11 -> python
+    prefix: str = ""  # put in front of a found value, e.g. "acct:" for an account actor
+    # in a list of objects, the one whose `key` equals `equals`, then its `take` (M365 Parameters)
+    find: dict[str, str] | None = None
     first: list[Any] | None = None  # alternatives: the first one that is not missing
     classify: list[dict[str, Any]] | None = None  # [{regex: ..., value: ...}]: first match wins
 
@@ -193,6 +196,8 @@ class ValueSpec(BaseModel):
             value = lookup(record, self.from_)
         else:
             value = _MISSING
+        if self.find is not None:
+            value = _find(value, self.find)
         if value is not _MISSING and value is not None and self.regex is not None:
             m = re.search(self.regex, str(value))
             value = m.group(self.group) if m else _MISSING
@@ -216,7 +221,18 @@ class ValueSpec(BaseModel):
             value = table.get(str(value), self.default)
             if value is None:
                 return None
+        if self.prefix:
+            value = f"{self.prefix}{value}"
         return _cast(value, self.as_)
+
+
+def _find(items: Any, spec: dict[str, str]) -> Any:
+    if not isinstance(items, list):
+        return _MISSING
+    for item in items:
+        if isinstance(item, dict) and str(item.get(spec["key"], "")) == spec["equals"]:
+            return item.get(spec["take"], _MISSING)
+    return _MISSING
 
 
 def _cast(value: Any, as_: str | None) -> Any:
@@ -298,7 +314,9 @@ class Mapping(BaseModel):
 
     name: str = Field(pattern=r"^[A-Za-z0-9_.-]{1,64}$")
     description: str = ""
-    format: Literal["json", "kv"] = "json"
+    format: Literal["json", "kv", "delimited"] = "json"
+    delimiter: str = "|"  # delimited only
+    fields: list[str] = Field(default_factory=list)  # delimited only: the names of the columns
     device: Any = None
     # what this sensor supplies, as heartbeat capability names (degraded protection, Phase 6)
     provides: list[str] = Field(default_factory=list)
@@ -341,14 +359,22 @@ def parse_ts(value: Any) -> datetime:
 _KV = re.compile(r'([A-Za-z0-9_.-]+)=("(?:[^"\\]|\\.)*"|\S*)')
 
 
-def parse_line(line: str, fmt: str) -> Any:
+def parse_line(line: str, fmt: str, *, delimiter: str = "|", fields: list[str] = ()) -> Any:
     import json
 
     if fmt == "json":
         return json.loads(line)
-    out = {}
+    if fmt == "delimited":
+        values = line.split(delimiter)
+        out = {name: value for name, value in zip(fields, values, strict=False) if name}
+        out["_line"] = line
+        return out
+    out = {"_line": line}  # the whole line: a time or a prefix outside the key=value pairs
     for key, raw in _KV.findall(line):
-        out[key] = raw[1:-1].replace('\\"', '"') if raw.startswith('"') else raw
+        if raw.startswith('"'):
+            out[key] = raw[1:-1].replace('\\"', '"')
+        else:
+            out[key] = raw.rstrip(",;")  # Keycloak: "type=LOGIN, realmId=..."
     return out
 
 
@@ -378,7 +404,8 @@ class Mapper:
         if not line:
             return None, "unmatched"
         try:
-            record = parse_line(line, self.mapping.format)
+            m = self.mapping
+            record = parse_line(line, m.format, delimiter=m.delimiter, fields=m.fields)
         except ValueError:
             return None, "unparsable"
         if not isinstance(record, dict):
@@ -412,10 +439,14 @@ class Mapper:
             values = {}
             for key, spec in attrs.items():
                 value = spec.evaluate(record, tb)
-                if value is not None:
-                    values[key] = (
-                        value if isinstance(value, (bool, int, float)) else str(value)[:256]
-                    )
+                if value is None:
+                    continue
+                if isinstance(value, (bool, int, float)):
+                    values[key] = value
+                elif key in EVENT_ATTR_KEYS:  # kept after Observe: a short identifier (C2)
+                    values[key] = clean_identifier(value)
+                else:  # a raw attribute Observe consumes and drops
+                    values[key] = str(value)[:256]
             ts = parse_ts(value_spec(ev.ts).evaluate(record, tb) if ev.ts is not None else None)
             self._seq += 1
             event = RawEvent.model_validate(
