@@ -11,7 +11,8 @@ types that do not exist yet.
 
 **Contents:** [Status](#status) · [How it works](#how-it-works) · [Install](#install) ·
 [Quick start: the attack lab](#quick-start-the-attack-lab) · [Logs and analysis](#logs-and-analysis) ·
-[Live barrier](#live-barrier-daemon-guard-and-web-dashboard) · [Rootkit scanner](#rootkit-scanner) ·
+[Live barrier](#live-barrier-daemon-guard-and-web-dashboard) · [Browser protection](#browser-protection-v21) ·
+[Deception](#deception-decoys-decoy-services-tarpit-v21) · [Rootkit scanner](#rootkit-scanner) ·
 [Tests](#tests-and-reproduction) · [Results](#results) ·
 [Package and deployment](#package-and-deployment) · [Paper](#paper) ·
 [Pushing to GitHub](#pushing-to-github) · [Layout](#layout) · [Versions](#versions)
@@ -20,14 +21,20 @@ types that do not exist yet.
 
 Refmon is a **research reference monitor**. What exists and works today:
 
-- the full decision pipeline with a signed policy, verified by 46 golden scenarios, seeded mutation
-  matrices (886 variants in the last round) and over 1,900 automated tests;
+- the full decision pipeline with a signed policy, verified by 50 golden scenarios, seeded mutation
+  matrices (886 variants in the last round) and over 2,100 automated tests;
 - an **interactive CLI attack lab** (`refmon lab`): 35 harmless attack and benign templates, each
   judged by the live pipeline *before* it may run, with saved logs and an automatic analysis;
 - an unprivileged **live barrier** (`refmon serve`, `refmon guard`) with a token-protected local web
   dashboard, a heartbeat, periodic self-tests and notifications (webhook or any command, such as
   `mail`), plus `refmon health` to watch it from outside;
 - a read-only six-engine **rootkit scanner** (`refmon scan-rootkit`);
+- **browser protection** (v2.1): an extension for Firefox and Chromium that stops ClickFix-style
+  attacks *before* they run. A page that puts a dangerous command on the clipboard is judged at
+  once; the clipboard is neutralised and a pop-up names the attack family. The user is never
+  locked out;
+- **deception** (v2.1): planted decoy files (honeytokens), decoy services with a bounded tarpit,
+  beacon documents, and block-list proposals for the sources, approved by a person;
 - a **LaTeX paper** with eight charts generated from the committed evaluation data, and a
   companion diagram book.
 
@@ -270,6 +277,47 @@ make health                                                          # or:
 `serve` stops cleanly on Ctrl-C and on `SIGTERM` (as sent by `kill` or systemd) and then sends
 *Refmon stopped*.
 
+## Browser protection (v2.1)
+
+`browser/extension/` is a small Manifest V3 extension (Firefox ESR 128+, Chromium 121+). When a page
+writes to the clipboard, the extension re-reads the real clipboard and asks the local daemon,
+through the native-messaging host `refmon browser-host`, what the text would do if pasted into a
+shell. A ClickFix lure (`curl … | sh` behind a fake CAPTCHA) is blocked *before* it can run: the
+clipboard gets a harmless warning sentence, and a banner and a notification name the family
+(*ClickFix-style command from a web page*). A command copied from documentation for local use
+(`git status`) is left alone. Downloads are checked against the threat lists. A hold asks *Keep it*
+or *Remove it*, and no answer removes it. No web page can reach the daemon (native messaging only),
+the route cannot execute anything, and clipboard text exists only in memory.
+
+```sh
+refmon serve --port 0 &      # one daemon per user; the browser host finds its port
+refmon browser-install       # native-messaging manifests (admins: --system)
+```
+
+Deployment for every user of a server (browser policy, systemd user unit), the mode table and a
+manual test checklist: [browser/README.md](browser/README.md). Not run in a real browser in CI
+(there is none on the build host); a static contract test keeps the extension and the daemon in step.
+
+## Deception: decoys, decoy services, tarpit (v2.1)
+
+`refmon decoy plant` writes realistic honeytokens:
+- an application `.env` with a database password;
+- cloud keys and a production kubeconfig;
+- a `.pgpass` and a "password vault" sheet;
+- a board summary whose image loads from your own decoy listener.
+
+Their times are aged over months, and nothing in the decoy directory names Refmon. `refmon serve
+--decoys decoys.yaml` runs decoy services (configured banners, random delays, an optional bounded
+tarpit) and watches the decoy files. A connection or a fetched beacon is a canary hit (block). The
+listener itself is never contained, and the source address becomes a *proposal*:
+- an outside address is kept raw, owner-only, for 7 days;
+- an internal address is kept only as a pseudonym, and revealing it takes four-eyes approval;
+- `refmon decoy approve-source ID --by NAME` adds it to a signed block list, optionally running
+  your firewall command.
+
+A touched decoy file is an alert: the unprivileged watcher cannot name the process. Guide:
+[docs/deception.md](docs/deception.md).
+
 ## Rootkit scanner
 
 ```bash
@@ -304,9 +352,9 @@ make all                                                  # lint, tests, privacy
 make reproduce                                            # regenerate every result table (slow)
 ```
 
-Over 1,900 tests: unit tests per rule, contract, effect and override; Hypothesis property tests
+Over 2,100 tests: unit tests per rule, contract, effect and override; Hypothesis property tests
 (labels never lost, no raw content after Observe, Contain never touches an unlabeled object, ...);
-replay of the 46 golden scenarios; the privacy audit; rootkit, live-barrier, CLI and attack-lab
+replay of the 50 golden scenarios; the privacy audit; rootkit, live-barrier, CLI, attack-lab, browser and deception
 tests. One test is an expected failure (`xfail`): a documented limit of the S19 stand-in.
 `make reproduce` (several minutes) generates the variants of the active pre-registered seed,
 replays them in the tagged versions that seed was recorded for (`v1.7` and `v2.0`), checks that the
@@ -317,7 +365,7 @@ or personal data is in the tree or the history.
 
 ## Results
 
-**Golden catalog:** 46/46 scenarios reach their expected decision.
+**Golden catalog:** 50/50 scenarios reach their expected decision (46 until v2.0; S53–S56 are the decoy scenarios of v2.1).
 
 ![Golden catalog and the v2.0 outcome split](docs/img/fig_outcomes.png)
 
@@ -506,7 +554,10 @@ commits.
 | `src/refmon/calculus/` | evidence (log-likelihood ratios, thresholds), labels (decay, noisy-OR), rarity (Laplace, Good-Turing), stats (Poisson, CUSUM), privacy (Laplace noise, k-anonymity, Bloom) |
 | `src/refmon/schemas/` | typed models: events, labels, stories, contracts, verdicts, actions |
 | `src/refmon/` | `gate.py`, `contain.py` (reversible containment), `policy*.py`, `signing.py`, `learning.py`, `tune.py`, `exposure.py`, `selftest.py`, `heartbeat.py`, `health.py` (the daemon's heartbeat, self-test and watchdog), `notify.py` (notification channels), `report.py`, `pseudonym.py`, `audit.py`, `variants.py`, `intent.py` (pre-execution command intent), `live.py`, `live_ui.py` (daemon and dashboard), `rootkit.py`, `attacklab.py`, `labreport.py` (attack lab, tables, saved runs, analysis), `cli.py` |
-| `tests/` | unit, property, replay, live, rootkit and lab tests; `tests/golden/` holds the 46 scenarios |
+| `src/refmon/deception/` | v2.1: `plant` (decoy files), `watch` (inotify), `listener` (decoy services, tarpit), `proposals` (source proposals), `runtime`, `cli` |
+| `src/refmon/` (v2.1) | `browser_host.py` (native-messaging host), `families.py` (attack family names for pop-ups) |
+| `browser/` | the browser extension and its admin README |
+| `tests/` | unit, property, replay, live, rootkit, lab, browser and deception tests; `tests/golden/` holds the 50 scenarios |
 | `scripts/` | `reproduce.py`, `generate_variants.py`, `dump_matrix.py`, `compare_versions.py`, `check_publishable.py`, `push_to_github.sh` |
 | `docs/` | `results.md`, `attack-lab.md`, `design-decisions.md`, `progress.md`, `review-list.md`, `variant-seeds.md`, `v1.x`/`v2.0-evaluation.md`, `phase-8-plan.md`, `evaluation/` (per-variant results of every seed, the lab reference run), `img/` (README charts) |
 | `documentation/` | the LaTeX paper (`main.tex`, `main.pdf`), `make_figures.py` and `figures/`, the diagram book (`diagrams.tex`, `diagrams/`) |
@@ -536,3 +587,9 @@ variant matrix and the lab reference run give identical decisions):
 - `make reproduce` replays the versions of the active seed (`v1.7`, `v2.0`) and refuses a tag
   without its code; the misleading tags `v1.0` to `v1.3` were deleted;
 - the paper's charts and the updated diagram book; `scripts/push_to_github.sh`.
+
+`v2.1` (branch `v2.1-browser-deception`, not tagged yet) adds browser protection and deception
+(A68 to A72) without any new signal or weight. On its recorded seed 395331504, none of the 883
+variants of the existing scenarios changes outcome against v2.0. Contained: 629/637 malicious
+(98.7 %); neutral false blocks: 0/158. The 33 malicious variants of the new decoy scenarios S53–S55
+are all blocked: [docs/v2.1-evaluation.md](docs/v2.1-evaluation.md).

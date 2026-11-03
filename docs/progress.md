@@ -331,3 +331,54 @@ replay import the installed, current code without a warning.
 - The misleading tags `v1.0` to `v1.3` (local only, never on the remote) were deleted on the
   owner's decision; they pointed at 03635ef, d5d546f, 2c85294 and d77b756. The only tags are now
   `v1.7` and `v2.0`.
+
+## v2.1: browser protection and deception (2026-11-03, branch `v2.1-browser-deception`)
+
+The owner asked for two things. First, attacks a user meets in the browser of a server should be
+caught and named before they run, with a pop-up and without ever locking the user out. Second,
+Refmon should get honeypot strategies. Decisions taken with the owner before any code:
+- a browser extension;
+- a suspicious session is held, never locked (planned for v2.2);
+- decoy sources are proposed for blocking and approved by an admin;
+- an external source is kept raw and expiring, an internal one only as a pseudonym;
+- decoys and the browser come first.
+
+The seed 395331504 was recorded before the first change.
+
+- **Browser (A68).** `/api/browser` judges a page's clipboard write as the command it would be if
+  pasted (no new signal: the story S02/S11 already judge, only earlier).
+  - The native-messaging host `refmon browser-host` and its installer `refmon browser-install`.
+  - The MV3 extension in `browser/extension/`, with admin deployment templates.
+  - The daemon writes `daemon.port`, so every user of a shared server runs their own daemon.
+  - `families.py` names the attack family for pop-ups and notifications.
+- **Deception (A69 to A72).**
+  - Canary classes `file`, `service` and `beacon` with `ignore_roles`.
+  - The channel role `decoy_service`.
+  - `refmon decoy plant`: aged, realistic honeytokens with random secrets and nothing that names
+    Refmon.
+  - The inotify watcher: alert only, no process attribution.
+  - Decoy services with a bounded tarpit, run by `refmon serve --decoys`.
+  - Source proposals: external raw, owner-only and expiring for 7 days; internal as a pseudonym
+    plus a sealed value with four-eyes reveal. Signed approval, and an optional firewall command
+    without a shell.
+- **Catalog.** S53–S56, a C13 family *Decoys and honeytokens*, and the v2.1 row of the C11 freeze
+  table. Stories only a decoy listener produced are exempt from the "a block contains something
+  local" checks (A70), and only they.
+- **Evaluation on seed 395331504** (docs/v2.1-evaluation.md):
+  - none of the 883 variants of existing scenarios changed against v2.0;
+  - contained 629/637 (98.7 %); neutral false blocks 0/158;
+  - all 8 allowed variants are the documented gaps G1 to G4;
+  - S53–S55: 33/33 blocked.
+
+Not done or not checkable here:
+- The extension in a real browser: no browser on the build host. It has a static contract test,
+  esprima parses all four scripts, and browser/README.md has a manual checklist.
+- fanotify decoy attribution: needs root.
+- Making 395331504 the active seed of `make reproduce`: that needs a `v2.1` tag, which is the
+  owner's decision. Three lines to change are listed in docs/v2.1-evaluation.md.
+- The two intermediate branch commits 2c7bad6 and f78c38c still hold placeholder URLs that the
+  history scan of `check_publishable.py` reports. The tree is clean; a squash merge removes them.
+
+Planned next, not started: v2.2 (an admin integration kit, i.e. `refmon ingest` with mapping
+files for Falco, Tetragon, auditd, the Kubernetes audit log and IdP/mail logs, plus identity
+events with session hold) and v2.3 (container and IaC roles and behaviours).
