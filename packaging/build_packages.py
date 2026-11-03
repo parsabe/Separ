@@ -113,6 +113,39 @@ def stage_files(stage_root: Path) -> None:
         shutil.copy2(license_src, doc_dir / "copyright")
         (doc_dir / "copyright").chmod(0o644)
 
+    stage_browser(stage_root)
+
+
+def stage_browser(stage_root: Path) -> None:
+    """v2.1: the browser extension (as files and as an .xpi), its policy templates and the per-user
+    systemd unit. Nothing is enabled by installing the package: an admin runs
+    `refmon browser-install --system` and applies the browser policy (browser/README.md)."""
+    import zipfile
+
+    ext_src = ROOT_DIR / "browser" / "extension"
+    share = stage_root / "usr" / "share" / "refmon" / "browser"
+    (share / "extension").mkdir(parents=True, exist_ok=True)
+    xpi = share / "refmon-browser.xpi"
+    with zipfile.ZipFile(xpi, "w", zipfile.ZIP_DEFLATED) as zf:
+        for f in sorted(ext_src.iterdir()):
+            if f.is_file():
+                shutil.copy2(f, share / "extension" / f.name)
+                (share / "extension" / f.name).chmod(0o644)
+                zf.write(f, f.name)
+    xpi.chmod(0o644)
+    for name in ("firefox-policies.json", "chromium-policy.json"):
+        shutil.copy2(PACKAGING_DIR / "browser" / name, share / name)
+        (share / name).chmod(0o644)
+    readme = ROOT_DIR / "browser" / "README.md"
+    shutil.copy2(readme, share / "README.md")
+    (share / "README.md").chmod(0o644)
+    unit_dir = stage_root / "usr" / "lib" / "systemd" / "user"
+    unit_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(
+        PACKAGING_DIR / "browser" / "refmon-user.service", unit_dir / "refmon-user.service"
+    )
+    (unit_dir / "refmon-user.service").chmod(0o644)
+
 
 def build_deb() -> Path:
     """Build Debian .deb package."""

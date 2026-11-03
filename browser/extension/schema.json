@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "properties": {
+    "checkNavigation": {
+      "title": "Check every visited page against the Refmon threat lists",
+      "description": "Off by default: it sends the address of every top-level page to the local Refmon program (fingerprinted there, never stored raw). Clipboard and download checks are always on.",
+      "type": "boolean"
+    },
+    "checkDownloads": {
+      "title": "Check downloads against the Refmon threat lists",
+      "type": "boolean"
+    }
+  }
+}

@@ -46,6 +46,7 @@ def test_a_copied_local_doc_command_is_allowed_and_left_alone(barrier):
     )  # fmt: skip
     assert res["decision"] == "allow"
     assert res["action"] == "none"
+    assert res["family"]["id"] == "none"
 
 
 def test_no_raw_text_or_address_reaches_any_log_or_answer(barrier):

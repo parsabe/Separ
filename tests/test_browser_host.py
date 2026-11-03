@@ -153,3 +153,17 @@ def test_system_install_under_a_root(tmp_path):
     install(home=tmp_path, launcher_dir=root / "usr/libexec/refmon", system=True, system_root=root)
     assert (root / "usr/lib/mozilla/native-messaging-hosts" / f"{HOST_NAME}.json").is_file()
     assert (root / "usr/lib64/mozilla/native-messaging-hosts" / f"{HOST_NAME}.json").is_file()
+
+
+def test_the_host_finds_the_daemon_through_its_port_file(tmp_path):
+    assert Forwarder(tmp_path).port == 8765
+    (tmp_path / "daemon.port").write_text("43117\n")
+    assert Forwarder(tmp_path).port == 43117
+    assert Forwarder(tmp_path, port=1234).port == 1234
+    (tmp_path / "daemon.port").write_text("junk")
+    assert Forwarder(tmp_path).port == 8765
+
+
+def test_a_system_launcher_names_no_port(tmp_path):
+    install(home=tmp_path, launcher_dir=tmp_path / "l")
+    assert "--port" not in (tmp_path / "l" / "refmon-browser-host").read_text()

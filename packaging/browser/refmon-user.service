@@ -1,0 +1,16 @@
+# Refmon live barrier, one per user (systemd user unit).
+# Install: /usr/lib/systemd/user/refmon-user.service, then: systemctl --global enable refmon-user.service
+# Each user's daemon picks a free port (--port 0) and records it in its work directory, where the
+# browser host finds it; users of a shared server never collide.
+[Unit]
+Description=Refmon live barrier for this user
+After=default.target
+
+[Service]
+ExecStart=/usr/bin/refmon serve --port 0
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target

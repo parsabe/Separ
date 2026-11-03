@@ -1,0 +1,18 @@
+{
+  "policies": {
+    "ExtensionSettings": {
+      "refmon-browser@refmon.invalid": {
+        "installation_mode": "force_installed",
+        "install_url": "file:///usr/share/refmon/browser/refmon-browser.xpi"
+      }
+    },
+    "3rdparty": {
+      "Extensions": {
+        "refmon-browser@refmon.invalid": {
+          "checkDownloads": true,
+          "checkNavigation": false
+        }
+      }
+    }
+  }
+}

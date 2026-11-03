@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "Refmon Browser Protection",
+  "short_name": "Refmon",
+  "version": "2.1.0",
+  "description": "Stops ClickFix-style attacks before they run: a page that puts a dangerous command on your clipboard is caught, named and neutralised. Talks only to the Refmon program on this computer.",
+  "icons": { "128": "icon.png" },
+  "action": { "default_title": "Refmon: protection active", "default_icon": "icon.png" },
+  "background": {
+    "service_worker": "background.js",
+    "scripts": ["background.js"]
+  },
+  "permissions": [
+    "nativeMessaging",
+    "clipboardRead",
+    "clipboardWrite",
+    "notifications",
+    "downloads",
+    "storage",
+    "offscreen"
+  ],
+  "host_permissions": ["<all_urls>"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["main-world.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "storage": { "managed_schema": "schema.json" },
+  "browser_specific_settings": {
+    "gecko": { "id": "refmon-browser@refmon.invalid", "strict_min_version": "128.0" }
+  },
+  "minimum_chrome_version": "121"
+}

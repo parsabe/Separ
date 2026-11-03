@@ -74,8 +74,20 @@ class Forwarder:
     """Sends observations to the daemon's `/api/browser`. The token is read on every call, so a
     daemon restarted with a new token is found again without restarting the browser."""
 
-    def __init__(self, workdir: Path, host: str = "localhost", port: int = 8765) -> None:
-        self.workdir, self.host, self.port = Path(workdir), host, port
+    def __init__(self, workdir: Path, host: str = "localhost", port: int | None = None) -> None:
+        self.workdir, self.host, self.fixed_port = Path(workdir), host, port
+
+    @property
+    def port(self) -> int:
+        """An explicit port wins; else the port the daemon wrote into its work directory (each user
+        of a shared server runs their own daemon); else the default 8765."""
+        if self.fixed_port is not None:
+            return self.fixed_port
+        with contextlib.suppress(OSError, ValueError):
+            port = int((self.workdir / "daemon.port").read_text(encoding="utf-8").strip())
+            if 0 < port < 65536:
+                return port
+        return 8765
 
     def _token(self) -> str | None:
         with contextlib.suppress(OSError):
@@ -171,13 +183,28 @@ def manifest(browser: str, launcher: Path, *, firefox_id: str, chromium_ids: Ite
     return {**base, "allowed_origins": [f"chrome-extension://{i}/" for i in chromium_ids]}
 
 
-def launcher_script(python: str, workdir: Path | None, port: int) -> str:
-    args = [python, "-m", "refmon.cli", "browser-host", "--port", str(port)]
+def _sh(word: str) -> str:
+    return "'" + word.replace("'", "'\\''") + "'"
+
+
+def launcher_script(
+    python: str, workdir: Path | None, port: int | None, package_root: Path | None = None
+) -> str:
+    """The program the browser starts. `package_root` is the directory that holds the `refmon`
+    package (a venv, an editable checkout or /usr/share/refmon of the .deb/.rpm); it is put on
+    PYTHONPATH so the launcher works whichever way Refmon was installed."""
+    if package_root is None:
+        package_root = Path(__file__).resolve().parent.parent
+    args = [python, "-m", "refmon.cli", "browser-host"]
+    if port is not None:
+        args += ["--port", str(port)]
     if workdir is not None:
         args += ["--workdir", str(workdir)]
-    quoted = " ".join("'" + a.replace("'", "'\\''") + "'" for a in args)
+    quoted = " ".join(_sh(a) for a in args)
     # the browser appends its own arguments (manifest path and extension id, or the origin)
-    return f'#!/bin/sh\nexec {quoted} "$@"\n'
+    return (
+        f'#!/bin/sh\nPYTHONPATH={_sh(str(package_root))}\nexport PYTHONPATH\nexec {quoted} "$@"\n'
+    )
 
 
 def install(
@@ -186,7 +213,7 @@ def install(
     launcher_dir: Path,
     system: bool = False,
     workdir: Path | None = None,
-    port: int = 8765,
+    port: int | None = None,
     firefox_id: str = FIREFOX_EXTENSION_ID,
     chromium_ids: Iterable[str] = (),
     python: str | None = None,

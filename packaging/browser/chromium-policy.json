@@ -1,0 +1,16 @@
+{
+  "ExtensionSettings": {
+    "REPLACE_WITH_EXTENSION_ID": {
+      "installation_mode": "force_installed",
+      "update_url": "https://extensions.example.internal/refmon/updates.xml"
+    }
+  },
+  "3rdparty": {
+    "extensions": {
+      "REPLACE_WITH_EXTENSION_ID": {
+        "checkDownloads": true,
+        "checkNavigation": false
+      }
+    }
+  }
+}

@@ -178,7 +178,7 @@ def main(argv: list[str] | None = None) -> int:
         "the extension's observations to the running daemon.",
     )
     bh.add_argument("--host", default="localhost")
-    bh.add_argument("--port", type=int, default=8765)
+    bh.add_argument("--port", type=int, default=None, help="default: the daemon's port file")
     bh.add_argument("--workdir", default=None)
     bh.add_argument("browser_args", nargs=argparse.REMAINDER, help=argparse.SUPPRESS)
     bi = sub.add_parser(
@@ -187,7 +187,7 @@ def main(argv: list[str] | None = None) -> int:
         "extension can reach this user's daemon (--system: for every user, as root).",
     )
     bi.add_argument("--system", action="store_true")
-    bi.add_argument("--port", type=int, default=8765)
+    bi.add_argument("--port", type=int, default=None, help="default: the daemon's port file")
     bi.add_argument("--workdir", default=None, help="daemon work directory (default: per user)")
     bi.add_argument("--launcher-dir", default=None)
     bi.add_argument("--chromium-extension-id", action="append", default=[], dest="chromium_ids")

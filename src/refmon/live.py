@@ -33,6 +33,7 @@ from typing import Any
 
 from . import signing
 from .calculus import evidence as calc
+from .families import NONE as NO_FAMILY
 from .families import classify, classify_judgement
 from .golden import load_golden_cases
 from .intent import analyze as analyze_command
@@ -832,6 +833,8 @@ class LiveBarrier:
                 decision = j.decision
                 explanation = self._explain_story(story_id, j)
                 log_odds = float(j.log_odds if j.log_odds is not None else 0.0)
+        if decision is Decision.ALLOW:
+            family = NO_FAMILY  # a family names an attack; an allowed story is none
         with self._lock:
             self._tag_story(story_id, attack_type=f"Browser: {family.name}", category="browser")
             holds = []
@@ -1834,6 +1837,14 @@ def serve_forever(
     monitor = HealthMonitor(barrier, rootkit_interval_s=rootkit_interval_s)
     barrier.health = monitor
     actual_port = server.server_address[1]
+    # v2.1: the browser host finds this daemon through its port file, so every user of a shared
+    # server can run their own daemon (serve --port 0 picks a free port).
+    port_file = barrier.workdir / "daemon.port"
+    with contextlib.suppress(FileNotFoundError):
+        port_file.unlink()
+    fd = os.open(port_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(f"{actual_port}\n")
     ui_url = f"http://localhost:{actual_port}/#token={barrier.api_token}"
     pol = barrier.policy
     print(f"Refmon Live Security Barrier active on {ui_url}", flush=True)
@@ -1884,6 +1895,8 @@ def serve_forever(
             signal.signal(signal.SIGTERM, previous)
         monitor.stop()
         server.server_close()
+        with contextlib.suppress(OSError):
+            port_file.unlink()
         barrier.stop_background_watcher()
         barrier.notify(
             Notification(
