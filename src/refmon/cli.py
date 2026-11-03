@@ -14,6 +14,8 @@
     refmon health [--workdir DIR] [--json]     is the daemon alive and healthy? (for cron)
     refmon guard [OPTS] -- COMMAND...          intercept and enforce policy on a command
     refmon lab [--list] [--run N ...]          interactive attack lab: templates judged, then run
+    refmon browser-host [--workdir DIR]        native-messaging host for the browser extension
+    refmon browser-install [--system]          install the host manifests for Firefox/Chromium
 
 Nothing here runs unattended: a person holds the key and names themselves as approver.
 """
@@ -170,6 +172,25 @@ def main(argv: list[str] | None = None) -> int:
     hl.add_argument("--workdir", default=None, help="the daemon's work directory")
     hl.add_argument("--json", action="store_true", dest="as_json")
     _notify_args(hl)
+    bh = sub.add_parser(
+        "browser-host",
+        description="Native-messaging host started by the browser itself (not by hand): relays "
+        "the extension's observations to the running daemon.",
+    )
+    bh.add_argument("--host", default="localhost")
+    bh.add_argument("--port", type=int, default=8765)
+    bh.add_argument("--workdir", default=None)
+    bh.add_argument("browser_args", nargs=argparse.REMAINDER, help=argparse.SUPPRESS)
+    bi = sub.add_parser(
+        "browser-install",
+        description="Write the launcher and the native-messaging manifests so the Refmon "
+        "extension can reach this user's daemon (--system: for every user, as root).",
+    )
+    bi.add_argument("--system", action="store_true")
+    bi.add_argument("--port", type=int, default=8765)
+    bi.add_argument("--workdir", default=None, help="daemon work directory (default: per user)")
+    bi.add_argument("--launcher-dir", default=None)
+    bi.add_argument("--chromium-extension-id", action="append", default=[], dest="chromium_ids")
     grd = sub.add_parser("guard")
     grd.add_argument("--host", default="localhost")
     grd.add_argument("--port", type=int, default=8765)
@@ -389,6 +410,31 @@ def _run(args: argparse.Namespace) -> int:
         from .attacklab import main as lab_main
 
         return lab_main(args)
+    elif args.command == "browser-host":
+        from .browser_host import Forwarder, serve
+        from .live import default_live_workdir
+
+        workdir = Path(args.workdir) if args.workdir else default_live_workdir()
+        return serve(sys.stdin.buffer, sys.stdout.buffer, Forwarder(workdir, args.host, args.port))
+    elif args.command == "browser-install":
+        from .browser_host import install
+
+        home = Path.home()
+        if args.launcher_dir:
+            launcher_dir = Path(args.launcher_dir)
+        elif args.system:
+            launcher_dir = Path("/usr/libexec/refmon")
+        else:
+            launcher_dir = home / ".local/share/refmon"
+        for path in install(
+            home=home,
+            launcher_dir=launcher_dir,
+            system=args.system,
+            workdir=Path(args.workdir) if args.workdir else None,
+            port=args.port,
+            chromium_ids=args.chromium_ids,
+        ):
+            print(f"wrote {path}")
     elif args.command == "guard":
         import json
         import shlex
