@@ -1,0 +1,24 @@
+{
+  "title": "A developer account creates a privileged host-mounting pod, then a cluster role binding",
+  "kind": "malicious",
+  "platform": "server",
+  "decision": "block",
+  "rule_decision": "hold",
+  "decided_in_phase": "4b",
+  "questions_failed": [
+    "contract",
+    "effect"
+  ],
+  "effects": [
+    "escalate"
+  ],
+  "known_gap": false,
+  "notes": "v2.3 (A78): Kubernetes audit events. An API request carries no origin label (the client is authenticated); contract_privilege_violation + effect_escalate reach block in the calculus, the plain fail rule holds.",
+  "scenario": "S62",
+  "actions": [
+    {
+      "type": "kill_process_tree",
+      "process": "k8s:dev-lab"
+    }
+  ]
+}

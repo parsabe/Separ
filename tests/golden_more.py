@@ -651,6 +651,69 @@ def s61() -> Result:
     return s.events, [], []
 
 
+# -- containers, Kubernetes and IaC (v2.3, A78) --------------------------------------------------
+
+K8S = "dev-k8s1"
+
+
+def s62() -> Result:
+    # a developer's credentials create a privileged pod that mounts the host root, then a binding
+    dev = actor("k8s:dev-lab", "k8s_api_client", "dev-lab")
+    s = Stream(K8S)
+    s.add(0, "priv_change", dev, "privileged_pod", "s62.pod")
+    s.add(30_000, "priv_change", dev, "rbac_binding", "s62.binding")
+    return s.events, ["k8s:dev-lab"], ["k8s:dev-lab"]
+
+
+def s63() -> Result:
+    # an exploited web container reads its service-account token and calls the API and metadata
+    web = actor("p-6300", "web_worker", "www-data")
+    s = Stream(K8S)
+    s.add(0, "request_in", web, "request_body", "s63.req", source_class="inbound_request")
+    s.add(300, "asset_access", web, "key_material", "s63.token", path_group="sa_token",
+          protected_asset="k8s-service-account-token")  # fmt: skip
+    s.add(200, "net_connect", web, "network_endpoint", "s63.api", destination_class="k8s_api")
+    s.add(
+        200, "net_connect", web, "network_endpoint", "s63.meta", destination_class="cloud_metadata"
+    )
+    s.add(500, "request_end", web, "request_body", "s63.req")
+    return s.events, ["p-6300"], ["p-6300"]
+
+
+def s64() -> Result:
+    # a Terraform module from an untrusted source runs a local-exec that fetches more code
+    tf = actor("p-6400", "iac_tool", "ops")
+    sh = actor("p-6401", "interactive_shell", "ops", parent="p-6400")
+    s = Stream(K8S)
+    s.add(0, "content_in", tf, "package_archive", "s64.module", source_class="download")
+    s.add(2_000, "exec", tf, "command_text", "s64.local_exec", exec_class="unknown")
+    s.add(300, "net_connect", sh, "network_endpoint", "s64.dest", destination_class="unknown")
+    return s.events, ["p-6400", "p-6401"], ["p-6400"]
+
+
+def s65() -> Result:
+    # a cluster admin debugs a pod and reads a secret (the admin's contract allows both)
+    adm = actor("k8s:adm-lab", "k8s_admin", "adm-lab")
+    s = Stream(K8S)
+    s.add(0, "exec", adm, "command_text", "s65.exec", exec_class="unknown")
+    s.add(20_000, "asset_access", adm, "k8s_secret", "s65.secret", protected_asset="k8s-secrets")
+    return s.events, [], []
+
+
+def s66() -> Result:
+    # terraform apply: its provider, its state, the registry and the cloud API (all in contract)
+    tf = actor("p-6600", "iac_tool", "ops")
+    s = Stream(K8S)
+    s.add(
+        0, "net_connect", tf, "network_endpoint", "s66.registry", destination_class="iac_registry"
+    )
+    s.add(500, "exec", tf, "command_text", "s66.provider", exec_class="iac_provider")
+    s.add(500, "asset_access", tf, "file", "s66.state", path_group="tfstate",
+          protected_asset="terraform-state")  # fmt: skip
+    s.add(500, "net_connect", tf, "network_endpoint", "s66.cloud", destination_class="cloud_api")
+    return s.events, [], []
+
+
 SCENARIOS = {
     "S03": s03, "S04": s04, "S05": s05, "S06": s06, "S07": s07, "S08": s08, "S12": s12, "S15": s15,
     "S17": s17, "S18": s18, "S19": s19, "S20": s20, "S21": s21, "S22": s22, "S23": s23, "S24": s24,
@@ -659,6 +722,7 @@ SCENARIOS = {
     "S40": s40, "S44": s44, "S45": s45, "S46": s46, "S47": s47, "S48": s48, "S49": s49, "S50": s50,
     "S53": s53, "S54": s54, "S55": s55, "S56": s56,
     "S57": s57, "S58": s58, "S59": s59, "S60": s60, "S61": s61,
+    "S62": s62, "S63": s63, "S64": s64, "S65": s65, "S66": s66,
 }  # fmt: skip
 
 ORIGIN, C, E = "origin", "contract", "effect"
@@ -748,6 +812,13 @@ META = {
               notes="v2.2 (A76): a canary of class account; an override still blocks a login story."),
     "S60": _m("A month of ordinary logins from campus and home", "benign", "server", "allow", [], []),
     "S61": _m("A user mistypes the password twice, then logs in from home as usual", "benign", "server", "allow", [], []),
+    "S62": _m("A developer account creates a privileged host-mounting pod, then a cluster role binding", "malicious", "server", "block", [C, E], ["escalate"], rule="hold", phase="4b",
+              notes="v2.3 (A78): Kubernetes audit events. An API request carries no origin label (the client is authenticated); contract_privilege_violation + effect_escalate reach block in the calculus, the plain fail rule holds."),
+    "S63": _m("An exploited web container reads its service-account token, then calls the API server and cloud metadata", "malicious", "server", "block", [ORIGIN, C, E], ["credential", "asset_access", "fetch"], override="protected_asset",
+              notes="v2.3 (A78): Tetragon events; the role comes from the container image. A labeled process touching a protected asset is the protected-asset override."),
+    "S64": _m("A Terraform module from an untrusted source runs a local-exec that fetches more code", "malicious", "server", "block", [ORIGIN, C, E], ["fetch"]),
+    "S65": _m("A cluster admin debugs a pod and reads a secret", "benign", "server", "allow", [], []),
+    "S66": _m("Terraform runs its provider, reads its state, uses the registry and the cloud API", "benign", "server", "allow", [], []),
 }  # fmt: skip
 
 

@@ -750,6 +750,17 @@ def identity_only(events) -> bool:
     return bool(events) and all(e.actor.role in IDENTITY_ROLES for e in events)
 
 
+# v2.3 (A79): authenticated principals: accounts (logins) and Kubernetes API clients. Their stories
+# carry no origin label by design (an admin's own SSH session or kubectl call is not external).
+PRINCIPAL_ROLES = IDENTITY_ROLES | frozenset({"k8s_api_client", "k8s_admin", "ci_deployer"})
+
+
+def principal_only(events) -> bool:
+    """True when every event of the stream is an action of an authenticated principal."""
+    events = list(events)
+    return bool(events) and all(e.actor.role in PRINCIPAL_ROLES for e in events)
+
+
 def blocks_acting_on_nothing(results: list[Result]) -> list[Result]:
     return [
         r

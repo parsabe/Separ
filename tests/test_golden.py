@@ -13,7 +13,7 @@ from refmon.golden import ExpectedVerdict, GoldenCase, ScenarioKind
 from refmon.policy import default_policy
 from refmon.replay import ReplaySource
 from refmon.schemas import EVENT_ATTR_KEYS, Decision, EventType, Override, SourceClass
-from refmon.variants import identity_only, remote_only
+from refmon.variants import identity_only, principal_only, remote_only
 from scenario_run import cases
 
 CASES = cases()
@@ -59,7 +59,9 @@ def test_rule_decision_is_the_plain_fail_rule_or_the_override(case: GoldenCase):
 
 def test_only_the_documented_scenarios_differ_between_rule_and_final_decision():
     differing = {c.scenario for c in CASES if c.expected.decision != c.expected.rule_decision}
-    assert differing == {"S05", "S11", "S26a"}
+    # S62 (v2.3, A79): an API-client story has no origin label, so two questions fail; the plain
+    # rule holds and the evidence calculus blocks (a privileged pod and a new binding)
+    assert differing == {"S05", "S11", "S26a", "S62"}
     assert all(c.expected.decided_in_phase == "4b" for c in CASES if c.scenario in differing)
 
 
@@ -127,8 +129,8 @@ def test_blocked_and_allowed_scenarios_have_consistent_expectations(case: Golden
 def test_malicious_streams_start_from_untrusted_external_input(case: GoldenCase):
     if case.scenario == "S05":
         return  # typed by hand: no external input is visible, which is the known gap
-    if identity_only(stream(case)):
-        return  # a login story: a login never creates an origin label (v2.2, A75)
+    if principal_only(stream(case)):
+        return  # a login or API-client story carries no origin label by design (A75, A79)
     sources = [
         e
         for e in stream(case)

@@ -1,0 +1,32 @@
+{
+  "title": "An exploited web container reads its service-account token, then calls the API server and cloud metadata",
+  "kind": "malicious",
+  "platform": "server",
+  "decision": "block",
+  "rule_decision": "block",
+  "decided_in_phase": "1",
+  "questions_failed": [
+    "origin",
+    "contract",
+    "effect"
+  ],
+  "effects": [
+    "credential",
+    "asset_access",
+    "fetch"
+  ],
+  "override": "protected_asset",
+  "known_gap": false,
+  "notes": "v2.3 (A78): Tetragon events; the role comes from the container image. A labeled process touching a protected asset is the protected-asset override.",
+  "scenario": "S63",
+  "actions": [
+    {
+      "type": "kill_process_tree",
+      "process": "p-6300"
+    },
+    {
+      "type": "cut_network",
+      "process": "p-6300"
+    }
+  ]
+}

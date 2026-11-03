@@ -1,0 +1,28 @@
+{
+  "title": "A Terraform module from an untrusted source runs a local-exec that fetches more code",
+  "kind": "malicious",
+  "platform": "server",
+  "decision": "block",
+  "rule_decision": "block",
+  "decided_in_phase": "1",
+  "questions_failed": [
+    "origin",
+    "contract",
+    "effect"
+  ],
+  "effects": [
+    "fetch"
+  ],
+  "known_gap": false,
+  "scenario": "S64",
+  "actions": [
+    {
+      "type": "kill_process_tree",
+      "process": "p-6400"
+    },
+    {
+      "type": "cut_network",
+      "process": "p-6401"
+    }
+  ]
+}
