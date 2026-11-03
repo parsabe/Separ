@@ -65,7 +65,7 @@ Then load the extension:
      `checkNavigation` and `checkDownloads` under `3rdparty`.
    - **Chromium/Chrome**: pack the extension (`chrome://extensions` → *Pack extension*), host the
      `.crx` and an update manifest on an internal web server, and put
-     `packaging/browser/chromium-policy.json` (with your extension ID and update URL) in
+     `packaging/browser/chromium-policy.json` (replace the extension ID and the example update URL) in
      `/etc/chromium/policies/managed/` or `/etc/opt/chrome/policies/managed/`.
 
 ## Settings (managed by policy)

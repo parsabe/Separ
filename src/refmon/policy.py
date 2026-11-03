@@ -80,11 +80,28 @@ class ProtectedAsset(_Model):
     value: str | None = None
 
 
+# What a canary can be (v2.1, A69): a decoy credential (matched on the content an asset access
+# reads), a decoy URL path or a decoy document's beacon path (matched on a request), a decoy file
+# (matched on the path an access or write touches) and a decoy service (matched on the name of the
+# decoy listener that took a connection). All are matched in Observe before anything is dropped.
+CANARY_CLASSES = ("credential", "url_path", "beacon", "file", "service")
+
+
 class Canary(_Model):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
     name: str
-    class_: str = Field(alias="class")  # credential | url_path
+    class_: str = Field(alias="class")  # one of CANARY_CLASSES
     value: str | None = None
+    # Roles whose touch is not a hit (a backup job or an indexer reads every file, decoys too).
+    # Only a sensor that knows the acting process can name its role; without one this cannot help.
+    ignore_roles: list[str] = Field(default_factory=list)
+
+    @field_validator("class_")
+    @classmethod
+    def _known_class(cls, value: str) -> str:
+        if value not in CANARY_CLASSES:
+            raise ValueError(f"canary class must be one of {CANARY_CLASSES}, not {value!r}")
+        return value
 
 
 class Executable(_Model):
@@ -297,9 +314,16 @@ class Policy(_Model):
     web_roots: list[str] = Field(default_factory=list)
     contracts: dict[str, Contract] = Field(default_factory=dict)
     extra_roles: list[str] = Field(default_factory=list)
-    non_carrier_roles: list[str] = Field(default_factory=lambda: ["browser", "mail", "launcher"])
+    # v2.1 (A70): a decoy listener is a channel too. It relays what an attacker sends and must not
+    # be contained by the hit it reports (else touching the trap would switch it off), and every
+    # connection it takes is its own story.
+    non_carrier_roles: list[str] = Field(
+        default_factory=lambda: ["browser", "mail", "launcher", "decoy_service"]
+    )
     # Roles that are the channel itself: their events do not link unrelated stories (Link).
-    non_process_keyed_roles: list[str] = Field(default_factory=lambda: ["browser", "mail"])
+    non_process_keyed_roles: list[str] = Field(
+        default_factory=lambda: ["browser", "mail", "decoy_service"]
+    )
     server_roles: list[str] = Field(
         default_factory=lambda: ["web_worker", "app_server", "node_app_server", "db_server"]
     )
@@ -472,6 +496,7 @@ def default_policy_dict() -> dict:
             "patch_tool",
             "elevation_tool",
             "deploy_tool",
+            "decoy_service",
         ],
         "trusted_sources": [
             {

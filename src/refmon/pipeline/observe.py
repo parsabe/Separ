@@ -11,8 +11,10 @@ from __future__ import annotations
 import hashlib
 import hmac
 import ipaddress
+import os
 from collections import deque
-from datetime import timedelta
+from collections.abc import Callable
+from datetime import datetime, timedelta
 
 from ..calculus.privacy import BloomFilter
 from ..policy import Policy
@@ -102,6 +104,8 @@ class Observe:
         self.features = obfuscation_features if features is None else features
         # Ring buffer of observed Events only (never raw content), at most buffer_max_age old.
         self.buffer: deque[Event] = deque()
+        # Optional: receives (canary name, raw source address, time) of a decoy hit (A71).
+        self.decoy_sink: Callable[[str, str, datetime], None] | None = None
 
     def fingerprint(self, content: str) -> str:
         return (
@@ -147,8 +151,10 @@ class Observe:
             hit = self.threat_lists.hit("fingerprint", [fingerprint])
         if hit:
             attrs["threat_list_hit"] = hit
-        if self._canary_hit(ev):
+        canary = self._canary_hit(ev)
+        if canary is not None:
             attrs["canary_hit"] = True
+            self._report_decoy_source(canary, ev)
 
         obj = ObjectRef(class_=ev.object.class_, fingerprint=fingerprint)
         return Event(
@@ -226,21 +232,43 @@ class Observe:
             return self.threat_lists.hit("url", [raw.get("url_path")])
         return None
 
-    def _canary_hit(self, ev: RawEvent) -> bool:
+    def _canary_hit(self, ev: RawEvent) -> str | None:
+        """The name of the canary this event touched, or None (C2, v2.1 A69 for the new classes)."""
         raw = ev.attrs
         for canary in self.policy.canaries:
-            if canary.value is None:
+            if canary.value is None or ev.actor.role in canary.ignore_roles:
                 continue
-            if canary.class_ == "url_path" and ev.type is EventType.REQUEST_IN:
-                path = raw.get("url_path")
-                if isinstance(path, str) and path.startswith(canary.value):
-                    return True
-            is_credential = canary.class_ == "credential" and ev.type is EventType.ASSET_ACCESS
-            content = ev.object.content
-            if (
-                is_credential
-                and content is not None
-                and normalize(content) == normalize(canary.value)
-            ):
-                return True
-        return False
+            if _canary_matches(canary.class_, canary.value, ev, raw):
+                return canary.name
+        return None
+
+    def _report_decoy_source(self, name: str, ev: RawEvent) -> None:
+        """v2.1 (A71): the source address of a connection that touched a decoy is handed, raw, to
+        the sink that keeps block-list proposals (deception/proposals.py), and only there. It is
+        dropped from the event like every other raw attribute."""
+        ip = ev.attrs.get("ip")
+        if self.decoy_sink is not None and ev.type is EventType.REQUEST_IN and isinstance(ip, str):
+            self.decoy_sink(name, ip, ev.ts)
+
+
+def _canary_matches(cls: str, value: str, ev: RawEvent, raw: dict) -> bool:
+    if cls in ("url_path", "beacon"):
+        path = raw.get("url_path")
+        return ev.type is EventType.REQUEST_IN and isinstance(path, str) and path.startswith(value)
+    if cls == "credential":
+        content = ev.object.content
+        return (
+            ev.type is EventType.ASSET_ACCESS
+            and content is not None
+            and normalize(content) == normalize(value)
+        )
+    if cls == "file":
+        path = raw.get("path")
+        return (
+            ev.type in (EventType.ASSET_ACCESS, EventType.FILE_WRITE)
+            and isinstance(path, str)
+            and os.path.normpath(path) == os.path.normpath(value)
+        )
+    if cls == "service":
+        return ev.type is EventType.REQUEST_IN and raw.get("decoy") == value
+    return False
