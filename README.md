@@ -166,10 +166,3 @@ separ lab --test-all
 - **Server Sensor Mappings (`/etc/separ/mappings/`):** [Cilium Tetragon (eBPF)](https://tetragon.io/), [CNCF Falco](https://falco.org/), [systemd / journald SSHD](https://systemd.io/), [Shibboleth IdP](https://www.shibboleth.net/), [Kubernetes Audit](https://kubernetes.io/), [Postfix/Dovecot](https://www.postfix.org/), [Keycloak](https://www.keycloak.org/), Microsoft 365
 - **Testing & Tooling:** [pytest](https://docs.pytest.org/), [Hypothesis](https://hypothesis.readthedocs.io/), [Ruff](https://docs.astral.sh/ruff/), [Matplotlib](https://matplotlib.org/), [LaTeX / TikZ](https://www.latex-project.org/)
 
----
-
-## 👤 Author & Contact
-
-- **Parsa Besharat**
-- 📧 Email: [parsa.besharat@student.tu-freiberg.de](mailto:parsa.besharat@student.tu-freiberg.de) / [parsa@parsabe.com](mailto:parsa@parsabe.com)
-- 🐙 GitHub: [https://github.com/parsabe/Separ](https://github.com/parsabe/Separ)
