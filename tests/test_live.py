@@ -177,7 +177,7 @@ def test_live_http_api_and_cli_guard_roundtrip(tmp_path: Path) -> None:
     try:
         with urllib.request.urlopen(f"{base}/", timeout=5.0) as resp:
             html = resp.read().decode("utf-8")
-            assert "Refmon Live Security Barrier" in html
+            assert "Separ Live Security Barrier" in html
             assert "--surface: #ffffff" in html
 
         # Preset API + Full Suite + Golden replay + Rootkit scan + Mode re-signing

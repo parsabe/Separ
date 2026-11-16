@@ -1,0 +1,30 @@
+# /etc/separ/ingest.yaml
+# Separ Sensor Ingest Configuration for Servers (TU Bergakademie Freiberg)
+#
+# Connect external sensors without writing code. Feed events via Unix sockets
+# (mode 0600) or log files. Run 'separ ingest list' for sensor templates.
+
+sensors: []
+  # Uncomment server sensors below when running as root/separ service on a server:
+  #
+  # 1. Tetragon (Cilium eBPF) - kernel process execution and outbound network
+  #    tetra getevents -o json | socat - UNIX-CONNECT:/run/separ/tetragon.sock
+  # - mapping: /etc/separ/mappings/tetragon.yaml
+  #   source: {socket: /run/separ/tetragon.sock}
+  #
+  # 2. SSH Logins via systemd journald - brute-force and credential abuse
+  #    journalctl -o json -f _COMM=sshd _COMM=sshd-session | socat - UNIX-CONNECT:/run/separ/sshd.sock
+  # - mapping: /etc/separ/mappings/sshd-journald.yaml
+  #   source: {socket: /run/separ/sshd.sock}
+
+  # 3. Shibboleth IdP (TUBAF SSO logins)
+  # - mapping: /etc/separ/mappings/shibboleth-idp.yaml
+  #   source: {file: /opt/shibboleth-idp/logs/idp-audit.log}
+
+  # 4. Postfix / Dovecot Mail Server logins (IMAP/POP/SMTP)
+  # - mapping: /etc/separ/mappings/postfix-dovecot.yaml
+  #   source: {socket: /run/separ/mail.sock}
+
+  # 5. Falco syscall alerts (processes, connections, file tampering)
+  # - mapping: /etc/separ/mappings/falco.yaml
+  #   source: {file: /var/log/falco/events.json}

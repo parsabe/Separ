@@ -1,0 +1,353 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[margin=0.85in]{geometry}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{enumitem}
+\usepackage{graphicx}
+\usepackage{fontawesome5}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{tcolorbox}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+\setlength{\emergencystretch}{2em}
+
+\definecolor{separblue}{HTML}{0550AE}
+\definecolor{separbg}{HTML}{F6F8FA}
+\definecolor{separborder}{HTML}{D0D7DE}
+\definecolor{separwarn}{HTML}{FFF8C5}
+\definecolor{separwarnborder}{HTML}{D4A72C}
+
+\lstset{
+  backgroundcolor=\color{separbg},
+  frame=single,
+  rulecolor=\color{separborder},
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  aboveskip=6pt,
+  belowskip=6pt,
+  xleftmargin=4pt,
+  xrightmargin=4pt
+}
+
+\newtcolorbox{callout}[1][]{
+  colback=separbg,
+  colframe=separblue,
+  boxrule=0.8pt,
+  arc=3pt,
+  left=8pt,
+  right=8pt,
+  top=6pt,
+  bottom=6pt,
+  #1
+}
+
+\newtcolorbox{warnbox}[1][]{
+  colback=separwarn,
+  colframe=separwarnborder,
+  boxrule=0.8pt,
+  arc=3pt,
+  left=8pt,
+  right=8pt,
+  top=6pt,
+  bottom=6pt,
+  #1
+}
+
+\title{\Huge\bfseries Separ: IT Service Desk Operations,\\Setup, and Administration Guide}
+\author{\large Technical Documentation for System Administrators \& Endpoint Support\\[4pt]
+\texttt{TU Bergakademie Freiberg (tu-freiberg.de) / Linux Servers \& Workstations}\\[6pt]
+\normalsize\href{mailto:parsa.besharat@student.tu-freiberg.de}{\faEnvelope\ \texttt{parsa.besharat@student.tu-freiberg.de}} \quad|\quad \href{https://github.com/parsabe/Separ}{\faGithub\ \texttt{github.com/parsabe/Separ}}}
+\date{November 2026 \quad | \quad Version 2.0}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\vspace{1em}
+\hrule
+\vspace{1em}
+
+% ============================================================================
+\section{What Is Separ?}
+% ============================================================================
+
+\textbf{Separ} (\emph{The Fire Shield}) is a lightweight, privacy-preserving security monitor and attack barrier for Linux servers, shared clusters, and staff or student laptops.
+
+Traditional antivirus scanners and firewalls try to recognize \emph{known bad files} or \emph{known malicious payloads}. Modern attacks—such as \textbf{ClickFix} copy-paste lures (tricking a user into pasting a hidden command from a website into their terminal), \textbf{prompt-injected AI coding assistants}, and \textbf{in-memory rootkits}—bypass traditional scanners because they use normal built-in system tools (like \texttt{curl}, \texttt{bash}, or \texttt{ssh}) rather than dropping a known virus file.
+
+Separ takes a different approach: it watches \textbf{how programs behave} and enforces signed security rules before dangerous actions cause damage, without ever saving cleartext passwords, tokens, or command-line secrets to disk.
+
+\begin{callout}[title=\textbf{Key Benefits for IT Service Desk Teams}]
+\begin{itemize}[leftmargin=1.3em,itemsep=2pt,topsep=2pt]
+  \item \textbf{Zero Cleartext Telemetry Exposure:} Sensitive command arguments, URLs, and file paths are hashed in RAM using a local device key before anything is written to logs.
+  \item \textbf{Cryptographically Signed Policies:} Every security rule and mode change is signed with an administrator Ed25519 key (\texttt{admin.key}). Unsigned or tampered configs are rejected automatically.
+  \item \textbf{Standalone Desktop GUI:} Opens directly as a dedicated Linux application window (\texttt{separ gui}) showing live sensor events, blocked incidents, and quarantined files—like Wireshark for system behavior.
+  \item \textbf{Lightweight Native Packages:} Installs cleanly via \texttt{.deb} (568\,KB), \texttt{.rpm} (293\,KB), or \texttt{install.sh} with no bundled Python interpreter or Electron bloat.
+\end{itemize}
+\end{callout}
+
+% ============================================================================
+\section{How Separ Works (Plain-English Overview)}
+% ============================================================================
+
+Separ evaluates system activity through a six-stage pipeline:
+\begin{center}
+\textbf{Observe} $\longrightarrow$ \textbf{Tag} $\longrightarrow$ \textbf{Link} $\longrightarrow$ \textbf{Judge} $\longrightarrow$ \textbf{Gate} $\longrightarrow$ \textbf{Contain}
+\end{center}
+
+\subsection{The Six Stages}
+\begin{enumerate}[leftmargin=1.4em,itemsep=4pt]
+  \item \textbf{Observe (Privacy Wall):} Raw events enter from system sensors (e.g., SSH logins, eBPF process logs, CLI commands). Separ checks for obfuscated text (hidden spaces, base64 encoding, high randomness) in memory, converts sensitive strings into irreversible one-way hashes, and immediately discards the raw text.
+  \item \textbf{Tag (Provenance Tracking):} If data arrived from an untrusted external source (a website, email, download, or AI agent), Separ attaches a provenance tag. This tag fades naturally over time (30-minute half-life) during harmless activity, but freezes immediately if the program breaks a security rule.
+  \item \textbf{Link (Incident Grouping):} Related actions across parent and child processes (for example, a web server spawning a shell, which then downloads a script) are grouped together into a single \emph{story}.
+  \item \textbf{Judge (Origin, Contract, Effect):} Separ evaluates the story by asking three concrete questions (detailed in Section~\ref{sec:oce}).
+  \item \textbf{Gate (Decision):} Based on the configured mode (\texttt{observe}, \texttt{warn}, or \texttt{block}), Separ decides to \textbf{ALLOW}, \textbf{HOLD} (pause for human review), or \textbf{BLOCK}.
+  \item \textbf{Contain (Response):} On a block, Separ stops the command or process tree, cuts its network access, quarantines dropped files in read-only mode (\texttt{0400}), and displays a live alert in the GUI.
+\end{enumerate}
+
+\subsection{Origin, Contract, and Effect Explained}
+\label{sec:oce}
+
+Every verdict in Separ is driven by three straightforward questions:
+
+\begin{table}[h]
+\centering
+\renewcommand{\arraystretch}{1.25}
+\begin{tabularx}{\textwidth}{@{}lXX@{}}
+\toprule
+\textbf{Question} & \textbf{What It Asks} & \textbf{Why It Matters} \\
+\midrule
+\textbf{1. Origin} & \emph{Where did this input come from?} (Web, email, download, AI agent, or typed directly by the user?) & Typing \texttt{curl} yourself is normal; pasting a hidden \texttt{curl | sh} command from an untrusted webpage is a ClickFix attack. \\
+\textbf{2. Contract} & \emph{Did the program break its job description (role)?} & Every program has a role (e.g., \texttt{web\_worker}, \texttt{interactive\_shell}, \texttt{mail}). A web server spawning \texttt{/bin/sh} violates its role contract, catching zero-day exploits without signatures. \\
+\textbf{3. Effect} & \emph{What dangerous outcome is it attempting?} & Checks for credential theft (\texttt{.ssh}, \texttt{.aws}), persistence (cron/systemd), mass file encryption, tampering with logs, or connecting to unknown external hosts. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\textbf{Why all three together?}
+\begin{itemize}[leftmargin=1.4em,itemsep=2pt]
+  \item \textbf{Origin alone} would block harmless downloads.
+  \item \textbf{Contract alone} (like traditional SELinux/AppArmor) misses attacks inside an allowed shell, because an interactive terminal is normally permitted to run \texttt{curl}.
+  \item \textbf{Effect alone} would flag normal admin tasks (like backups or software updates).
+  \item \textbf{Contract Gate Safety Rule:} Separ \emph{never} hard-blocks a process purely on suspicion if no role contract was broken; instead, it places the action on \textbf{HOLD} for an administrator or user to review.
+\end{itemize}
+
+\subsection{Operating Modes \& Server vs.\ Laptop Behavior}
+\begin{itemize}[leftmargin=1.4em,itemsep=2pt]
+  \item \textbf{\texttt{observe} mode:} Recommended for initial 1--2 week server pilots. Logs all detections and alerts without stopping any process.
+  \item \textbf{\texttt{warn} mode:} Displays warnings to the user/admin without blocking execution.
+  \item \textbf{\texttt{block} mode:} Full active protection. Blocks attacks before execution and quarantines suspicious dropped files.
+\end{itemize}
+
+On an \textbf{interactive laptop}, an unanswered \texttt{HOLD} prompt eventually times out and stops the suspicious command. On an \textbf{unattended server}, an unanswered \texttt{HOLD} moves only the suspicious file into \texttt{KEPT\_QUARANTINED} while keeping the main server daemon running smoothly.
+
+% ============================================================================
+\section{Installation Guide}
+% ============================================================================
+
+Separ requires \textbf{Python 3.10 or newer} (Python 3.12+ recommended) along with standard OS packages (\texttt{python3-pydantic}, \texttt{python3-yaml}, \texttt{python3-cryptography}).
+
+\subsection{Option A: Debian / Ubuntu / Kali Linux (\texttt{.deb})}
+\begin{lstlisting}[language=bash]
+sudo apt update
+sudo apt install ./separ_2.0.0_all.deb
+\end{lstlisting}
+
+\subsection{Option B: RHEL / Rocky Linux / AlmaLinux / Fedora (\texttt{.rpm})}
+\begin{lstlisting}[language=bash]
+sudo dnf install ./separ-2.0.0-1.noarch.rpm
+\end{lstlisting}
+
+\subsection{Option C: Universal POSIX Installer (\texttt{install.sh})}
+From the extracted Separ directory:
+\begin{lstlisting}[language=bash]
+# System-wide installation (IT admins / servers -> /usr/local, /etc/separ)
+sudo ./install.sh
+
+# Unprivileged user installation (personal laptop -> ~/.local)
+./install.sh
+\end{lstlisting}
+
+\subsection{Verify Installation}
+\begin{lstlisting}[language=bash]
+separ --help
+\end{lstlisting}
+If installed via \texttt{.deb} or \texttt{.rpm}, this registers \texttt{/usr/bin/separ}, \texttt{/etc/separ/} templates, systemd service units, and the \textbf{Separ} launcher in your Linux Application Menu.
+
+% ============================================================================
+\section{Upfront Policy \& Environment Setup (\texttt{separ setup})}
+% ============================================================================
+
+\begin{warnbox}[title=\textbf{Important: Configure Policies Before Starting the App}]
+Administrators and laptop users must initialize their signing keys and signed policy \textbf{before} starting the daemon or GUI. Separ refuses to enforce unsigned or modified \texttt{policy.yaml} files.
+\end{warnbox}
+
+\subsection{Setup for Campus Servers (IT Admins)}
+Run as root to configure \texttt{/etc/separ/} (or \texttt{/var/lib/separ}):
+\begin{lstlisting}[language=bash]
+# Start in observe mode for pilot, or block mode for active enforcement
+sudo separ setup --server --mode observe
+\end{lstlisting}
+This creates:
+\begin{itemize}[leftmargin=1.4em,itemsep=2pt]
+  \item \textbf{\texttt{admin.key}:} Your private Ed25519 signing key (strictly \texttt{0600} root-owned; keep backups secure).
+  \item \textbf{\texttt{policy.yaml}:} Pre-configured and signed with TUBAF campus subnets (\texttt{139.18/16}, campus VPN \texttt{10.0.0.0/8}, eduroam \texttt{172.16.0.0/12}), internal domain \texttt{tu-freiberg.de}, and Shibboleth SSO apps (OPAL, Moodle, Nextcloud, Zoom).
+\end{itemize}
+
+\subsection{Setup for Staff / Developer Laptops}
+Run as your normal user (no \texttt{sudo} needed):
+\begin{lstlisting}[language=bash]
+separ setup --laptop --mode block
+\end{lstlisting}
+This tailors the policy for endpoint workstations, allowing standard developer tools (VS Code, Cursor, Git, Pip, Cargo, SSH clients, browsers) while blocking ClickFix pastes, credential theft, and reverse shells.
+
+\subsection{Customizing \& Re-Signing \texttt{policy.yaml}}
+Whenever an IT admin edits \texttt{policy.yaml} (for example, adding a new internal software repository or trusted host), it \textbf{must} be re-signed before reloading:
+\begin{lstlisting}[language=bash]
+# 1. Edit policy (e.g. add trusted internal host)
+sudo nano /etc/separ/policy.yaml
+
+# 2. Re-sign with admin.key
+sudo separ sign /etc/separ/policy.yaml /etc/separ/admin.key
+
+# 3. Verify signature integrity
+sudo separ verify /etc/separ/policy.yaml /etc/separ/admin.pub
+\end{lstlisting}
+
+% ============================================================================
+\section{Server Sensor Configuration (\texttt{/etc/separ/ingest.yaml})}
+% ============================================================================
+
+By default, \texttt{/etc/separ/ingest.yaml} ships with \texttt{sensors: []} so desktop users can open the GUI without root socket errors. On production servers, enable the sensors relevant to the host by editing \texttt{/etc/separ/ingest.yaml}:
+
+\begin{lstlisting}
+sensors:
+  # 1. SSH logins via systemd journald (brute-force & credential abuse)
+  - mapping: /etc/separ/mappings/sshd-journald.yaml
+    source: {socket: /run/separ/sshd.sock}
+
+  # 2. Tetragon eBPF (kernel process execution & outbound network)
+  - mapping: /etc/separ/mappings/tetragon.yaml
+    source: {socket: /run/separ/tetragon.sock}
+
+  # 3. Shibboleth IdP (TUBAF SSO audit log)
+  - mapping: /etc/separ/mappings/shibboleth-idp.yaml
+    source: {file: /opt/shibboleth-idp/logs/idp-audit.log}
+\end{lstlisting}
+
+\subsection{Available Built-In Sensor Mappings}
+Separ ships eight ready-to-use YAML mappings in \texttt{/etc/separ/mappings/}:
+\begin{itemize}[leftmargin=1.4em,itemsep=1pt]
+  \item \texttt{sshd-journald.yaml} — OpenSSH authentication and session events
+  \item \texttt{tetragon.yaml} — Cilium Tetragon eBPF process/network telemetry
+  \item \texttt{falco.yaml} — CNCF Falco runtime syscall alerts
+  \item \texttt{shibboleth-idp.yaml} — Shibboleth Identity Provider SSO audit logs
+  \item \texttt{postfix-dovecot.yaml} — Campus mail server (IMAP/POP/SMTP) logins
+  \item \texttt{keycloak.yaml} — Keycloak OIDC/SAML authentication events
+  \item \texttt{k8s-audit.yaml} — Kubernetes API server audit logs
+  \item \texttt{m365-audit.yaml} — Microsoft 365 cloud audit logs
+\end{itemize}
+
+\subsection{Feeding Journald / Tetragon into Separ Sockets}
+Ensure \texttt{/run/separ} exists (managed automatically by \texttt{separ.service}) and pipe your sensor stream:
+\begin{lstlisting}[language=bash]
+# Example: forward live SSHD journal events into Separ
+journalctl -o json -f _COMM=sshd _COMM=sshd-session | socat - UNIX-CONNECT:/run/separ/sshd.sock
+
+# Example: forward Tetragon eBPF events into Separ
+tetra getevents -o json | socat - UNIX-CONNECT:/run/separ/tetragon.sock
+\end{lstlisting}
+
+\subsection{Running as a Systemd Service}
+\begin{lstlisting}[language=bash]
+# System-wide server daemon
+sudo systemctl enable --now separ.service
+sudo systemctl status separ.service
+
+# Or per-user daemon on a workstation
+systemctl --user enable --now separ-user.service
+\end{lstlisting}
+
+% ============================================================================
+\section{Using the Desktop GUI \& CLI Operations}
+% ============================================================================
+
+\subsection{Launching the Standalone GUI}
+\begin{itemize}[leftmargin=1.4em,itemsep=2pt]
+  \item \textbf{From Desktop Menu:} Open your Linux Application Menu and click \textbf{Separ}.
+  \item \textbf{From Terminal:} Run \texttt{separ gui} (or \texttt{sudo separ gui} when monitoring root-owned server sockets). Separ automatically opens a dedicated application window (Chromium \texttt{-{}-app} mode or Firefox new window) and attaches to an already-running daemon if one is active.
+  \item \textbf{What You See:} A clean \textbf{Live Event Ledger}, active sensor status indicators, and signed policy scope. Attack alert cards stay hidden until a real violation happens. Diagnostic test presets are tucked inside the collapsible \emph{Diagnostics \& Attack Lab Simulation} drawer at the bottom.
+\end{itemize}
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.95\textwidth]{"separ template.png"}
+  \caption{Separ standalone desktop Reference Monitor GUI showing live system telemetry, policy enforcement status, and real-time event inspection.}
+  \label{fig:separ_gui}
+\end{figure}
+
+\subsection{IT Service Desk CLI Cheat Sheet}
+\begin{table}[h]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+\textbf{Command} & \textbf{Purpose} \\
+\midrule
+\texttt{separ setup --server|--laptop} & Initialize keys and generate signed \texttt{policy.yaml} upfront. \\
+\texttt{separ gui} & Open standalone Reference Monitor GUI (attaches to active daemon). \\
+\texttt{separ serve} & Run background daemon headlessly (for servers / \texttt{systemd}). \\
+\texttt{separ health --json} & External heartbeat check for Nagios, Icinga, cron, or Prometheus. \\
+\texttt{separ scan-rootkit} & Run the 6-engine, 2-pass read-only host rootkit \& stealth scan. \\
+\texttt{separ guard -- CMD} & Mediate and enforce policy on a single command before execution. \\
+\texttt{separ lab --test-all} & Run all 35 harmless attack/benign verification templates and save report. \\
+\texttt{separ audit} & Run red-team privacy audit verifying zero cleartext leaks in logs. \\
+\texttt{separ ingest list} & List available external sensor templates and mapping files. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+% ============================================================================
+\section{Monitoring, Alerts, and Troubleshooting}
+% ============================================================================
+
+\subsection{External Health Monitoring \& Webhooks}
+Because a crashed daemon cannot report its own failure, schedule \texttt{separ health} via \texttt{cron} or a \texttt{systemd} timer. It alerts once on outage and once on recovery:
+\begin{lstlisting}[language=bash]
+# Alert via Mattermost / Slack webhook or local mail
+separ health --workdir /var/lib/separ \
+  --notify-webhook https://chat.example.org/hooks/YOUR_HOOK \
+  --notify-command "mail -s 'Separ Alert' security@tu-freiberg.de"
+\end{lstlisting}
+
+\subsection{Common Service Desk Troubleshooting}
+
+\begin{enumerate}[leftmargin=1.4em,itemsep=4pt]
+  \item \textbf{Error: \texttt{PolicyRejected} on startup} \\
+  \emph{Cause:} \texttt{policy.yaml} was edited manually without re-signing, or is missing its signature. \\
+  \emph{Fix:} Run \texttt{sudo separ sign /etc/separ/policy.yaml /etc/separ/admin.key}.
+
+  \item \textbf{Warning: \texttt{Degraded protection: no host sensor}} \\
+  \emph{Cause:} Separ is running without any external sensors connected in \texttt{ingest.yaml}, so it only sees commands passed through \texttt{separ guard} or files in its watched sandbox. \\
+  \emph{Fix:} Normal on laptops; on servers, configure \texttt{sshd-journald} or \texttt{tetragon} in \texttt{/etc/separ/ingest.yaml} and restart \texttt{separ.service}.
+
+  \item \textbf{A legitimate internal script or campus portal was blocked} \\
+  \emph{Cause:} The destination host is not listed in the policy's trusted hosts/subnets. \\
+  \emph{Fix:} Add the internal domain/CIDR to \texttt{policy.yaml}, re-sign with \texttt{separ sign}, and reload.
+
+  \item \textbf{Running GUI on a headless server over SSH} \\
+  \emph{Fix:} Start the daemon headlessly on the server with \texttt{sudo separ gui --no-browser} (or \texttt{separ serve}), and forward port \texttt{8765} over SSH: \texttt{ssh -L 8765:127.0.0.1:8765 server}, then open the printed \texttt{http://localhost:8765/\#token=...} URL locally.
+
+  \item \textbf{Browser extension setup (optional)} \\
+  \emph{Fix:} Run \texttt{sudo separ browser-install --system} to register native messaging manifests for Firefox/Chromium enterprise policies in \texttt{/usr/share/separ/browser/}.
+\end{enumerate}
+
+\end{document}

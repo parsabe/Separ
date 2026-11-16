@@ -18,15 +18,15 @@ from pathlib import Path
 
 VERSION = "2.0.0"
 RELEASE = "1"
-PKG_NAME = "refmon"
-MAINTAINER = "Refmon Development Team <refmon@example.org>"
-HOMEPAGE = "https://github.com/parsabe/Refmon"
+PKG_NAME = "separ"
+MAINTAINER = "Separ Development Team <separ@example.org>"
+HOMEPAGE = "https://github.com/parsabe/Separ"
 SUMMARY = "Behavioral Reference Monitor & Live Attack Barrier"
 DESCRIPTION = (
-    "Refmon detects, contains and explains attacks on endpoints and servers\n"
+    "Separ detects, contains and explains attacks on endpoints and servers\n"
     "by judging behaviour rather than static signatures. It provides\n"
-    "real-time CLI mediation tools (refmon guard, refmon lab) and an\n"
-    "interactive Reference Monitor GUI (refmon gui) similar to Wireshark\n"
+    "real-time CLI mediation tools (separ guard, separ lab) and an\n"
+    "interactive Reference Monitor GUI (separ gui) similar to Wireshark\n"
     "for behavioral incident analysis."
 )
 
@@ -37,12 +37,26 @@ BUILD_DIR = ROOT_DIR / "build" / "package_staging"
 DIST_DIR = ROOT_DIR / "dist"
 
 CLI_WRAPPER = """#!/usr/bin/env python3
-# Refmon Reference Monitor executable launcher
+# Separ Reference Monitor executable launcher
+import os
+import shutil
 import sys
 from pathlib import Path
 
-# Look for refmon package in /usr/share/refmon or /usr/lib/refmon
-for candidate in ("/usr/share/refmon", "/usr/lib/refmon"):
+# If started by an older platform Python (< 3.10), re-exec with modern Python
+if sys.version_info < (3, 10):
+    for candidate in ("python3.12", "python3.11", "python3.10"):
+        if shutil.which(candidate):
+            os.execvp(candidate, [candidate] + sys.argv)
+    sys.stderr.write(
+        "Error: Separ requires Python >= 3.10 (e.g. python3.12). "
+        "Currently running on Python %s\\n" % sys.version.split()[0]
+    )
+    sys.exit(1)
+
+# Look for separ/refmon package in
+# /usr/share/separ, /usr/share/refmon, /usr/lib/separ, /usr/lib/refmon
+for candidate in ("/usr/share/separ", "/usr/share/refmon", "/usr/lib/separ", "/usr/lib/refmon"):
     cand_path = Path(candidate)
     if cand_path.is_dir() and str(cand_path) not in sys.path:
         sys.path.insert(0, str(cand_path))
@@ -65,86 +79,134 @@ def stage_files(stage_root: Path) -> None:
     """Populate Linux filesystem tree under stage_root."""
     bin_dir = stage_root / "usr" / "bin"
     bin_dir.mkdir(parents=True, exist_ok=True)
-    refmon_bin = bin_dir / "refmon"
-    refmon_bin.write_text(CLI_WRAPPER, encoding="utf-8")
-    refmon_bin.chmod(0o755)
+    for bname in ("separ", "refmon"):
+        bin_file = bin_dir / bname
+        bin_file.write_text(CLI_WRAPPER, encoding="utf-8")
+        bin_file.chmod(0o755)
 
-    # Python package modules under /usr/share/refmon/refmon
-    share_refmon = stage_root / "usr" / "share" / "refmon" / "refmon"
-    share_refmon.mkdir(parents=True, exist_ok=True)
-    for root, dirs, files in os.walk(SRC_DIR):
-        dirs[:] = [d for d in dirs if d != "__pycache__" and not d.startswith(".")]
-        rel = Path(root).relative_to(SRC_DIR)
-        dest_dir = share_refmon / rel
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        for f in files:
-            if f.endswith((".pyc", ".pyo")):
-                continue
-            src_f = Path(root) / f
-            dest_f = dest_dir / f
-            shutil.copy2(src_f, dest_f)
-            dest_f.chmod(0o644)
+    # Python package modules under /usr/share/separ and /usr/share/refmon
+    for share_base in ("separ", "refmon"):
+        share_refmon = stage_root / "usr" / "share" / share_base / "refmon"
+        share_refmon.mkdir(parents=True, exist_ok=True)
+        for root, dirs, files in os.walk(SRC_DIR):
+            dirs[:] = [d for d in dirs if d != "__pycache__" and not d.startswith(".")]
+            rel = Path(root).relative_to(SRC_DIR)
+            dest_dir = share_refmon / rel
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            for f in files:
+                if f.endswith((".pyc", ".pyo")):
+                    continue
+                src_f = Path(root) / f
+                dest_f = dest_dir / f
+                shutil.copy2(src_f, dest_f)
+                dest_f.chmod(0o644)
+        separ_src = ROOT_DIR / "src" / "separ"
+        if separ_src.is_dir():
+            share_separ = stage_root / "usr" / "share" / share_base / "separ"
+            share_separ.mkdir(parents=True, exist_ok=True)
+            for f in separ_src.iterdir():
+                if f.is_file() and not f.name.endswith((".pyc", ".pyo")):
+                    dest_f = share_separ / f.name
+                    shutil.copy2(f, dest_f)
+                    dest_f.chmod(0o644)
 
     # Desktop entry & icon
     app_dir = stage_root / "usr" / "share" / "applications"
     app_dir.mkdir(parents=True, exist_ok=True)
-    desktop_src = PACKAGING_DIR / "refmon.desktop"
-    if desktop_src.is_file():
-        shutil.copy2(desktop_src, app_dir / "refmon.desktop")
-        (app_dir / "refmon.desktop").chmod(0o644)
+    for dname in ("separ.desktop", "refmon.desktop"):
+        desktop_src = PACKAGING_DIR / dname
+        if desktop_src.is_file():
+            shutil.copy2(desktop_src, app_dir / dname)
+            (app_dir / dname).chmod(0o644)
 
     icon_dir = stage_root / "usr" / "share" / "icons" / "hicolor" / "scalable" / "apps"
     icon_dir.mkdir(parents=True, exist_ok=True)
-    icon_src = PACKAGING_DIR / "refmon.svg"
-    if icon_src.is_file():
-        shutil.copy2(icon_src, icon_dir / "refmon.svg")
-        (icon_dir / "refmon.svg").chmod(0o644)
+    for iname in ("separ.svg", "refmon.svg"):
+        icon_src = PACKAGING_DIR / iname
+        if icon_src.is_file():
+            shutil.copy2(icon_src, icon_dir / iname)
+            (icon_dir / iname).chmod(0o644)
 
     # Documentation & License
-    doc_dir = stage_root / "usr" / "share" / "doc" / "refmon"
-    doc_dir.mkdir(parents=True, exist_ok=True)
-    readme_src = ROOT_DIR / "README.md"
-    if readme_src.is_file():
-        shutil.copy2(readme_src, doc_dir / "README.md")
-        (doc_dir / "README.md").chmod(0o644)
+    for doc_name in ("separ", "refmon"):
+        doc_dir = stage_root / "usr" / "share" / "doc" / doc_name
+        doc_dir.mkdir(parents=True, exist_ok=True)
+        readme_src = ROOT_DIR / "README.md"
+        if readme_src.is_file():
+            shutil.copy2(readme_src, doc_dir / "README.md")
+            (doc_dir / "README.md").chmod(0o644)
 
-    license_src = ROOT_DIR / "LICENSE"
-    if license_src.is_file():
-        shutil.copy2(license_src, doc_dir / "copyright")
-        (doc_dir / "copyright").chmod(0o644)
+        license_src = ROOT_DIR / "LICENSE"
+        if license_src.is_file():
+            shutil.copy2(license_src, doc_dir / "copyright")
+            (doc_dir / "copyright").chmod(0o644)
 
+    stage_server_config(stage_root)
     stage_browser(stage_root)
+
+
+def stage_server_config(stage_root: Path) -> None:
+    """Stage /etc/separ configuration templates, mapping files and systemd unit."""
+    etc_separ = stage_root / "etc" / "separ"
+    etc_separ.mkdir(parents=True, exist_ok=True)
+    etc_src = PACKAGING_DIR / "etc" / "separ"
+    if etc_src.is_dir():
+        for f in etc_src.iterdir():
+            if f.is_file():
+                shutil.copy2(f, etc_separ / f.name)
+                (etc_separ / f.name).chmod(0o644)
+
+    mappings_dest = etc_separ / "mappings"
+    mappings_dest.mkdir(parents=True, exist_ok=True)
+    mappings_src = ROOT_DIR / "src" / "refmon" / "ingest" / "mappings"
+    if mappings_src.is_dir():
+        for f in mappings_src.iterdir():
+            if f.suffix in (".yaml", ".yml"):
+                shutil.copy2(f, mappings_dest / f.name)
+                (mappings_dest / f.name).chmod(0o644)
+
+    system_unit_dir = stage_root / "usr" / "lib" / "systemd" / "system"
+    system_unit_dir.mkdir(parents=True, exist_ok=True)
+    svc_src = PACKAGING_DIR / "system" / "separ.service"
+    if svc_src.is_file():
+        shutil.copy2(svc_src, system_unit_dir / "separ.service")
+        (system_unit_dir / "separ.service").chmod(0o644)
+        refmon_svc = system_unit_dir / "refmon.service"
+        if not refmon_svc.exists():
+            refmon_svc.symlink_to("separ.service")
 
 
 def stage_browser(stage_root: Path) -> None:
     """v2.1: the browser extension (as files and as an .xpi), its policy templates and the per-user
     systemd unit. Nothing is enabled by installing the package: an admin runs
-    `refmon browser-install --system` and applies the browser policy (browser/README.md)."""
+    `separ browser-install --system` and applies the browser policy (browser/README.md)."""
     import zipfile
 
     ext_src = ROOT_DIR / "browser" / "extension"
-    share = stage_root / "usr" / "share" / "refmon" / "browser"
-    (share / "extension").mkdir(parents=True, exist_ok=True)
-    xpi = share / "refmon-browser.xpi"
-    with zipfile.ZipFile(xpi, "w", zipfile.ZIP_DEFLATED) as zf:
-        for f in sorted(ext_src.iterdir()):
-            if f.is_file():
-                shutil.copy2(f, share / "extension" / f.name)
-                (share / "extension" / f.name).chmod(0o644)
-                zf.write(f, f.name)
-    xpi.chmod(0o644)
-    for name in ("firefox-policies.json", "chromium-policy.json"):
-        shutil.copy2(PACKAGING_DIR / "browser" / name, share / name)
-        (share / name).chmod(0o644)
-    readme = ROOT_DIR / "browser" / "README.md"
-    shutil.copy2(readme, share / "README.md")
-    (share / "README.md").chmod(0o644)
+    for share_base in ("separ", "refmon"):
+        share = stage_root / "usr" / "share" / share_base / "browser"
+        (share / "extension").mkdir(parents=True, exist_ok=True)
+        xpi = share / f"{share_base}-browser.xpi"
+        with zipfile.ZipFile(xpi, "w", zipfile.ZIP_DEFLATED) as zf:
+            for f in sorted(ext_src.iterdir()):
+                if f.is_file():
+                    shutil.copy2(f, share / "extension" / f.name)
+                    (share / "extension" / f.name).chmod(0o644)
+                    zf.write(f, f.name)
+        xpi.chmod(0o644)
+        for name in ("firefox-policies.json", "chromium-policy.json"):
+            shutil.copy2(PACKAGING_DIR / "browser" / name, share / name)
+            (share / name).chmod(0o644)
+        readme = ROOT_DIR / "browser" / "README.md"
+        shutil.copy2(readme, share / "README.md")
+        (share / "README.md").chmod(0o644)
     unit_dir = stage_root / "usr" / "lib" / "systemd" / "user"
     unit_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(
-        PACKAGING_DIR / "browser" / "refmon-user.service", unit_dir / "refmon-user.service"
-    )
-    (unit_dir / "refmon-user.service").chmod(0o644)
+    for uname in ("separ-user.service", "refmon-user.service"):
+        usrc = PACKAGING_DIR / "browser" / uname
+        if usrc.is_file():
+            shutil.copy2(usrc, unit_dir / uname)
+            (unit_dir / uname).chmod(0o644)
 
 
 def build_deb() -> Path:
@@ -317,7 +379,8 @@ Summary:        {SUMMARY}
 License:        MIT
 URL:            {HOMEPAGE}
 BuildArch:      noarch
-Requires:       python3 >= 3.10, python3-pydantic, python3-pyyaml, python3-cryptography
+Requires:       (python3.12 or python3.11 or python3 >= 3.10)
+Recommends:     python3-pydantic, python3-pyyaml, python3-cryptography
 
 %description
 {DESCRIPTION}
@@ -337,10 +400,26 @@ if command -v update-desktop-database >/dev/null 2>&1; then
 fi
 
 %files
+/usr/bin/separ
 /usr/bin/refmon
+/usr/share/separ
 /usr/share/refmon
+/usr/share/applications/separ.desktop
 /usr/share/applications/refmon.desktop
+/usr/share/icons/hicolor/scalable/apps/separ.svg
 /usr/share/icons/hicolor/scalable/apps/refmon.svg
+/usr/lib/systemd/user/separ-user.service
+/usr/lib/systemd/user/refmon-user.service
+/usr/lib/systemd/system/separ.service
+/usr/lib/systemd/system/refmon.service
+%dir /etc/separ
+%config(noreplace) /etc/separ/ingest.yaml
+/etc/separ/ingest.yaml.example
+/etc/separ/policy.yaml.example
+/etc/separ/README.md
+/etc/separ/mappings
+%doc /usr/share/doc/separ/README.md
+%doc /usr/share/doc/separ/copyright
 %doc /usr/share/doc/refmon/README.md
 %doc /usr/share/doc/refmon/copyright
 

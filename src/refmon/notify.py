@@ -64,7 +64,7 @@ class Notification:
         }
 
     def text(self) -> str:
-        return f"[Refmon {self.severity.upper()}] {self.title}: {self.message}"
+        return f"[Separ {self.severity.upper()}] {self.title}: {self.message}"
 
 
 class Channel(Protocol):

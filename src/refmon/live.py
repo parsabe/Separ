@@ -18,6 +18,7 @@ import shutil
 import signal
 import socket
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -139,7 +140,7 @@ PRESET_CATALOG: list[dict[str, str]] = [
     },
     {
         "id": "self_tamper",
-        "label": "Security Tamper (Kill Refmon)",
+        "label": "Security Tamper (Kill Separ)",
         "group": "Stealth, Persistence & Supply Chain",
         "category": "attack",
         "expected": "block",
@@ -185,20 +186,31 @@ _PRESET_BY_ID = {item["id"]: item for item in PRESET_CATALOG}
 
 def default_live_workdir() -> Path:
     uid = os.getuid() if hasattr(os, "getuid") else 1000
-    return Path(tempfile.gettempdir()) / f"refmon-live-{uid}"
+    return Path(tempfile.gettempdir()) / f"separ-live-{uid}"
+
+
+def default_golden_dir() -> Path:
+    repo = Path(__file__).resolve().parents[2] / "tests" / "golden"
+    if repo.is_dir():
+        return repo
+    pkg = Path(__file__).resolve().parents[1] / "golden"
+    if pkg.is_dir():
+        return pkg
+    return Path("/usr/share/separ/golden")
 
 
 def _secure_dir(path: Path) -> None:
     """The work directory holds the signing key, the device key and the API token. It must be a
     real directory owned by this user and closed to everyone else: the default path under /tmp is
     predictable, and on a shared node another user could create it first with their own keys."""
+    mode = 0o755 if path == Path("/var/lib/separ") else 0o700
     if not path.is_symlink() and not path.exists():
-        path.mkdir(mode=0o700, parents=True)
+        path.mkdir(mode=mode, parents=True)
     if path.is_symlink() or not path.is_dir():
         raise PermissionError(f"refusing work directory {path}: not a plain directory")
     if hasattr(os, "getuid") and path.stat().st_uid != os.getuid():
         raise PermissionError(f"refusing work directory {path}: it belongs to another user")
-    path.chmod(0o700)
+    path.chmod(mode)
 
 
 def _secret_file(path: Path, make) -> str:
@@ -370,7 +382,7 @@ class LiveBarrier:
         self.last_rootkit: RootkitScanReport = self._run_rootkit_scan()
         self._snapshot_existing_sandbox()
         self._log_line(
-            f"Refmon live barrier ready | mode={self.policy.mode.value} "
+            f"Separ live barrier ready | mode={self.policy.mode.value} "
             f"| signed_digest={self.policy_digest[:18]}..."
         )
 
@@ -394,7 +406,7 @@ class LiveBarrier:
         readme_file = self.workspace_dir / "README.txt"
         if not readme_file.exists():
             readme_file.write_text(
-                "Safe Refmon user workspace. Allowed commands execute here.\n",
+                "Safe Separ user workspace. Allowed commands execute here.\n",
                 encoding="utf-8",
             )
 
@@ -912,7 +924,7 @@ class LiveBarrier:
                 decoys = decoys_from_proposal(json.loads(path.read_text(encoding="utf-8")))
             except (OSError, ValueError):
                 decoys = {}
-                self._log_line("DECOY watcher: no planted decoys found (run refmon decoy plant)")
+                self._log_line("DECOY watcher: no planted decoys found (run separ decoy plant)")
             if decoys:
                 try:
                     self._decoy_watcher = DecoyWatcher(decoys)
@@ -984,7 +996,7 @@ class LiveBarrier:
             Notification(
                 "alert", "warning", "Decoy source proposed for blocking",
                 f"{where} touched {canary}; proposal {entry.id} waits for an admin "
-                "(refmon decoy sources, refmon decoy approve-source)",
+                "(separ decoy sources, separ decoy approve-source)",
                 self.device_pseudonym, details={"proposal": entry.id, "internal": entry.internal},
             ),
             key=f"decoy-source:{entry.id}",
@@ -1026,7 +1038,7 @@ class LiveBarrier:
                     "warning",
                     "Degraded protection",
                     "decoy services without an approved canary: "
-                    f"{', '.join(unarmed)} (refmon decoy approve-canaries)",
+                    f"{', '.join(unarmed)} (separ decoy approve-canaries)",
                     "decoy_unarmed",
                 )
             )
@@ -1076,7 +1088,7 @@ class LiveBarrier:
         for runner in self.ingest_runners:
             if not runner.alive:
                 out.append((f"ingest:{runner.name}", "alert", "critical", "Sensor stopped",
-                            f"the sensor {runner.name} no longer feeds Refmon; what it covered "
+                            f"the sensor {runner.name} no longer feeds Separ; what it covered "
                             "is not judged", f"ingest:{runner.name}"))  # fmt: skip
         return out
 
@@ -1451,7 +1463,7 @@ class LiveBarrier:
                 return {
                     **out.to_dict(),
                     "expected": exp,
-                    "note": "Attempt to stop Refmon triggered OVR-SELF-TAMPER.",
+                    "note": "Attempt to stop Separ triggered OVR-SELF-TAMPER.",
                 }
 
             if name == "supply_chain":
@@ -1781,6 +1793,7 @@ class LiveBarrier:
                 "workdir": str(self.workdir),
                 "sandbox_dir": str(self.sandbox_dir),
                 "policy_path": str(self.policy_path),
+                "server_configured": bool(len(self.ingest_runners) > 0),
                 "presets": PRESET_CATALOG,
                 "counts": {
                     "stories": len(all_records),
@@ -1881,7 +1894,9 @@ def make_http_server(
                 self._send_json(HTTPStatus.FORBIDDEN, {"error": "host not allowed"})
                 return False
             if self.path.startswith("/api/"):
-                given = (self.headers.get("X-Refmon-Token") or "").encode("utf-8")
+                given = (
+                    self.headers.get("X-Separ-Token") or self.headers.get("X-Refmon-Token") or ""
+                ).encode("utf-8")
                 if not hmac.compare_digest(given, token):
                     self._send_json(
                         HTTPStatus.UNAUTHORIZED, {"error": "missing or wrong API token"}
@@ -2012,7 +2027,7 @@ def send_guard_request(
     except urllib.error.HTTPError as exc:
         # The daemon answered and refused: never fall back to running the command in-process.
         raise ValueError(
-            f"the Refmon daemon refused the request (HTTP {exc.code}); "
+            f"the Separ daemon refused the request (HTTP {exc.code}); "
             "pass --workdir of the running daemon"
         ) from exc
     except (urllib.error.URLError, TimeoutError, ConnectionError):
@@ -2069,11 +2084,9 @@ def serve_forever(
         fh.write(f"{actual_port}\n")
     ui_url = f"http://localhost:{actual_port}/#token={barrier.api_token}"
     pol = barrier.policy
-    print(f"Refmon Live Security Barrier active on {ui_url}", flush=True)
+    print(f"Separ Live Security Barrier active on {ui_url}", flush=True)
     if open_browser:
-        import webbrowser
-
-        threading.Timer(0.3, lambda: webbrowser.open(ui_url)).start()
+        threading.Timer(0.3, lambda: open_desktop_app(ui_url)).start()
     print(f"  Signed policy : {barrier.policy_path} (mode={pol.mode.value})", flush=True)
     print(f"  Sandbox watch : {barrier.sandbox_dir}", flush=True)
     print(f"  Quarantine    : {barrier.quarantine_dir}", flush=True)
@@ -2081,7 +2094,7 @@ def serve_forever(
     print(f"  API token     : {barrier.api_token_path} (required by every /api/ call)", flush=True)
     print(
         f"  Heartbeat     : {monitor.heartbeat_path} every {int(pol.heartbeat.interval)} s "
-        f"(check from outside: refmon health --workdir {barrier.workdir})",
+        f"(check from outside: separ health --workdir {barrier.workdir})",
         flush=True,
     )
     print(
@@ -2098,7 +2111,7 @@ def serve_forever(
     previous = signal.signal(signal.SIGTERM, _terminate) if in_main else None
     barrier.notify(
         Notification(
-            "lifecycle", "info", "Refmon started",
+            "lifecycle", "info", "Separ started",
             f"live barrier running in {pol.mode.value} mode; notifications: {hub.describe()}",
             barrier.device_pseudonym,
         )
@@ -2124,7 +2137,7 @@ def serve_forever(
         barrier.stop_background_watcher()
         barrier.notify(
             Notification(
-                "lifecycle", "warning", "Refmon stopped",
+                "lifecycle", "warning", "Separ stopped",
                 f"the live barrier is no longer running ({reason}); nothing is judged until it "
                 "is started again",
                 barrier.device_pseudonym,
@@ -2132,6 +2145,117 @@ def serve_forever(
         )  # fmt: skip
         hub.close()
     return 0
+
+
+def _desktop_launch_context() -> tuple[dict[str, str], Any]:
+    """Return (env, preexec_fn) for launching a desktop app window safely under sudo or user."""
+    env = os.environ.copy()
+    is_root = hasattr(os, "geteuid") and os.geteuid() == 0
+    sudo_user = env.get("SUDO_USER")
+    if not is_root or not sudo_user or sudo_user == "root":
+        return env, None
+    try:
+        import pwd
+
+        pw = pwd.getpwnam(sudo_user)
+    except (ImportError, KeyError):
+        return env, None
+
+    env["HOME"] = pw.pw_dir
+    env["USER"] = pw.pw_name
+    env["LOGNAME"] = pw.pw_name
+    runtime_dir = f"/run/user/{pw.pw_uid}"
+    if Path(runtime_dir).is_dir():
+        env.setdefault("XDG_RUNTIME_DIR", runtime_dir)
+        if not env.get("DBUS_SESSION_BUS_ADDRESS") and Path(f"{runtime_dir}/bus").exists():
+            env["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path={runtime_dir}/bus"
+        if not env.get("WAYLAND_DISPLAY") and Path(f"{runtime_dir}/wayland-0").exists():
+            env["WAYLAND_DISPLAY"] = "wayland-0"
+    if not env.get("DISPLAY") and Path("/tmp/.X11-unix/X0").exists():
+        env["DISPLAY"] = ":0"
+    xauth = Path(pw.pw_dir) / ".Xauthority"
+    if not env.get("XAUTHORITY") and xauth.is_file():
+        env["XAUTHORITY"] = str(xauth)
+
+    uid, gid, uname = pw.pw_uid, pw.pw_gid, pw.pw_name
+
+    def _drop_privs() -> None:
+        if hasattr(os, "initgroups"):
+            os.initgroups(uname, gid)
+        os.setgid(gid)
+        os.setuid(uid)
+
+    return env, _drop_privs
+
+
+def open_desktop_app(url: str) -> bool:
+    """Open Separ as a standalone application window on Linux, falling back to desktop browser."""
+    import shutil
+    import subprocess
+
+    env, preexec = _desktop_launch_context()
+    still_root = hasattr(os, "geteuid") and os.geteuid() == 0 and preexec is None
+    popen_kwargs: dict[str, Any] = {
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+        "env": env,
+        "start_new_session": True,
+    }
+    if preexec is not None:
+        popen_kwargs["preexec_fn"] = preexec
+
+    # 1. Chromium-based browsers in app mode open a chromeless native window
+    for browser in (
+        "google-chrome",
+        "google-chrome-stable",
+        "chromium",
+        "chromium-browser",
+        "brave-browser",
+        "microsoft-edge",
+    ):
+        b_path = shutil.which(browser)
+        if b_path:
+            cmd = [
+                b_path,
+                f"--app={url}",
+                "--window-size=1400,900",
+                "--window-position=100,50",
+            ]
+            if still_root:
+                cmd.append("--no-sandbox")
+            try:
+                subprocess.Popen(cmd, **popen_kwargs)
+                return True
+            except Exception:
+                pass
+
+    # 2. Firefox / Firefox-ESR in new window
+    for ff_bin in ("firefox", "firefox-esr"):
+        ff = shutil.which(ff_bin)
+        if ff:
+            try:
+                subprocess.Popen([ff, "--new-window", url], **popen_kwargs)
+                return True
+            except Exception:
+                pass
+
+    # 3. Desktop URL opener (xdg-open / x-www-browser)
+    for opener in ("xdg-open", "x-www-browser"):
+        op = shutil.which(opener)
+        if op:
+            try:
+                subprocess.Popen([op, url], **popen_kwargs)
+                return True
+            except Exception:
+                pass
+
+    # 4. Fallback to Python webbrowser
+    try:
+        import webbrowser
+
+        return webbrowser.open(url)
+    except Exception:
+        return False
 
 
 def launch_gui(
@@ -2142,27 +2266,66 @@ def launch_gui(
     hub: NotificationHub | None = None,
     rootkit_interval_s: float = 3600.0,
     open_browser: bool = True,
+    decoys: str | Path | None = None,
+    ingest: str | Path | None = None,
 ) -> int:
-    """Launch the Refmon Reference Monitor GUI, connecting to an active daemon if one exists."""
+    """Launch the Separ Reference Monitor GUI, connecting to an active daemon if one exists."""
     import urllib.request
-    import webbrowser
 
     workdir_path = Path(workdir) if workdir is not None else default_live_workdir()
     token_file = workdir_path / "api.token"
+    if not token_file.is_file() and workdir is None:
+        for candidate_dir in (Path("/var/lib/separ"), Path("/var/lib/refmon")):
+            cand_token = candidate_dir / "api.token"
+            if cand_token.is_file():
+                token_file = cand_token
+                workdir_path = candidate_dir
+                break
+
     if token_file.is_file():
         try:
             token = token_file.read_text(encoding="utf-8").strip()
             test_url = f"http://{host}:{port}/api/state"
-            req = urllib.request.Request(test_url, headers={"X-Refmon-Token": token})
+            req = urllib.request.Request(
+                test_url,
+                headers={"X-Separ-Token": token, "X-Refmon-Token": token},
+            )
             with urllib.request.urlopen(req, timeout=1.5):
                 ui_url = f"http://localhost:{port}/#token={token}"
-                print(f"Refmon GUI: active daemon detected on {ui_url}", flush=True)
+                print(f"Separ GUI: active daemon detected on {ui_url}", flush=True)
                 if open_browser:
                     with contextlib.suppress(Exception):
-                        webbrowser.open(ui_url)
+                        open_desktop_app(ui_url)
                 return 0
         except Exception:
             pass  # Daemon not running, will start fresh below
+
+    ingest_cfg = ingest
+    if not ingest_cfg:
+        user_ingest = Path.home() / ".config" / "separ" / "ingest.yaml"
+        if user_ingest.is_file():
+            ingest_cfg = str(user_ingest)
+        elif (
+            hasattr(os, "geteuid")
+            and os.geteuid() == 0
+            and Path("/etc/separ/ingest.yaml").is_file()
+        ):
+            ingest_cfg = "/etc/separ/ingest.yaml"
+    if not ingest_cfg:
+        border = "=" * 74
+        print(
+            f"\n{border}\n"
+            "⚠️  SEPAR NOTICE: External Server Sensors Not Configured!\n"
+            f"{border}\n"
+            "Running in local monitor mode without external server sensors.\n"
+            "To monitor production servers (SSH, Tetragon, Shibboleth), configure:\n"
+            "  1. Ingest config : /etc/separ/ingest.yaml (sensor sources & sockets)\n"
+            "  2. Signed policy : separ setup --server (campus domains & subnets)\n"
+            "  3. Decoy settings: /etc/separ/decoys.yaml (optional deception)\n\n"
+            "Run 'separ ingest list' or see /etc/separ/README.md for instructions.\n"
+            f"{border}\n",
+            file=sys.stderr,
+        )
 
     return serve_forever(
         host=host,
@@ -2171,4 +2334,6 @@ def launch_gui(
         hub=hub,
         rootkit_interval_s=rootkit_interval_s,
         open_browser=open_browser,
+        decoys=decoys,
+        ingest=ingest_cfg,
     )

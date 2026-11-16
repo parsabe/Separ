@@ -85,8 +85,35 @@ def _build_hub(args: argparse.Namespace):
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="refmon", description=__doc__.split("\n\n")[0])
+    prog_name = Path(sys.argv[0]).name if (sys.argv and sys.argv[0]) else "separ"
+    if prog_name not in ("separ", "refmon"):
+        prog_name = "separ"
+    parser = argparse.ArgumentParser(prog=prog_name, description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
+
+    setup = sub.add_parser(
+        "setup",
+        help="guided policy and environment setup for servers or laptops",
+        description=(
+            "Initialize keys, sign policy (TUBAF campus subnets, domains, apps), "
+            "and configure environment."
+        ),
+    )
+    setup.add_argument(
+        "--server", action="store_true", help="configure for campus server infrastructure"
+    )
+    setup.add_argument(
+        "--laptop",
+        action="store_true",
+        help="configure for workstation / personal laptop endpoint",
+    )
+    setup.add_argument(
+        "--mode",
+        choices=("observe", "block", "warn"),
+        default="observe",
+        help="initial policy enforcement mode (default: observe)",
+    )
+    setup.add_argument("--workdir", default=None, help="target configuration directory")
 
     keygen = sub.add_parser("keygen")
     keygen.add_argument("keyfile")
@@ -146,8 +173,8 @@ def main(argv: list[str] | None = None) -> int:
         "gui",
         help="launch interactive Reference Monitor GUI in desktop browser",
         description=(
-            "Launch Refmon's reference monitor interface. Similar to Wireshark for "
-            "network packets, Refmon GUI traces behavior, role contracts and security "
+            "Launch Separ's reference monitor interface. Similar to Wireshark for "
+            "network packets, Separ GUI traces behavior, role contracts and security "
             "verdicts in real time, with visual and audio alerts for blocked attack attempts."
         ),
     )
@@ -165,6 +192,16 @@ def main(argv: list[str] | None = None) -> int:
         type=float,
         default=3600.0,
         help="seconds between rootkit scans while serving (0: only at start; default 3600)",
+    )
+    gui.add_argument(
+        "--decoys",
+        default=None,
+        help="path to decoys.yaml or 'default' to install standard bait (design decision A75)",
+    )
+    gui.add_argument(
+        "--ingest",
+        default=None,
+        help="path to ingest.yaml (or directory of .yaml configs) for external sensors (A76)",
     )
     hl = sub.add_parser(
         "health",
@@ -217,8 +254,8 @@ def main(argv: list[str] | None = None) -> int:
 
     lab = sub.add_parser(
         "lab",
-        help="interactive attack lab: pick an attack, Refmon judges it before it runs",
-        description="Interactive attack lab: attack templates go through the Refmon pipeline "
+        help="interactive attack lab: pick an attack, Separ judges it before it runs",
+        description="Interactive attack lab: attack templates go through the Separ pipeline "
         "before they may run. Without options it opens the menu.",
         epilog=GUIDE,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -226,7 +263,7 @@ def main(argv: list[str] | None = None) -> int:
     lab.add_argument(
         "--workdir",
         default=None,
-        help="lab folder: policy, keys, sandbox, logs/, runs/ (default <Refmon>/attack-lab)",
+        help="lab folder: policy, keys, sandbox, logs/, runs/ (default <Separ>/attack-lab)",
     )
     lab.add_argument("--list", action="store_true", help="print all templates and exit")
     lab.add_argument(
@@ -253,7 +290,7 @@ def main(argv: list[str] | None = None) -> int:
     lab.add_argument(
         "--report-dir",
         default=None,
-        help="where saved runs go (default <Refmon>/attack-lab/runs; each run gets run-<time>/)",
+        help="where saved runs go (default <Separ>/attack-lab/runs; each run gets run-<time>/)",
     )
     lab.add_argument(
         "--analyze",
@@ -281,12 +318,16 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return _run(args)
     except (PolicyRejected, PermissionError, ValueError, OSError) as error:
-        print(f"refmon: {error}", file=sys.stderr)
+        print(f"separ: {error}", file=sys.stderr)
         return 1
 
 
 def _run(args: argparse.Namespace) -> int:
-    if args.command == "keygen":
+    if args.command == "setup":
+        from .setup import run_setup
+
+        return run_setup(args)
+    elif args.command == "keygen":
         private, public = signing.generate_keypair()
         path = Path(args.keyfile)
         path.write_text(private + "\n", encoding="utf-8")
@@ -357,11 +398,34 @@ def _run(args: argparse.Namespace) -> int:
     elif args.command == "serve":
         from .live import serve_forever
 
+        prog = Path(sys.argv[0]).name if (sys.argv and sys.argv[0]) else "separ"
+        if prog not in ("separ", "refmon"):
+            prog = "separ"
+
         try:
             hub = _build_hub(args)
         except ValueError as exc:
-            print(f"refmon serve: {exc}", file=sys.stderr)
+            print(f"{prog} serve: {exc}", file=sys.stderr)
             return 2
+        ingest_cfg = args.ingest
+        if not ingest_cfg and Path("/etc/separ/ingest.yaml").is_file():
+            ingest_cfg = "/etc/separ/ingest.yaml"
+        if not ingest_cfg:
+            border = "=" * 74
+            print(
+                f"\n{border}\n"
+                f"⚠️  {prog.upper()} NOTICE: External Server Sensors Not Configured!\n"
+                f"{border}\n"
+                "Running in local demonstration mode without external server sensors.\n"
+                "To monitor and protect production servers (SSH, Tetragon, Shibboleth), please\n"
+                "define your server configuration files:\n"
+                "  1. Ingest config : /etc/separ/ingest.yaml (sensor sources & sockets)\n"
+                "  2. Signed policy : /etc/separ/policy.yaml (campus domains & subnets)\n"
+                "  3. Decoy settings: /etc/separ/decoys.yaml (optional deception)\n\n"
+                f"Run '{prog} ingest list' or see /etc/separ/README.md for instructions.\n"
+                f"{border}\n",
+                file=sys.stderr,
+            )
         return serve_forever(
             host=args.host,
             port=args.port,
@@ -369,7 +433,7 @@ def _run(args: argparse.Namespace) -> int:
             hub=hub,
             rootkit_interval_s=args.rootkit_interval,
             decoys=args.decoys,
-            ingest=args.ingest,
+            ingest=ingest_cfg,
         )
     elif args.command == "ingest":
         from .ingest.cli import run as run_ingest
@@ -382,11 +446,18 @@ def _run(args: argparse.Namespace) -> int:
     elif args.command == "gui":
         from .live import launch_gui
 
+        prog = Path(sys.argv[0]).name if (sys.argv and sys.argv[0]) else "separ"
+        if prog not in ("separ", "refmon"):
+            prog = "separ"
+
         try:
             hub = _build_hub(args)
         except ValueError as exc:
-            print(f"refmon gui: {exc}", file=sys.stderr)
+            print(f"{prog} gui: {exc}", file=sys.stderr)
             return 2
+        ingest_cfg = getattr(args, "ingest", None)
+        if not ingest_cfg and Path("/etc/separ/ingest.yaml").is_file():
+            ingest_cfg = "/etc/separ/ingest.yaml"
         return launch_gui(
             host=args.host,
             port=args.port,
@@ -394,6 +465,8 @@ def _run(args: argparse.Namespace) -> int:
             hub=hub,
             rootkit_interval_s=args.rootkit_interval,
             open_browser=not args.no_browser,
+            decoys=getattr(args, "decoys", None),
+            ingest=ingest_cfg,
         )
     elif args.command == "health":
         import json
@@ -401,12 +474,24 @@ def _run(args: argparse.Namespace) -> int:
         from .health import check_health, notify_on_change
         from .live import default_live_workdir
 
+        prog = Path(sys.argv[0]).name if (sys.argv and sys.argv[0]) else "separ"
+        if prog not in ("separ", "refmon"):
+            prog = "separ"
+
         try:
             hub = _build_hub(args)
         except ValueError as exc:
-            print(f"refmon health: {exc}", file=sys.stderr)
+            print(f"{prog} health: {exc}", file=sys.stderr)
             return 2
         workdir = Path(args.workdir) if args.workdir else default_live_workdir()
+        if not args.workdir:
+            for sys_workdir in (Path("/var/lib/separ"), Path("/var/lib/refmon")):
+                if (
+                    not (workdir / "heartbeat.json").exists()
+                    and (sys_workdir / "heartbeat.json").is_file()
+                ):
+                    workdir = sys_workdir
+                    break
         now = datetime.now(UTC)
         code, info = check_health(workdir, now)
         if hub.external:
@@ -414,7 +499,18 @@ def _run(args: argparse.Namespace) -> int:
         if args.as_json:
             print(json.dumps(info, indent=2))
         else:
-            print(f"Refmon daemon: {info['status'].upper()} - {info['reason']}")
+            prog_label = "Refmon" if prog == "refmon" else "Separ"
+            print(f"{prog_label} daemon: {info['status'].upper()} - {info['reason']}")
+            if (
+                code != 0
+                and not args.workdir
+                and Path("/var/lib/separ").is_dir()
+                and workdir != Path("/var/lib/separ")
+            ):
+                print(
+                    "Tip: System service runs in /var/lib/separ. "
+                    f"Try: sudo {prog} health --workdir /var/lib/separ"
+                )
             for key in ("pid", "mode", "heartbeat_age_s", "policy_digest"):
                 if info.get(key) is not None:
                     print(f"  {key:16} {info[key]}")
@@ -442,9 +538,13 @@ def _run(args: argparse.Namespace) -> int:
         if args.launcher_dir:
             launcher_dir = Path(args.launcher_dir)
         elif args.system:
-            launcher_dir = Path("/usr/libexec/refmon")
+            launcher_dir = Path("/usr/libexec/separ")
+            if not launcher_dir.exists() and Path("/usr/libexec/refmon").exists():
+                launcher_dir = Path("/usr/libexec/refmon")
         else:
-            launcher_dir = home / ".local/share/refmon"
+            launcher_dir = home / ".local/share/separ"
+            if not launcher_dir.exists() and (home / ".local/share/refmon").exists():
+                launcher_dir = home / ".local/share/refmon"
         for path in install(
             home=home,
             launcher_dir=launcher_dir,
@@ -479,8 +579,10 @@ def _run(args: argparse.Namespace) -> int:
             print(json.dumps(res, indent=2))
         else:
             verdict = str(res["decision"]).upper()
+            prog = Path(sys.argv[0]).name if (sys.argv and sys.argv[0]) else "separ"
+            prog_label = "Refmon" if prog == "refmon" else "Separ"
             print(
-                f"[Refmon Barrier: {verdict}] mode={res['mode']} "
+                f"[{prog_label} Barrier: {verdict}] mode={res['mode']} "
                 f"log_odds={res['log_odds']} nats executed={res['executed']}"
             )
             print(f"  Why: {res['explanation']}")

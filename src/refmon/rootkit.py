@@ -38,6 +38,7 @@ import math
 import os
 import shutil
 import subprocess
+import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -958,8 +959,10 @@ def evaluate_rootkit_scan(
 
 def format_scan_report(report: RootkitScanReport) -> str:
     """Human-readable summary for CLI output (contains fingerprints only, zero raw paths)."""
+    prog = Path(sys.argv[0]).name if (sys.argv and sys.argv[0]) else "separ"
+    prog_name = "Refmon" if prog == "refmon" else "Separ"
     lines = [
-        "Refmon Rootkit & Stealth Scanner",
+        f"{prog_name} Rootkit & Stealth Scanner",
         f"  scanned at             {report.scanned_at}",
         f"  two-view passes        {report.passes}",
         f"  own processes checked  {report.own_processes_inspected}",

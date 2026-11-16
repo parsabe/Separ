@@ -141,7 +141,7 @@ class HealthMonitor:
             out[f"degraded:{','.join(names)}"] = Condition(
                 f"degraded:{','.join(names)}", "degraded", "warning", "Degraded protection",
                 f"no host sensor for {', '.join(names)}: the live barrier judges only commands "
-                "sent through `refmon guard` and files in its sandbox, not everything on the host",
+                "sent through `separ guard` and files in its sandbox, not everything on the host",
                 ",".join(names),
             )  # fmt: skip
         if self.watcher_stopped():
@@ -354,7 +354,7 @@ def rootkit_condition(barrier: LiveBarrier) -> Condition | None:
         "critical" if report.calculus_decision is Decision.BLOCK else "warning",
         f"Rootkit scan: {decision.upper()}",
         f"{len(report.findings)} finding(s): {', '.join(kinds)} "
-        f"(L={report.log_odds:.2f} nats); run `refmon scan-rootkit` for details",
+        f"(L={report.log_odds:.2f} nats); run `separ scan-rootkit` for details",
         "rootkit_scan",
     )
 
@@ -430,8 +430,8 @@ def notify_on_change(
     try:
         last = json.loads(state_path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        last = {"code": 0, "reason": ""}
-    changed = (last.get("code"), last.get("reason")) != (code, info.get("reason"))
+        last = {"code": 0, "status": "healthy", "reason": ""}
+    changed = (last.get("code"), last.get("status")) != (code, info.get("status"))
     if not changed:
         return False
     if code == 0 and last.get("code", 0) == 0:
@@ -439,11 +439,11 @@ def notify_on_change(
     else:
         if code == 0:
             note = Notification(
-                "alert", "info", "Recovered", f"Refmon daemon healthy again ({info['reason']})",
+                "alert", "info", "Recovered", f"Separ daemon healthy again ({info['reason']})",
                 info.get("device", "unknown"), now,
             )  # fmt: skip
         else:
-            title = "Refmon daemon not running" if code == 1 else "Refmon daemon has a problem"
+            title = "Separ daemon not running" if code == 1 else "Separ daemon has a problem"
             note = Notification(
                 "alert", "critical", title, info["reason"], info.get("device", "unknown"), now,
                 {"status": info["status"]},
@@ -452,8 +452,11 @@ def notify_on_change(
         hub.flush()
         sent = True
     with contextlib.suppress(OSError):
-        state_path.write_text(
-            json.dumps({"code": code, "reason": info.get("reason"), "ts": now.isoformat()}) + "\n",
-            encoding="utf-8",
-        )
+        payload = {
+            "code": code,
+            "status": info.get("status"),
+            "reason": info.get("reason"),
+            "ts": now.isoformat(),
+        }
+        state_path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
     return sent

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Separ
+GenericName=Behavioral Reference Monitor
+Comment=Real-time behavioral reference monitor & security incident tracer
+Exec=separ gui
+Icon=separ
+Terminal=false
+Categories=System;Security;Monitor;
+Keywords=security;monitor;packet;reference;barrier;audit;
+StartupNotify=true

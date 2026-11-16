@@ -1,0 +1,19 @@
+# /etc/separ/policy.yaml.example
+# Separ Behavioral Reference Policy (TUBAF Server Configuration)
+
+identity:
+  internal_mail_domains: [tu-freiberg.de]       # Exfiltration alert on outside mail forwarding
+  approved_apps: [Zoom, Moodle, Nextcloud, OPAL] # Allowlisted SSO app consents
+  min_logins: 20                                # Login count before baseline network profile is locked
+  failure_burst: 10                             # Failed login attempts for account within burst_window
+  burst_window: 5m
+
+destinations:
+  - {name: campus,  match: {cidr: [139.18.0.0/16]}}     # TUBAF campus subnets
+  - {name: vpn,     match: {cidr: [10.0.0.0/8]}}         # Campus VPN pool
+  - {name: eduroam, match: {cidr: [172.16.0.0/12]}}      # Wireless campus eduroam
+
+rules:
+  # Observe mode first for identity and mail to avoid false blocks during rollout:
+  - {id: R-ID-01,   role: identity_provider, mode: observe}
+  - {id: R-MAIL-01, role: mail_server,       mode: observe}

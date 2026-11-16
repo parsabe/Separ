@@ -153,7 +153,7 @@ def test_webhook_channel_posts_text_and_the_structured_notification():
     finally:
         t.join(5)
         server.server_close()
-    assert got[0]["text"].startswith("[Refmon CRITICAL]")
+    assert got[0]["text"].startswith("[Separ CRITICAL]")
     assert got[0]["refmon"]["category"] == "block"
 
 
@@ -414,7 +414,7 @@ def test_notify_on_change_alerts_once_per_outage_and_once_on_recovery(tmp_path: 
     assert notify_on_change(tmp_path, 1, info_down, hub, T0) is True
     assert notify_on_change(tmp_path, 1, info_down, hub, T0) is False  # cron again: quiet
     assert notify_on_change(tmp_path, 0, info_up, hub, T0) is True
-    assert [n.title for n in sink.notes] == ["Refmon daemon not running", "Recovered"]
+    assert [n.title for n in sink.notes] == ["Separ daemon not running", "Recovered"]
     assert (tmp_path / CHECK_STATE_FILE).is_file()
 
 
@@ -434,7 +434,7 @@ def test_cli_health_exit_codes_and_command_notification(tmp_path: Path, capsys):
     args = ["health", "--workdir", str(barrier.workdir), "--notify-command", cmd]
     assert cli_main(args) == 1
     assert cli_main(args) == 1
-    assert out.read_text() == "Refmon daemon not running"  # once
+    assert out.read_text() == "Separ daemon not running"  # once
     assert cli_main(["health", "--notify-on", "nonsense"]) == 2
 
 
@@ -469,7 +469,7 @@ def test_serve_starts_beats_notifies_and_reports_its_stop(tmp_path: Path):
         holder["server"].shutdown()
         t.join(10)
     titles = [n.title for n in sink.notes]
-    assert titles[0] == "Refmon started"
+    assert titles[0] == "Separ started"
     assert "Blocked" in titles
-    assert titles[-1] == "Refmon stopped"
+    assert titles[-1] == "Separ stopped"
     assert "Degraded protection" not in titles  # not an external category by default

