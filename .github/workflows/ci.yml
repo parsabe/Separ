@@ -28,7 +28,10 @@ jobs:
       - name: Robustness matrix
         run: python -m refmon.variants --golden tests/golden --out build/robustness-matrix.csv
       - name: Publishability (secrets, personal data, raw content)
-        run: python scripts/check_publishable.py
+        # new commits (not on origin/master) must be clean; published history is only reported
+        run: |
+          git rev-parse --verify --quiet origin/master^{commit} || git fetch --no-tags origin master:refs/remotes/origin/master
+          python scripts/check_publishable.py --published-ref origin/master
       - name: Reproduce every result table
         run: python scripts/reproduce.py --skip-tests && git diff --stat docs/
       - name: Upload the matrix

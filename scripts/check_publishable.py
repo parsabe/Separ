@@ -3,6 +3,12 @@ working tree (tracked files) or in the history of any ref.
 
     python scripts/check_publishable.py            # exit 1 on a content finding
     python scripts/check_publishable.py --strict   # also exit 1 on an identity in the history
+    python scripts/check_publishable.py --published-ref origin/master   # the default
+
+A content finding fails in the working tree and in every commit NOT reachable from
+`--published-ref` (anything new in a branch or a pull request). Findings in commits already on
+that ref are reported as "already published, not failing", like identities: rewriting published
+history is the owner's decision. Without that ref, every commit counts as new.
 
 What it looks for:
   * secrets: private keys, cloud and chat tokens, `password = "..."` style assignments;
@@ -158,9 +164,33 @@ def scan_tree(names: set[str]) -> list[str]:
     return findings
 
 
-def scan_history(names: set[str]) -> list[str]:
+# Commits reachable from this ref are already published: their findings are reported, not
+# failing (round 2, owner decision). Everything else (a branch, a pull request) must be clean.
+PUBLISHED_REF = "origin/master"
+
+
+def ref_exists(ref: str) -> bool:
+    done = subprocess.run(
+        ["git", "-C", str(ROOT), "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return done.returncode == 0
+
+
+def history_findings(names: set[str], published_ref: str = PUBLISHED_REF):
+    """(new, published, base_found): findings in commits not reachable from `published_ref`, and
+    in commits that are. Without that ref every commit counts as new."""
+    if not ref_exists(published_ref):
+        return scan_history(names, ["--all"]), [], False
+    new = scan_history(names, ["--all", "--not", published_ref])
+    return new, scan_history(names, [published_ref]), True
+
+
+def scan_history(names: set[str], revs: list[str] | None = None) -> list[str]:
     findings: Counter[str] = Counter()
-    log = git("log", "--all", "-p", "--no-color", "--format=commit %h")
+    log = git("log", *(revs or ["--all"]), "-p", "--no-color", "--format=commit %h")
     commit, skip = "", False
     for line in log.splitlines():
         if line.startswith("commit "):
@@ -223,17 +253,30 @@ def identities() -> Counter[str]:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--strict", action="store_true", help="a person's identity is a failure")
+    parser.add_argument(
+        "--published-ref",
+        default=PUBLISHED_REF,
+        help="commits reachable from it are already published: reported, not failing",
+    )
     args = parser.parse_args(argv)
     names = own_names()
-    tree, history = scan_tree(names), scan_history(names)
+    tree = scan_tree(names)
+    history, published, base_found = history_findings(names, args.published_ref)
     events, bad_events = scan_events()
     who = identities()
     print(f"tracked files scanned: {len(git('ls-files').splitlines())}, history: every ref")
     print(f"findings in the working tree: {len(tree)}")
     for f in tree[:20]:
         print(f"  {f}")
-    print(f"findings in the history (added lines of every commit of every ref): {len(history)}")
+    scope = f"not on {args.published_ref}" if base_found else f"every ref; no {args.published_ref}"
+    print(f"findings in new commits ({scope}; failing): {len(history)}")
     for f in history[:20]:
+        print(f"  {f}")
+    print(
+        f"findings already published on {args.published_ref} (reported, not failing): "
+        f"{len(published)}"
+    )
+    for f in published[:20]:
         print(f"  {f}")
     print(f"replay events checked as post-Observe events: {events}, rejected: {len(bad_events)}")
     for f in bad_events[:20]:

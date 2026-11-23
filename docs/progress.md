@@ -607,3 +607,16 @@ a public address, since fixed), and two in 5210f89 and 123d893 (docs/results.md 
 the checker's own report, since masked). `check_publishable.py` exits 1 on them, so the CI
 publishability step, and with it the release job, still fails; see the round 2 summary. The tag
 `v2.4` was moved to the end of Part A (it was never pushed; `make reproduce` gives the same rows).
+
+**Owner decision on the history findings (applied):**
+1. `fix/review-2026-11` (never pushed) was rewritten with `git filter-branch` from `origin/master`
+   on: the test address in e5574db became 198.51.100.1/24, and the quoted address in the generated
+   report of docs/results.md (5210f89, 123d893) became its masked form. The final tree is
+   byte-identical to the one before; `origin/master` and `master` are untouched. The tags
+   `v2.3.1-base` and `v2.4` were re-created on the rewritten commits (each differs from its old tree
+   only by those lines), and `make reproduce` gives the committed rows exactly. The old head was
+   b8872c5 (in the reflog only).
+2. `check_publishable.py` fails on findings in the working tree and in every commit not reachable
+   from `origin/master` (`--published-ref`); findings in commits already on `origin/master` (the
+   four of 558ef68) are reported as "already published, not failing", like identities. Without that
+   ref every commit counts as new. CI fetches `origin/master` if the checkout lacks it.

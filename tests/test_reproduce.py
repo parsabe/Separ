@@ -173,3 +173,53 @@ def test_dump_matrix_can_replay_with_a_policy_flag(tmp_path):
                                         "math.origin_combination=noisy_or"])  # fmt: skip
     assert policy.math.decision_rule == "expected_cost"
     assert policy.math.origin_combination == "noisy_or"
+
+
+def _repo(tmp_path, monkeypatch, *, new_line: str):
+    """A repository whose published commit (origin/master) has a finding, plus one new commit."""
+    import subprocess
+
+    def g(*args):
+        subprocess.run(["git", "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@x.test",
+                        *args], check=True, capture_output=True)  # fmt: skip
+
+    g("init", "-q", "-b", "main")
+    (tmp_path / "a.txt").write_text("connect 8.8.8.8\n")
+    g("add", "a.txt")
+    g("commit", "-q", "-m", "published")
+    g("update-ref", "refs/remotes/origin/master", "HEAD")
+    (tmp_path / "b.txt").write_text(new_line + "\n")
+    g("add", "b.txt")
+    g("commit", "-q", "-m", "new")
+    monkeypatch.setattr(cp, "ROOT", tmp_path)
+    monkeypatch.setattr(cp, "scan_tree", lambda names: [])
+    monkeypatch.setattr(cp, "scan_events", lambda: (0, []))
+    monkeypatch.setattr(cp, "identities", lambda: set())
+    return g
+
+
+def test_a_finding_in_a_new_commit_fails(tmp_path, monkeypatch, capsys):
+    _repo(tmp_path, monkeypatch, new_line="mail someone@gmail.com")
+    new, published, base = cp.history_findings(set())
+    assert base and len(new) == 1 and "e-mail" in new[0]
+    assert len(published) == 1 and "public IP 8.8.x.x" in published[0]
+    assert cp.main([]) == 1
+    out = capsys.readouterr().out
+    assert "findings in new commits (not on origin/master; failing): 1" in out
+    assert "already published on origin/master (reported, not failing): 1" in out
+
+
+def test_a_finding_only_in_published_history_does_not_fail(tmp_path, monkeypatch, capsys):
+    _repo(tmp_path, monkeypatch, new_line="plain prose")
+    new, published, _ = cp.history_findings(set())
+    assert new == [] and len(published) == 1
+    assert cp.main([]) == 0
+    assert "content: CLEAN" in capsys.readouterr().out
+
+
+def test_without_the_published_ref_every_commit_counts_as_new(tmp_path, monkeypatch):
+    g = _repo(tmp_path, monkeypatch, new_line="plain prose")
+    g("update-ref", "-d", "refs/remotes/origin/master")
+    new, published, base = cp.history_findings(set())
+    assert not base and published == [] and any("8.8.x.x" in f for f in new)
+    assert cp.main([]) == 1
