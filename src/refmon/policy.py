@@ -116,6 +116,18 @@ class ThreatListSpec(_Model):
     entries: list[str] = Field(default_factory=list)
 
 
+class Browser(_Model):
+    """Browser observations (v2.1, A68).
+
+    `clipboard_commands_only` (design decision A80, review 2026-11 item 11; **needs owner
+    approval**, so it is off and the A68 behaviour stays until then): a clipboard write is judged
+    as a pasted command only when the text looks like a command (`intent.looks_like_command`);
+    other text gets the address check of a navigation (threat lists) and never an exec, and a lone
+    URL the user selected and copied is never blocked."""
+
+    clipboard_commands_only: bool = False
+
+
 class Identity(_Model):
     """v2.2 (A74, A75): login and mail stories. Counted thresholds and the lists Observe matches."""
 
@@ -355,6 +367,7 @@ class Policy(_Model):
     user_groups: dict[str, str] = Field(default_factory=dict)
     rates: Rates = Field(default_factory=Rates)
     identity: Identity = Field(default_factory=Identity)
+    browser: Browser = Field(default_factory=Browser)
     exposure: Exposure = Field(default_factory=Exposure)
     rule_packs: list[RulePackRef] = Field(default_factory=list)
     exceptions: list[Exception_] = Field(default_factory=list)

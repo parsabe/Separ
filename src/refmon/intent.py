@@ -355,3 +355,264 @@ def _analyze_text(text: str) -> CommandIntent:
     elif _LOG_TAMPER_RE.search(text):
         intent.tamper = "logs"
     return intent
+
+
+# -- is a piece of text a command at all? (review 2026-11, item 11) ------------------------------
+# Programs and interpreters a pasted command starts with. Lower case only: prose starts with a
+# capital letter ("Make sure ...") far more often than a command does.
+_PROGRAMS = frozenset(
+    [
+        "sh",
+        "bash",
+        "zsh",
+        "dash",
+        "ksh",
+        "fish",
+        "csh",
+        "tcsh",
+        "busybox",
+        "python",
+        "python2",
+        "python3",
+        "perl",
+        "ruby",
+        "php",
+        "node",
+        "nodejs",
+        "deno",
+        "bun",
+        "lua",
+        "tclsh",
+        "osascript",
+        "curl",
+        "wget",
+        "nc",
+        "ncat",
+        "netcat",
+        "socat",
+        "telnet",
+        "ssh",
+        "scp",
+        "sftp",
+        "rsync",
+        "ftp",
+        "sudo",
+        "su",
+        "doas",
+        "pkexec",
+        "chmod",
+        "chown",
+        "chgrp",
+        "chattr",
+        "rm",
+        "rmdir",
+        "mv",
+        "cp",
+        "ln",
+        "dd",
+        "tar",
+        "zip",
+        "unzip",
+        "gzip",
+        "gunzip",
+        "bzip2",
+        "xz",
+        "7z",
+        "base64",
+        "xxd",
+        "openssl",
+        "gpg",
+        "crontab",
+        "at",
+        "systemctl",
+        "service",
+        "journalctl",
+        "launchctl",
+        "apt",
+        "apt-get",
+        "aptitude",
+        "dpkg",
+        "dnf",
+        "yum",
+        "rpm",
+        "zypper",
+        "pacman",
+        "snap",
+        "flatpak",
+        "brew",
+        "pip",
+        "pip3",
+        "pipx",
+        "npm",
+        "npx",
+        "yarn",
+        "pnpm",
+        "gem",
+        "cargo",
+        "rustup",
+        "go",
+        "git",
+        "docker",
+        "podman",
+        "kubectl",
+        "helm",
+        "terraform",
+        "tofu",
+        "ansible",
+        "make",
+        "cmake",
+        "gcc",
+        "cc",
+        "clang",
+        "echo",
+        "printf",
+        "cat",
+        "tac",
+        "tee",
+        "sed",
+        "awk",
+        "gawk",
+        "grep",
+        "egrep",
+        "find",
+        "xargs",
+        "env",
+        "export",
+        "source",
+        "eval",
+        "exec",
+        "nohup",
+        "setsid",
+        "screen",
+        "tmux",
+        "kill",
+        "pkill",
+        "killall",
+        "ps",
+        "top",
+        "id",
+        "whoami",
+        "uname",
+        "hostname",
+        "history",
+        "unset",
+        "alias",
+        "ls",
+        "ll",
+        "cd",
+        "pwd",
+        "mkdir",
+        "touch",
+        "head",
+        "tail",
+        "less",
+        "more",
+        "vi",
+        "vim",
+        "nano",
+        "iptables",
+        "nft",
+        "ufw",
+        "firewall-cmd",
+        "setenforce",
+        "mount",
+        "umount",
+        "useradd",
+        "usermod",
+        "passwd",
+        "chpasswd",
+        "ssh-keygen",
+        "ssh-add",
+        "nmap",
+        "ping",
+        "dig",
+        "nslookup",
+        "host",
+        "ip",
+        "ifconfig",
+        "powershell",
+        "pwsh",
+        "cmd",
+        "mshta",
+        "rundll32",
+        "regsvr32",
+        "certutil",
+        "bitsadmin",
+        "wscript",
+        "cscript",
+        "msiexec",
+        "reg",
+        "schtasks",
+        "wmic",
+        "net",
+        "start",
+        "explorer",
+        "open",
+        "xdg-open",
+    ]
+)
+_URL_ONLY_RE = re.compile(r"^(?:https?://|ftp://|www\.)\S+$", re.I)
+_EMAIL_RE = re.compile(r"^(?:mailto:)?[^@\s/]+@[^@\s/]+\.[A-Za-z]{2,}$", re.I)
+_UNAMBIGUOUS_SHELL_RE = re.compile(
+    r"\$\(|`[^`\n]+`|<\(|\$\{\w|"
+    r"\|\s*(?:sudo\s+)?(?:\S*/)?(?:(?:ba|z|da|k)?sh|python[23]?|perl|ruby|php|node|iex)\b"
+)
+_WINDOWS_RE = re.compile(
+    r"(?i)\b(?:powershell|pwsh|mshta|rundll32|regsvr32|certutil|bitsadmin|wscript|cscript|msiexec"
+    r"|conhost|schtasks)(?:\.exe)?\b|\bcmd(?:\.exe)?\s+/[ckr]\b|\biex\b|invoke-(?:expression|webrequest)"
+    r"|\biwr\s|downloadstring|frombase64string|\s-e(?:nc(?:odedcommand)?)?\s+[A-Za-z0-9+/=]{16,}"
+    r"|^\s*\"?(?:[a-z]:\\|\\\\[\w.-]+\\|%\w+%)"
+)
+_CHAIN_SPLIT_RE = re.compile(r"\s*(?:\|\||&&|;|\||\n)\s*")
+_TECH_TOKEN_RE = re.compile(r"^(?:-|/|~|\./|\$)|[=:/*\\]|\.\w{1,4}$")
+_URL_FIND_RE = re.compile(r"https?://[^\s'\"<>]+", re.I)
+
+
+def _starts_like_program(segment: str) -> bool:
+    toks = segment.strip().split()
+    while toks and "=" in toks[0] and not toks[0].startswith(("/", ".", "=")):
+        toks = toks[1:]  # VAR=value prefixes
+    if not toks:
+        return False
+    first = toks[0]
+    if first.startswith(("./", "/", "~/")) and len(first) > 2:
+        return True  # a path run as a program
+    return PurePosixPath(first).name in _PROGRAMS and first == first.lower()
+
+
+def _prose(text: str) -> bool:
+    """Ordinary sentences: several words, none technical, sentence punctuation."""
+    words = text.split()
+    if len(words) < 5:
+        return False
+    technical = sum(1 for w in words if _TECH_TOKEN_RE.search(w.strip(",.;:!?()\"'")))
+    return technical == 0 and bool(re.search(r"[.!?]$|,\s", text.strip()))
+
+
+def looks_like_command(text: str) -> bool:
+    """True when `text` would do something if pasted into a shell, the Run dialog or a terminal;
+    False for a lone URL, an e-mail address and ordinary prose. A pure function over the text in
+    memory (the browser path, item 11): text that is not a command is checked as an address only."""
+    t = (text or "").strip()
+    if not t:
+        return False
+    if _URL_ONLY_RE.match(t) or _EMAIL_RE.match(t):
+        return False
+    if _UNAMBIGUOUS_SHELL_RE.search(t) or _WINDOWS_RE.search(t):
+        return True
+    for line in t.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        segments = [s for s in _CHAIN_SPLIT_RE.split(line) if s.strip()]
+        if any(_starts_like_program(s) for s in segments) and not _prose(line):
+            return True
+        # a redirection into a file, after a word: `something > ~/.bashrc`
+        if re.search(r"\S\s*(?:\d?>>?|&>)\s*(?:~|/|\$|\.)\S*", line) and not _prose(line):
+            return True
+    return False
+
+
+def urls_in(text: str) -> list[str]:
+    """The addresses in a text, for the address check of text that is not a command."""
+    return [m.group(0).rstrip(".,;:!?)]}'\"") for m in _URL_FIND_RE.finditer(text or "")]

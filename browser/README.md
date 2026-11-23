@@ -12,6 +12,13 @@ the extension:
 - leaves everything else alone. The user is never locked out and can keep browsing. Only the one
   dangerous action is stopped.
 
+Every clipboard write is judged as the command it would be if pasted (design decision A68). The
+policy flag `browser.clipboard_commands_only` (design decision A80, off until the owner approves it)
+narrows that: only text that looks like a command is judged as one; a copied address gets the
+threat-list check of a navigation, prose is not judged, and a URL the user selected and copied is
+never blocked (at most a warning). With the flag off, copying a plain URL from a page is judged as a
+pasted command and can be blocked.
+
 Downloads are checked against the Refmon threat lists (a hit pauses the download and asks the user).
 Page addresses are checked only if an admin turns it on (`checkNavigation`, see below).
 
@@ -97,5 +104,6 @@ Use a harmless self-made test page served from `localhost`. Never use a real lur
 4. Stop the daemon: the toolbar badge shows `!`; copying still works normally.
 5. Put a test host on a threat list in the policy and download a file from it: the download is
    paused, *Remove it* cancels it, *Keep it* resumes it.
-6. Switch the daemon to `warn` (dashboard): case 1 shows only the banner and the clipboard is kept.
+6. Switch the daemon to `warn` (`separ policy set-mode warn --key ...`, then `separ reload`; the
+   dashboard cannot change the mode): case 1 shows only the banner and the clipboard is kept.
 7. Check `logs/` in the daemon's work directory: no command text, host or path from 1–5 appears.

@@ -49,6 +49,7 @@ from .families import NONE as NO_FAMILY
 from .families import classify, classify_judgement
 from .golden import load_golden_cases
 from .intent import analyze as analyze_command
+from .intent import looks_like_command, urls_in
 from .keys import new_device_key
 from .live_ui import DASHBOARD_HTML
 from .notify import LogChannel, Notification, NotificationHub
@@ -896,40 +897,50 @@ class LiveBarrier:
             if len(text) > BROWSER_MAX_TEXT:
                 raise ValueError("clipboard text too long")
             method = "user_selection" if data.get("user_selection") is True else "page_script"
-            out = self.guard_command(
-                text, origin="web", role="interactive_shell", execute=False,
-                attack_type="Browser clipboard", category="browser", expected=None,
-                source_domain=domain or None, input_method=method,
-            )  # fmt: skip
-            family = classify(
-                out.signals, override=out.override, sources=("web",), roles=("interactive_shell",)
-            )
-            story_id, decision, explanation = out.story_id, Decision(out.decision), out.explanation
-            log_odds = out.log_odds
+            judged_as = "command"
+            if self.policy.browser.clipboard_commands_only and not looks_like_command(text):
+                # A80 (needs owner approval; off by default): text that would do nothing in a
+                # shell is never judged as an exec. Its addresses get a navigation's check.
+                urls = [u for u in urls_in(text) if len(u) <= BROWSER_MAX_URL]
+                lone_url = len(urls) == 1 and text.strip().rstrip("/") == urls[0].rstrip("/")
+                if not urls:
+                    self._log_line("BROWSER [clipboard_write] -> not a command, no address")
+                    return {
+                        "kind": kind, "story_id": None, "decision": "allow",
+                        "mode": self.policy.mode.value, "action": "none",
+                        "family": NO_FAMILY.to_dict(), "summary": "copied text, not a command",
+                        "log_odds": None, "predicted": True, "holds": [],
+                        "judged_as": "text",
+                        "hold_timeout_s": float(self.policy.decisions.endpoint_hold_timeout),
+                    }  # fmt: skip
+                host = re.sub(r"^https?://", "", urls[0], flags=re.I).split("/")[0].split(":")[0]
+                story_id, decision, explanation, log_odds, family = self._address_check(
+                    "web", urls[0], domain or host.lower()
+                )
+                judged_as = "address"
+                if method == "user_selection" and lone_url and decision is not Decision.ALLOW:
+                    judged_as = "address_user_selection"  # never blocked: at most a warning
+            else:
+                out = self.guard_command(
+                    text, origin="web", role="interactive_shell", execute=False,
+                    attack_type="Browser clipboard", category="browser", expected=None,
+                    source_domain=domain or None, input_method=method,
+                )  # fmt: skip
+                family = classify(
+                    out.signals, override=out.override, sources=("web",),
+                    roles=("interactive_shell",),
+                )  # fmt: skip
+                story_id, decision = out.story_id, Decision(out.decision)
+                explanation, log_odds = out.explanation, out.log_odds
         else:
             url = data.get("url")
             if not isinstance(url, str) or not url or len(url) > BROWSER_MAX_URL:
                 raise ValueError(f"{kind} needs an address of at most {BROWSER_MAX_URL} characters")
             source = "download" if kind == "download" else "web"
-            with self._lock:
-                if self._browser_actor is None:
-                    user = os.environ.get("USER") or "operator"
-                    self._browser_actor = self._make_actor("proc:browser-ext", "browser", user)
-                attrs: dict[str, Any] = {"source_class": source}
-                if domain:
-                    attrs["domain"] = domain
-                ev = RawEvent(
-                    event_id=self._next_id(), ts=datetime.now(UTC), device=self.device_pseudonym,
-                    type=EventType.CONTENT_IN, actor=self._browser_actor,
-                    object=RawObjectRef(class_="download" if source == "download" else "web_page",
-                                        content=url),
-                    attrs=attrs,
-                )  # fmt: skip
-                story_id, j = self._feed_raw_events([ev])
-                family = classify_judgement(j, sources=(source,), roles=("browser",))
-                decision = j.decision
-                explanation = self._explain_story(story_id, j)
-                log_odds = float(j.log_odds if j.log_odds is not None else 0.0)
+            judged_as = "address"
+            story_id, decision, explanation, log_odds, family = self._address_check(
+                source, url, domain
+            )
         if decision is Decision.ALLOW:
             family = NO_FAMILY  # a family names an attack; an allowed story is none
         with self._lock:
@@ -944,20 +955,46 @@ class LiveBarrier:
                 for h in holds:
                     self._browser_holds.add(h["hold_id"])
         mode = self.policy.mode
+        action = browser_action(mode, decision, kind)
+        if judged_as == "address_user_selection" and action not in ("none", "warn"):
+            action = "warn"  # A80: a URL the user selected and copied is never blocked
         self._log_line(f"BROWSER [{kind}] -> {decision.value.upper()} ({family.id})")
         return {
             "kind": kind,
             "story_id": story_id,
             "decision": decision.value,
             "mode": mode.value,
-            "action": browser_action(mode, decision, kind),
+            "action": action,
             "family": family.to_dict(),
             "summary": explanation,
             "log_odds": round(log_odds, 2),
             "predicted": True,
             "holds": holds,
+            "judged_as": judged_as,
             "hold_timeout_s": float(self.policy.decisions.endpoint_hold_timeout),
         }
+
+    def _address_check(self, source: str, url: str, domain: str | None):
+        """A navigation's check: the address reaches Observe in memory only (threat lists)."""
+        with self._lock:
+            if self._browser_actor is None:
+                user = os.environ.get("USER") or "operator"
+                self._browser_actor = self._make_actor("proc:browser-ext", "browser", user)
+            attrs: dict[str, Any] = {"source_class": source}
+            if domain and _DOMAIN_RE.match(domain):
+                attrs["domain"] = domain
+            ev = RawEvent(
+                event_id=self._next_id(), ts=datetime.now(UTC), device=self.device_pseudonym,
+                type=EventType.CONTENT_IN, actor=self._browser_actor,
+                object=RawObjectRef(class_="download" if source == "download" else "web_page",
+                                    content=url),
+                attrs=attrs,
+            )  # fmt: skip
+            story_id, j = self._feed_raw_events([ev])
+            family = classify_judgement(j, sources=(source,), roles=("browser",))
+            explanation = self._explain_story(story_id, j)
+            log_odds = float(j.log_odds if j.log_odds is not None else 0.0)
+            return story_id, j.decision, explanation, log_odds, family
 
     def answer_browser_hold(self, hold_id: str, answer: str) -> dict[str, Any]:
         """The user's answer to a hold that the browser extension shows. Only holds that a browser
