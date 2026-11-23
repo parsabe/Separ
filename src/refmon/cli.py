@@ -605,6 +605,13 @@ def _run(args: argparse.Namespace) -> int:
             for key in ("pid", "mode", "heartbeat_age_s", "policy_digest"):
                 if info.get(key) is not None:
                     print(f"  {key:16} {info[key]}")
+            dec = info.get("decision") or {}
+            if dec:
+                print(
+                    f"  {'decision rule':16} {dec.get('rule')} (hold at L >= "
+                    f"{dec.get('hold_at')}, block at L >= {dec.get('block_at')} nats; "
+                    f"origin {dec.get('origin_combination')})"
+                )
             cont = info.get("containment") or {}
             if cont:
                 print(f"  {'containment':16} {cont.get('backend')}")

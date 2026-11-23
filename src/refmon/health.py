@@ -270,6 +270,7 @@ class HealthMonitor:
                 "backend": barrier.enforcer.backend,
                 "actions": barrier.enforcer.capabilities(),
             },
+            "decision": decision_summary(barrier.policy),
             "interval": interval,
             "stale_after": stale_after,
             "problems": [
@@ -399,6 +400,7 @@ def check_health(workdir: Path, now: datetime | None = None) -> tuple[int, dict[
         "pid": doc.get("pid"),
         "mode": doc.get("mode"),
         "containment": doc.get("containment"),
+        "decision": doc.get("decision"),
         "heartbeat_age_s": round(age, 1),
         "stale_after_s": stale_after,
         "policy_digest": beat.get("policy_digest"),
@@ -420,6 +422,21 @@ def check_health(workdir: Path, now: datetime | None = None) -> tuple[int, dict[
         titles = sorted({p.get("title", "?") for p in serious})
         return 2, {**info, "status": "problem", "reason": "; ".join(titles)}
     return 0, {**info, "status": "healthy", "reason": "heartbeat fresh, self-test passing"}
+
+
+def decision_summary(policy) -> dict[str, Any]:
+    """The decision rule in force and its log-odds boundaries (review 2026-11, item 16)."""
+    from .calculus import evidence as calc
+
+    m = policy.math
+    hold_at, block_at = calc.boundaries(m)
+    return {
+        "rule": m.decision_rule,
+        "origin_combination": m.origin_combination,
+        "prior_log_odds": round(calc.prior_log_odds(m.prior_attack), 3),
+        "hold_at": None if hold_at is None else round(hold_at, 3),
+        "block_at": round(block_at, 3),
+    }
 
 
 def _pid_alive(pid: int) -> bool:

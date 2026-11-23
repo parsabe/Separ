@@ -693,10 +693,11 @@ class AttackLab:
 
     def thresholds(self) -> dict[str, float]:
         m = self.barrier.policy.math
+        hold_at, block_at = calc.boundaries(m)  # of the active decision rule (A82)
         return {
             "prior": round(calc.prior_log_odds(m.prior_attack), 3),
-            "tau_block": round(calc.block_threshold(m.costs), 3),
-            "tau_hold": round(calc.hold_threshold(m.costs, m.hold_catch_rate), 3),
+            "tau_block": round(block_at, 3),
+            "tau_hold": round(hold_at if hold_at is not None else block_at, 3),
         }
 
     def print_analysis(self) -> None:

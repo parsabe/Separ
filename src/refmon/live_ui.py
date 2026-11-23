@@ -1081,7 +1081,8 @@ async function refresh() {
 
     document.getElementById('policy-kv').innerHTML = `
       <div class="kv-row"><span>Ed25519 Digest</span><span class="mono">${esc(st.policy.digest.slice(0, 20))}...</span></div>
-      <div class="kv-row"><span>Prior / Hold / Block (nats)</span><span class="mono">${st.policy.prior_lo} / ${st.policy.hold_thr} / ${st.policy.block_thr}</span></div>
+      <div class="kv-row"><span>Prior / Hold / Block (nats)</span><span class="mono">${st.policy.prior_lo} / ${st.policy.hold_thr ?? 'never'} / ${st.policy.block_thr}</span></div>
+      <div class="kv-row"><span>Decision rule</span><span class="mono">${esc(st.policy.decision_rule)} (origin: ${esc(st.policy.origin_combination)})</span></div>
       <div class="kv-row"><span>Canaries</span><span class="mono">${esc(st.policy.canaries.join(', '))}</span></div>
       <div class="kv-row"><span>Containment</span><span class="mono">${esc(st.containment.backend)}: ${esc(Object.entries(st.containment.actions).filter(([k, v]) => v === 'available').map(([k]) => k).join(', ') || 'no action available')}</span></div>
       ${st.containment.recent.slice(-5).reverse().map(a =>

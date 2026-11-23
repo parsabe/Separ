@@ -201,6 +201,10 @@ class MathParams(_Model):
     # C11.2 states and that the Contract and Effect signals already use for their threshold;
     # "max" is the strongest single label, as before.
     origin_combination: Literal["max", "noisy_or"] = "max"
+    # Design decision A82 (review 2026-11, item 16; **needs owner approval**, so "thresholds"
+    # until then): "expected_cost" picks the cheapest of ALLOW, HOLD and BLOCK with the same costs
+    # and catch rate (calculus/evidence.py); "thresholds" compares each action with ALLOW only.
+    decision_rule: Literal["thresholds", "expected_cost"] = "thresholds"
     # Attenuation a_e in (0, 1] of a label along an edge of a given kind (C11.2): "write" for a
     # file written by a labeled process, "persist" for a persistence item. 1.0 when not listed.
     attenuation: dict[str, float] = Field(default_factory=dict)

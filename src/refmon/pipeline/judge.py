@@ -192,10 +192,9 @@ def _apply_calculus(j: Judgement, policy: Policy, labeled: bool) -> None:
     j.contributions = calc.contributions(evidence, m.weights)
     j.prior_log_odds = calc.prior_log_odds(m.prior_attack)
     j.log_odds = calc.log_odds(m.prior_attack, j.contributions)
-    outcome = calc.decide(
+    outcome = calc.decide_by_policy(  # thresholds, or the expected-cost rule (A82)
         j.log_odds,
-        calc.block_threshold(m.costs),
-        calc.hold_threshold(m.costs, m.hold_catch_rate),
+        m,
         has_contract_signal=j.failed["contract"],
         override=_FORCED[j.override] if j.override else None,
     )

@@ -1918,8 +1918,9 @@ class LiveBarrier:
         with self._lock:
             m = self.policy.math
             prior_lo = round(calc.prior_log_odds(m.prior_attack), 2)
-            hold_thr = round(calc.hold_threshold(m.costs, m.hold_catch_rate), 2)
-            block_thr = round(calc.block_threshold(m.costs), 2)
+            hold_at, block_at = calc.boundaries(m)  # of the active decision rule (A82)
+            hold_thr = round(hold_at, 2) if hold_at is not None else None
+            block_thr = round(block_at, 2)
 
             evaluated = 0
             eval_passed = 0
@@ -2033,6 +2034,8 @@ class LiveBarrier:
                     "prior_lo": prior_lo,
                     "hold_thr": hold_thr,
                     "block_thr": block_thr,
+                    "decision_rule": m.decision_rule,
+                    "origin_combination": m.origin_combination,
                     "protected_assets": [a.name for a in self.policy.protected_assets],
                     "canaries": [c.name for c in self.policy.canaries],
                     "contracts": contracts_summary,

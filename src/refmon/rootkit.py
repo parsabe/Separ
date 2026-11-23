@@ -904,8 +904,8 @@ def evaluate_rootkit_scan(
     findings, caps, notes, (own_n, mod_n, iface_n) = scanner.scan()
 
     prior_lo = calc.prior_log_odds(pol.math.prior_attack)
-    hold_thr = calc.hold_threshold(pol.math.costs, pol.math.hold_catch_rate)
-    block_thr = calc.block_threshold(pol.math.costs)
+    hold_at, block_thr = calc.boundaries(pol.math)  # the policy's decision rule (A82 or not)
+    hold_thr = hold_at if hold_at is not None else block_thr
 
     # Group by scanner family: max within each family (correlated), sum across orthogonal families.
     by_scanner: dict[str, float] = {}
@@ -919,10 +919,9 @@ def evaluate_rootkit_scan(
             self_tamper = True
 
     total_lo = prior_lo + sum(by_scanner.values())
-    outcome = calc.decide(
+    outcome = calc.decide_by_policy(
         total_lo,
-        block_thr,
-        hold_thr,
+        pol.math,
         has_contract_signal=has_contract,
         override=Decision.BLOCK if self_tamper else None,
     )
