@@ -521,3 +521,35 @@ attached, it is every ingested event, so it shows other accounts' names and the 
   program is stopped.
 - Server hold (`decisions.server_hold_wait`, `server_hold_timeout: keep_quarantined`): waits up to
   3600 s for an admin; without an answer the file stays quarantined.
+
+## 7. Behaviour the guides rely on (checked in the code)
+
+- **Log growth.** The daemon appends to `logs/*.jsonl` and `logs/barrier.log` and does not rotate
+  them in v2.4.
+- **Notification titles** (`logs/notifications.jsonl`, webhook, command): in observe or warn mode a
+  story that would be blocked or held is titled `Would block (not enforced)` or
+  `Would hold (not enforced)`; in block mode `Blocked` or `Held: an answer is needed`.
+- **`separ guard` in block mode**: a command decided BLOCK or HOLD does not run and the command exits
+  with status 1; in observe or warn mode it runs and the decision is only logged. Answering a hold of
+  a guarded command in the dashboard does not run the command afterwards.
+- **Browser extension holds**: the clipboard is held and the user is asked *Keep it* / *Remove it*;
+  no answer within the endpoint hold timeout (60 s) removes it.
+- **Packages and `/etc/separ`**: no file is marked as a configuration file (conffile). Removing the
+  package removes the files it installed there (`ingest.yaml`, the examples, `mappings/`) and the
+  venv; the `policy.yaml` and `admin.pub` that `separ setup` wrote, and `/var/lib/separ`, stay.
+- **Key rotation**: there is no revocation list. Changing the admin key means replacing
+  `/etc/separ/admin.pub` and `policy.yaml` on every machine and `separ reload`.
+- **Identity sensors** (sshd, Shibboleth, Keycloak, Postfix/Dovecot, M365): their rules start in
+  observe mode for the roles `identity_provider` and `mail_server` (design decision A77); a story only
+  they produced is capped at HOLD.
+
+## 8. System commands the guides use
+
+Standard tools of the target distributions, not part of Separ; the guides use only these forms:
+`sha256sum --ignore-missing -c SHA256SUMS`, `curl -fLO <url>`, `sudo apt install ./<file>.deb`,
+`sudo apt remove separ`, `sudo dnf install python3.12 ./<file>.rpm`, `sudo dnf remove separ`,
+`sudo install -o root -g root -m 0644 <file> /etc/separ/<file>`, `sudo systemctl enable --now
+separ.service`, `sudo systemctl status separ.service`, `sudo systemctl reload separ`,
+`sudo systemctl restart separ`, `sudo systemctl edit separ` (a drop-in with `[Service]` and
+`UMask=0077`), `sudo systemctl --global enable separ-user.service`, `crontab -e`,
+`grep -c '<text>' <file>`, `scp <file> <host>:` and `uname -m`.
