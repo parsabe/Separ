@@ -65,7 +65,7 @@ def main(argv=None) -> int:
     m = first.barrier.policy.math
     meta = {
         "refmon_version": refmon.__version__,
-        "git_commit": al._git_commit(),
+        "git_commit": _commit(),
         "policy_mode": first.mode,
         **first.thresholds(),
         "decision_rule": m.decision_rule,
@@ -84,6 +84,19 @@ def main(argv=None) -> int:
     Path(args.out).write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
     print(f"{len(results)} results written to {args.out}")
     return 0
+
+
+def _commit() -> str:
+    """HEAD, marked when tracked files differ from it (untracked files, such as this run's own
+    output, do not count)."""
+    import subprocess
+
+    def git(*a: str) -> str:
+        return subprocess.run(["git", "-C", str(ROOT), *a], capture_output=True, text=True,
+                              check=True).stdout.strip()  # fmt: skip
+
+    dirty = git("status", "--porcelain", "--untracked-files=no")
+    return git("rev-parse", "--short", "HEAD") + ("+uncommitted-changes" if dirty else "")
 
 
 def _full(row: dict) -> dict:
