@@ -13,6 +13,12 @@ Configuration files live in `/etc/separ/`:
   the daemon refuses a policy or key that group/others can write.
 - **`mappings/`**: Ready-to-use YAML mapping definitions for external sensors.
 
+Per-user daemons (`separ-user.service`, `separ gui`) read this folder too whenever it holds a
+policy or public key, and then refuse them unless they are root-owned and not writable by group
+or others. Only on a machine without `/etc/separ/policy.yaml` does a user's daemon fall back to the
+user's own `~/.config/separ/`, which `separ health` reports as degraded protection (the user could
+replace that policy with an older signed one).
+
 The **private** signing key is never on a server: `separ setup` creates it in the admin's
 `~/.separ-admin/admin.key` (or `--key PATH`). Keep it on the admin's machine and copy only
 `policy.yaml` and `admin.pub` to the servers. Changes are made there and then reloaded:

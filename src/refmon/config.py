@@ -2,7 +2,8 @@
 
 One source of truth for every path, so that `separ setup` writes the policy the daemon reads:
 
-- signed policy and public key: /etc/separ/ (system daemon, root), else $XDG_CONFIG_HOME/separ/
+- signed policy and public key: /etc/separ/ for the system daemon, and for a per-user daemon too
+  whenever /etc/separ holds one (it must then be root-owned); else $XDG_CONFIG_HOME/separ/
 - work directory (state, logs): /var/lib/separ (root), else $XDG_STATE_HOME/separ/
 - admin signing key: never on an endpoint; the admin's own ~/.separ-admin/admin.key
 
@@ -53,9 +54,19 @@ def user_state_dir() -> Path:
     return _xdg("XDG_STATE_HOME", ".local/state")
 
 
+def system_config_present() -> bool:
+    """IT installed a system policy (/etc/separ/policy.yaml or admin.pub exists)."""
+    return any((SYSTEM_CONFIG_DIR / n).exists() for n in (POLICY_NAME, PUBLIC_KEY_NAME))
+
+
 def default_config_dir() -> Path:
-    """/etc/separ for the system daemon (root), the user's XDG config directory otherwise."""
-    return SYSTEM_CONFIG_DIR if is_root() else user_config_dir()
+    """Where the daemon reads its policy (owner decision R2, round 2): /etc/separ for the system
+    daemon, and for a per-user daemon too whenever /etc/separ holds a policy or public key (then
+    they must be root-owned: check_trusted). Only without one does a per-user daemon fall back to
+    its own $XDG_CONFIG_HOME/separ, reported as degraded protection."""
+    if is_root() or system_config_present():
+        return SYSTEM_CONFIG_DIR
+    return user_config_dir()
 
 
 def default_workdir() -> Path:
@@ -150,14 +161,19 @@ def _under(path: Path, root: Path) -> bool:
     return True
 
 
+def _lstat(path: Path) -> os.stat_result:
+    return path.lstat()
+
+
 def check_trusted(path: Path, *, system: bool | None = None, euid: int | None = None) -> list[str]:
     """Refuse a policy or public key (or its folder) that someone other than the admin can change.
 
     Always refused: a symlink, a non-regular file, anything writable by group or others, and for a
-    root daemon anything not owned by root. A non-root daemon refuses a file its own user owns when
-    it sits in the system configuration (/etc/separ): that user could roll the policy back. In the
-    per-user configuration the user is by definition the owner; that is returned as a warning
-    (`owner_writable`), reported as degraded protection, not refused (docs/review-list.md R2).
+    root daemon anything not owned by root. In the system configuration (/etc/separ) every daemon,
+    root or per-user, requires root-owned files and folder: a file its own user (or any other
+    non-root user) owns could be rolled back by that user. In the per-user fallback configuration
+    the user is by definition the owner; that is returned as a warning (`owner_writable`),
+    reported as degraded protection, not refused (docs/review-list.md R2, owner decision).
     """
     path = Path(path)
     euid = (os.geteuid() if hasattr(os, "geteuid") else 1000) if euid is None else euid
@@ -165,23 +181,21 @@ def check_trusted(path: Path, *, system: bool | None = None, euid: int | None = 
         system = _under(path, SYSTEM_CONFIG_DIR)
     warnings: list[str] = []
     for item, kind in ((path, "file"), (path.parent, "directory")):
-        st = item.lstat()
+        st = _lstat(item)
         if stat.S_ISLNK(st.st_mode):
             raise UntrustedFile(f"refusing {item}: a symlink")
         if kind == "file" and not stat.S_ISREG(st.st_mode):
             raise UntrustedFile(f"refusing {item}: not a regular file")
         if st.st_mode & 0o022:
             raise UntrustedFile(f"refusing {kind} {item}: writable by group or others")
-        if euid == 0:
-            if st.st_uid != 0:
-                raise UntrustedFile(f"refusing {kind} {item}: owned by uid {st.st_uid}, not root")
-        elif st.st_uid == euid:
-            if system:
+        if (euid == 0 or system) and st.st_uid != 0:
+            if st.st_uid == euid:
                 raise UntrustedFile(
                     f"refusing {item}: writable by the daemon's own user (it must be root-owned)"
                 )
-            if "owner_writable" not in warnings:
-                warnings.append("owner_writable")
+            raise UntrustedFile(f"refusing {kind} {item}: owned by uid {st.st_uid}, not root")
+        if euid != 0 and st.st_uid == euid and "owner_writable" not in warnings:
+            warnings.append("owner_writable")
     return warnings
 
 

@@ -18,10 +18,11 @@ from .admin import ensure_admin_key, write_public_key, write_signed_policy
 from .config import (
     POLICY_NAME,
     PUBLIC_KEY_NAME,
+    SYSTEM_CONFIG_DIR,
     default_admin_key,
-    default_config_dir,
     is_root,
     secure_dir,
+    user_config_dir,
 )
 from .policy import default_policy_dict
 
@@ -44,7 +45,10 @@ def run_setup(args: argparse.Namespace) -> int:
     mode_arg = getattr(args, "mode", None) or "observe"
     key_path = Path(getattr(args, "key", None) or default_admin_key())
 
-    target_dir = Path(config_arg) if config_arg else default_config_dir()
+    # root writes the system policy; a user writes their own (never /etc/separ, even when it exists)
+    target_dir = (
+        Path(config_arg) if config_arg else (SYSTEM_CONFIG_DIR if is_root() else user_config_dir())
+    )
     # the daemon must be able to read the folder; nobody else may write it
     secure_dir(target_dir, 0o755)
 

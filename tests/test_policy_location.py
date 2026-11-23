@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 from tests.livehelp import make_barrier, provision
 
-from refmon import admin, signing
+from refmon import admin, config, signing
 from refmon.cli import main as cli_main
 from refmon.config import PolicyMissing, UntrustedFile, check_trusted, resolve_policy_paths
 from refmon.live import LiveBarrier, make_http_server
@@ -82,7 +82,8 @@ def test_policy_paths_default_to_the_config_folder(monkeypatch, tmp_path: Path) 
     assert pol == tmp_path / "xdg" / "separ" / "policy.yaml"
     assert pub == tmp_path / "xdg" / "separ" / "admin.pub"
     monkeypatch.setattr(os, "geteuid", lambda: 0)
-    assert resolve_policy_paths() == (Path("/etc/separ/policy.yaml"), Path("/etc/separ/admin.pub"))
+    system = config.SYSTEM_CONFIG_DIR  # /etc/separ, a temp path in tests (conftest.py)
+    assert resolve_policy_paths() == (system / "policy.yaml", system / "admin.pub")
     assert resolve_policy_paths("/x/p.yaml", None)[1] == Path("/x/admin.pub")
 
 

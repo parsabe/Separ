@@ -206,7 +206,7 @@ This creates:
 \end{itemize}
 
 \subsection{Setup for Staff / Developer Laptops}
-Run as your normal user (no \texttt{sudo} needed); the policy goes to \texttt{\textasciitilde/.config/separ/}, which the per-user daemon reads:
+Run as your normal user (no \texttt{sudo} needed); the policy goes to \texttt{\textasciitilde/.config/separ/}. A per-user daemon reads it only when \texttt{/etc/separ/} has no policy: if IT installed one there, every user's daemon uses it (and refuses it unless it is root-owned), and \texttt{separ health} reports the user's own policy as degraded protection, because the user could replace it:
 \begin{lstlisting}[language=bash]
 separ setup --laptop --mode block
 \end{lstlisting}

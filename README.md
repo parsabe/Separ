@@ -152,7 +152,8 @@ sudo ./install.sh
 sudo separ setup --server --mode observe --campus-cidr <campus/16> \
      [--vpn-cidr <vpn/16>] [--wlan-cidr <wlan/16>] [--mail-domain tu-freiberg.de]
                                            # system daemon: /etc/separ/policy.yaml + admin.pub
-separ setup --laptop --mode block          # per-user daemon: ~/.config/separ/
+separ setup --laptop --mode block          # per-user daemon: ~/.config/separ/ (used only when
+                                           # /etc/separ has no policy; reported as degraded)
 # The private key (default ~/.separ-admin/admin.key, --key PATH) belongs on the admin's
 # machine, not on the endpoints: the daemon only ever gets the public key.
 
