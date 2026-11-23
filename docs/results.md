@@ -15,8 +15,8 @@ Earlier evaluations on retired seeds are listed at the end.
 <!-- BEGIN GENERATED: versions -->
 | tag | commit | |
 |---|---|---|
-| v2.2 | 1adae36 | A73 to A77: sensor ingest kit, hacked accounts (approved weights, login cap) |
-| v2.3 | dc284bd | A78, A79: containers, Kubernetes and IaC vocabulary and templates |
+| v2.3.1-base | cbf07d0 | v2.3 plus the review 2026-11 Part 1 fixes (no evaluated decision changed) |
+| v2.4 | f1f313f | review 2026-11 Part 2; A80 to A82 behind policy flags, off until approved |
 <!-- END GENERATED: versions -->
 
 `v1.0` is frozen. Each later version changes structural rules in response to the findings of the
@@ -46,43 +46,43 @@ labelled, before any replay, its mutation as adding a Contract violation or an E
 in [variant-seeds.md](variant-seeds.md)); the **neutral** variants are the false-alarm test.
 
 <!-- BEGIN GENERATED: matrix -->
-Seed 837115701; sha256 of the generated variants file `bb794a51f350f32ee6bcccd783ac458db69c3dbc3c6ad97f87fd897ebc700503`.
+Seed 335384967; sha256 of the generated variants file `d95dfc0c110210bbabde82f2e80cbef2cdb0a359d6e04895815266f7c710a98e`.
 
-933 variants, identical event streams in every run (hash checked).
+1035 variants, identical event streams in every run (hash checked).
 
 ## Malicious variants
 
 **All**
 
-| | v2.2 | v2.3 |
+| | v2.3.1-base | v2.4 |
 |---|---:|---:|
-| variants | 670 | 670 |
-| block | 516 | 516 |
-| effective hold | 138 | 138 |
-| uncontained (allow + hold pauses nothing) | 16 | 16 |
-| - allow | 9 | 9 |
+| variants | 721 | 721 |
+| block | 552 | 552 |
+| effective hold | 157 | 157 |
+| uncontained (allow + hold pauses nothing) | 12 | 12 |
+| - allow | 5 | 5 |
 | - hold pauses nothing | 7 | 7 |
 | blocks that act on nothing | 2 | 2 |
 
-**Variants the seed decides (339): the independent test**
+**Variants the seed decides (370): the independent test**
 
-| | v2.2 | v2.3 |
+| | v2.3.1-base | v2.4 |
 |---|---:|---:|
-| variants | 339 | 339 |
-| block | 238 | 238 |
-| effective hold | 87 | 87 |
-| uncontained (allow + hold pauses nothing) | 14 | 14 |
-| - allow | 9 | 9 |
+| variants | 370 | 370 |
+| block | 258 | 258 |
+| effective hold | 102 | 102 |
+| uncontained (allow + hold pauses nothing) | 10 | 10 |
+| - allow | 5 | 5 |
 | - hold pauses nothing | 5 | 5 |
 | blocks that act on nothing | 0 | 0 |
 
-**Variants that are the same for every seed (331): a regression check, not fresh evidence**
+**Variants that are the same for every seed (351): a regression check, not fresh evidence**
 
-| | v2.2 | v2.3 |
+| | v2.3.1-base | v2.4 |
 |---|---:|---:|
-| variants | 331 | 331 |
-| block | 278 | 278 |
-| effective hold | 51 | 51 |
+| variants | 351 | 351 |
+| block | 294 | 294 |
+| effective hold | 55 | 55 |
 | uncontained (allow + hold pauses nothing) | 2 | 2 |
 | - allow | 0 | 0 |
 | - hold pauses nothing | 2 | 2 |
@@ -90,68 +90,68 @@ Seed 837115701; sha256 of the generated variants file `bb794a51f350f32ee6bcccd78
 
 ## Benign variants
 
-**Benign, neutral (161)**
+**Benign, neutral (189)**
 
-| | v2.2 | v2.3 |
+| | v2.3.1-base | v2.4 |
 |---|---:|---:|
-| variants | 161 | 161 |
-| allow | 141 | 141 |
-| hold | 20 | 20 |
+| variants | 189 | 189 |
+| allow | 158 | 158 |
+| hold | 31 | 31 |
 | block | 0 | 0 |
 | block rate (the false block rate for neutral variants) | 0.0% | 0.0% |
-| worse than the unmodified file | 0 | 0 |
+| worse than the unmodified file | 9 | 9 |
 
-**Benign, adds a contract violation (64)**
+**Benign, adds a contract violation (72)**
 
-| | v2.2 | v2.3 |
+| | v2.3.1-base | v2.4 |
 |---|---:|---:|
-| variants | 64 | 64 |
-| allow | 15 | 15 |
-| hold | 6 | 6 |
+| variants | 72 | 72 |
+| allow | 21 | 21 |
+| hold | 8 | 8 |
 | block | 43 | 43 |
-| block rate (the false block rate for neutral variants) | 67.2% | 67.2% |
+| block rate (the false block rate for neutral variants) | 59.7% | 59.7% |
 | worse than the unmodified file | 0 | 0 |
 
-**Benign, adds an effect (38)**
+**Benign, adds an effect (53)**
 
-| | v2.2 | v2.3 |
+| | v2.3.1-base | v2.4 |
 |---|---:|---:|
-| variants | 38 | 38 |
+| variants | 53 | 53 |
 | allow | 0 | 0 |
-| hold | 35 | 35 |
-| block | 3 | 3 |
-| block rate (the false block rate for neutral variants) | 7.9% | 7.9% |
+| hold | 49 | 49 |
+| block | 4 | 4 |
+| block rate (the false block rate for neutral variants) | 7.5% | 7.5% |
 | worse than the unmodified file | 0 | 0 |
 
 **All benign variants**
 
-| | v2.2 | v2.3 |
+| | v2.3.1-base | v2.4 |
 |---|---:|---:|
-| variants | 263 | 263 |
-| allow | 156 | 156 |
-| hold | 61 | 61 |
-| block | 46 | 46 |
-| block rate (the false block rate for neutral variants) | 17.5% | 17.5% |
-| worse than the unmodified file | 0 | 0 |
+| variants | 314 | 314 |
+| allow | 179 | 179 |
+| hold | 88 | 88 |
+| block | 47 | 47 |
+| block rate (the false block rate for neutral variants) | 15.0% | 15.0% |
+| worse than the unmodified file | 9 | 9 |
 <!-- END GENERATED: matrix -->
 
 ### Rates with intervals, and version comparisons
 
 <!-- BEGIN GENERATED: stats -->
-| rate (Wilson 95 % interval) | v2.2 | v2.3 |
+| rate (Wilson 95 % interval) | v2.3.1-base | v2.4 |
 |---|---:|---:|
-| malicious variants caught (block or hold) | 661/670 = 98.7% [97.5%, 99.3%] | 661/670 = 98.7% [97.5%, 99.3%] |
-| malicious variants blocked | 516/670 = 77.0% [73.7%, 80.0%] | 516/670 = 77.0% [73.7%, 80.0%] |
-| malicious variants contained (block or effective hold) | 654/670 = 97.6% [96.2%, 98.5%] | 654/670 = 97.6% [96.2%, 98.5%] |
-| neutral benign variants blocked (false block rate) | 0/161 = 0.0% [0.0%, 2.3%] | 0/161 = 0.0% [0.0%, 2.3%] |
+| malicious variants caught (block or hold) | 716/721 = 99.3% [98.4%, 99.7%] | 716/721 = 99.3% [98.4%, 99.7%] |
+| malicious variants blocked | 552/721 = 76.6% [73.3%, 79.5%] | 552/721 = 76.6% [73.3%, 79.5%] |
+| malicious variants contained (block or effective hold) | 709/721 = 98.3% [97.1%, 99.0%] | 709/721 = 98.3% [97.1%, 99.0%] |
+| neutral benign variants blocked (false block rate) | 0/189 = 0.0% [0.0%, 2.0%] | 0/189 = 0.0% [0.0%, 2.0%] |
 
 McNemar's exact test on the same malicious variants (only first / only second = variants that only the first / only the second version gets right):
 
 | comparison | metric | only first | only second | p |
 |---|---|---:|---:|---:|
-| v2.2 vs v2.3 | caught | 0 | 0 | 1 |
-| v2.2 vs v2.3 | contained | 0 | 0 | 1 |
-| v2.2 vs v2.3 | blocked | 0 | 0 | 1 |
+| v2.3.1-base vs v2.4 | caught | 0 | 0 | 1 |
+| v2.3.1-base vs v2.4 | contained | 0 | 0 | 1 |
+| v2.3.1-base vs v2.4 | blocked | 0 | 0 | 1 |
 <!-- END GENERATED: stats -->
 
 The Wilson intervals treat variants as independent. They are not: the variants of one scenario are
@@ -166,7 +166,7 @@ catalog scenarios that are known gaps by design, and their expected decision is 
 partial detection the specification names.
 
 <!-- BEGIN GENERATED: golden -->
-| scenario | kind | expected | v2.2 | v2.3 |
+| scenario | kind | expected | v2.3.1-base | v2.4 |
 |---|---|---|---|---|
 | S01 | malicious | block | block | block |
 | S02 | malicious | block | block | block |
@@ -223,16 +223,16 @@ partial detection the specification names.
 | S59 | malicious | block | block | block |
 | S60 | benign | allow | allow | allow |
 | S61 | benign | allow | allow | allow |
-| S62 | malicious | block | — | block |
-| S63 | malicious | block | — | block |
-| S64 | malicious | block | — | block |
-| S65 | benign | allow | — | allow |
-| S66 | benign | allow | — | allow |
+| S62 | malicious | block | block | block |
+| S63 | malicious | block | block | block |
+| S64 | malicious | block | block | block |
+| S65 | benign | allow | allow | allow |
+| S66 | benign | allow | allow | allow |
 
-| | v2.2 | v2.3 |
+| | v2.3.1-base | v2.4 |
 |---|---:|---:|
-| scenarios reaching the expected `decision` (of 60) | 55 | 60 |
-| same `decision` as v2.2 (of the 55 scenarios every version has) | 55 | 55 |
+| scenarios reaching the expected `decision` (of 60) | 60 | 60 |
+| same `decision` as v2.3.1-base (of the 60 scenarios every version has) | 60 | 60 |
 <!-- END GENERATED: golden -->
 
 ## 4. Coverage map
@@ -263,7 +263,7 @@ Every attack family keeps at least one malicious and one benign scenario (CLAUDE
 | Containers, Kubernetes and infrastructure as code (container escape, RBAC abuse, token theft, malicious IaC modules) | S62✓, S63✓, S64✓ | S65✓, S66✓ |
 | Unpatched, workaround-only and end-of-life software | S16✓, S28✓, S29✓ | - |
 
-✓ the scenario reaches its expected `decision` in v2.3 (S16, S28 and S29 are policy-over-time tests in tests/test_phase5_exposure.py).
+✓ the scenario reaches its expected `decision` in v2.4 (S16, S28 and S29 are policy-over-time tests in tests/test_phase5_exposure.py).
 <!-- END GENERATED: coverage -->
 
 ## 5. Privacy audit
@@ -294,7 +294,7 @@ Privacy audit
 ## 6. Tests
 
 <!-- BEGIN GENERATED: tests -->
-`2355 passed, 4 skipped, 1 xfailed`
+`1 failed, 2548 passed, 5 skipped, 1 xfailed`
 <!-- END GENERATED: tests -->
 
 The suite includes property tests (labels never lost along process chains, no raw content in any
@@ -404,15 +404,57 @@ regenerated; `make publishable` runs it alone). The content is clean. These are 
 
 <!-- BEGIN GENERATED: publishable -->
 ```
-tracked files scanned: 432, history: every ref
-findings in the working tree: 0
-findings in the history (added lines of every commit of every ref): 0
+tracked files scanned: 472, history: every ref
+findings in the working tree: 39
+  README.md:3: url img.shields.io/badge/Version-2.4.0-0f766e
+  README.md:4: url img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoC
+  README.md:5: url img.shields.io/badge/License-GPL--3.0-blue.svg
+  README.md:6: url img.shields.io/badge/Tests-2%2C548%20Passing-16a34a?logo=pyt
+  README.md:7: url img.shields.io/badge/Privacy-Zero--Raw%20HMAC%20Boundary-dc2
+  README.md:8: url img.shields.io/badge/Policy-Ed25519%20Signed-0550AE
+  README.md:9: url img.shields.io/badge/Packages-.deb%20%7C%20.rpm-7c3aed?logo=
+  README.md:188: url docs.pydantic.dev/
+  README.md:188: url pyyaml.org/
+  README.md:188: url cryptography.io/
+  README.md:189: url tetragon.io/
+  README.md:189: url falco.org/
+  README.md:189: url systemd.io/
+  README.md:189: url www.shibboleth.net/
+  README.md:189: url kubernetes.io/
+  README.md:189: url www.postfix.org/
+  README.md:189: url www.keycloak.org/
+  README.md:190: url matplotlib.org/
+  README.md:190: url www.latex-project.org/
+  documentation/main.tex:369: url doi.org/10.1214/aoms/1177731118
+findings in the history (added lines of every commit of every ref): 41
+  558ef68: e-mail address p***@s***.de
+  558ef68: e-mail address s***@t***.de
+  558ef68: home path
+  558ef68: public IP 139.18.x.x
+  558ef68: url attack.mitre.org/techniques/T1204/004/
+  558ef68: url cryptography.io/
+  558ef68: url docs.pydantic.dev/
+  558ef68: url doi.org/10.1007/11681878_14
+  558ef68: url doi.org/10.1007/3-540-68697-5_1
+  558ef68: url doi.org/10.1016/C2009-0-27609-4
+  558ef68: url doi.org/10.1093/biomet/41.1-2.100
+  558ef68: url doi.org/10.1109/DSN.2005.39
+  558ef68: url doi.org/10.1109/SP.2019.00026
+  558ef68: url doi.org/10.1145/3605764.3623985
+  558ef68: url doi.org/10.1214/aoms/1177731118
+  558ef68: url doi.org/10.14722/ndss.2020.24046
+  558ef68: url falco.org/
+  558ef68: url falco.org/docs/
+  558ef68: url gitlab.com/apparmor/apparmor
+  558ef68: url img.shields.io/badge/License-GPL--3.0-blue.svg
 replay events checked as post-Observe events: 528, rejected: 0
-identities recorded by git as author or committer: 3 (masked here so that this output can be published)
+identities recorded by git as author or committer: 5 (masked here so that this output can be published)
   G***b <n***y@g***b.com>
   P***A <1***e@u***b.com>
+  P***t <p***t@s***g.de>
   P***t <p***u@m***1.cluster>
-content: CLEAN
+  p***e <p***9@g***l.com>
+content: FINDINGS
 identities: present in the history, the owner decides before publishing
 ```
 <!-- END GENERATED: publishable -->

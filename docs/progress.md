@@ -474,3 +474,99 @@ On the owner's request:
   the hold threshold on seed 171139148, gap 508 s) covers no variant of seed 837115701: the gaps
   this seed draws keep S27 held. Following `variants.stale`, the entry goes. The limit itself
   stays: a slow enough leak inside the story window can still fall just under the hold threshold.
+
+## v2.4: code review 2026-11 (2026-11-23, branch `fix/review-2026-11`, tags `v2.3.1-base`, `v2.4`)
+
+The instructions are in SEPAR_FIXES.md (not committed). One commit per item, each with tests;
+`v2.3.1-base` tags the Part 1 code, `v2.4` the finished code. Nothing was pushed.
+
+**Part 1: security and correctness (no evaluated decision changes)**
+1. **Policy location** (with 2, one commit, review-list R1). `refmon.config`: the system daemon
+   reads `/etc/separ/policy.yaml` and `admin.pub`, a per-user daemon `$XDG_CONFIG_HOME/separ/`;
+   `serve`/`gui --policy --public-key`. Without a signed policy the daemon refuses to start
+   ("run `separ setup`"); it never generates one and never defaults to block. `separ setup`
+   writes exactly there.
+2. **No signing in the daemon.** `refmon.admin` does every signature with the private key from
+   `--key` (default `~/.separ-admin/admin.key`; refused inside a daemon work directory or when
+   readable by others). New `separ policy show|sign|set-mode` and `separ reload` (authenticated
+   `/api/reload` or SIGHUP; both only re-read and verify). `/api/mode` is gone; the GUI shows the
+   mode read-only. The daemon refuses a policy, key or folder that is a symlink or writable by
+   group/others; a root daemon refuses anything not root-owned; a non-root daemon refuses its own
+   files in /etc/separ and reports them as degraded protection in the per-user configuration
+   (review-list R2, owner decision). Decoy approvals and the attack lab use a separate admin key.
+3. **Real containment.** `LinuxEnforcer` (SIGSTOP/SIGCONT, cgroup-v2 freezer or tree SIGSTOP then
+   SIGKILL, nftables `socket cgroupv2` rule in table `inet separ` with undo, root-owned 0400
+   quarantine; never PID 1, the daemon or its ancestors, another user's process unless root).
+   Real pids come only from sensors (`RawEvent.pid`, dropped by Observe; Tetragon and Falco
+   mappings); without one the action is `unavailable`. `serve --enforce` (root) uses it, else
+   containment is simulated and health says so. Every action and result is logged and shown.
+4. **Safe secrets.** Every secret is created O_EXCL|O_NOFOLLOW at 0600; the per-user work directory
+   is `$XDG_STATE_HOME/separ`; old /tmp keys are copied once; every created directory goes through
+   `secure_dir`. The self-tamper pattern names the new locations.
+5. **Symlinks.** The watcher walks with lstat; a symlink in the web root is its own finding, never
+   followed or chmod-ed; quarantine renames the entry and sets 0400 through O_NOFOLLOW.
+6. **Packaging.** Python 3.12 everywhere; the .deb/.rpm ship pinned wheels for CPython
+   3.12/3.13/3.14 and build `/opt/separ/venv` offline with `--require-hashes` (no distribution
+   pydantic); per-architecture packages; `install.sh` from a wheel directory; a CI job installs
+   them in ubuntu:24.04, debian:13 and rockylinux:9. Built packages are no longer committed.
+7. **HTTP API.** Content-Length required, ≤ 64 KiB (413 above), non-object JSON is a 400; origin
+   and role only from the CLI client of a daemon in lab mode (`serve --lab`).
+8. **No constant default keys** in Pipeline, RootkitScanner, evaluate_rootkit_scan; replay tooling
+   passes the named `LAB_REPLAY_KEY` (same bytes; decisions shown not to depend on the key).
+9. **No hard-coded campus networks or device ids.** `setup --server` requires `--campus-cidr`;
+   `--vpn-cidr`, `--wlan-cidr`, `--mail-domain`; the output lists what was configured. The daemon
+   names the host by its pseudonym. Setup no longer drops the reference destination classes, and
+   the admin's networks are internal classes placed first (before, the generated policy had no
+   `package_index` and no internal class, so `lateral` could never fire there).
+
+**Part 2: false positives and detection gaps** (seed 335384967 recorded first)
+10. `separ guard` origin defaults to `none` (`sudo apt update`: BLOCK −2.61 → HOLD −4.41).
+11. `intent.looks_like_command` (53-example table); **A80** (browser clipboard judged only when it is
+    a command; URL → address check; user-selected URL never blocked) behind
+    `browser.clipboard_commands_only`, **off until approved**.
+12. Attack lab: 10 benign web-origin and 8 typed network controls, recorded not scored:
+    allowed 5 / held 0 / blocked 5 and allowed 4 / held 4 / blocked 0. `policy.yaml.example` shows
+    trusted destinations and sources (never a git host as a source).
+13. Command analysis: run-time code (`exec(`, `compile(`, `__import__(`, `marshal.loads`,
+    `codecs.decode`, chr/bytes chains), `sh -c "$(curl …)"`, and hosts in variables (destination
+    `unknown`).
+14. Workspace watcher: truthful `new_file`; only rewrites, renames and replacements of existing
+    files feed the mass-change detector; the ransomware stand-ins encrypt existing documents.
+15. **A81** (noisy-OR Origin in Judge too) behind `math.origin_combination`, **`max` until approved**;
+    property tests for both settings.
+16. **A82** (expected-cost decision over allow/hold/block, ties to the milder, gate and overrides as
+    before) behind `math.decision_rule`, **`thresholds` until approved**; boundaries in
+    `separ health`, the heartbeat, the GUI and lab reports.
+17. Rootkit: module cross-views in every direction plus kallsyms (separate kinds, existing weight);
+    read-only PID sweep (full in `separ scan-rootkit`, bounded in the daemon's periodic scan, off at
+    its start); `separ scan-rootkit --calibrate N` measures p_race, which the weight then uses.
+
+**Part 3.** Version 2.4.0 everywhere; seed 335384967 active (837115701 retired); `reproduce.py`
+names a missing tag and exits 2; docs/v2.4-evaluation.md.
+
+**Decision changes**
+- Replay matrix and golden catalog with the default policy: **none** (1035 variants, 60/60 golden;
+  `v2.3.1-base` and `v2.4` identical).
+- Live paths: the guard's default origin (10), the recognisers (13), the workspace watcher (14),
+  the rootkit scan (17), and `separ setup`'s policy (9). See the evaluation.
+- With the flags on (not the default): A82 moves 20 malicious variants block → effective hold and
+  1 (S27, G4 returning) effective hold → allow, and 17 labelled benign variants block → hold; A81
+  alone changes none on this seed; A80 lets a pasted URL pass the browser as an address.
+
+**Findings recorded, not fixed**
+- **F15.** The web-root watcher still marks every changed file `new_file=true`. Making it truthful
+  (as item 14 does for the workspace) would drop `effect_persist` for a backdoor written into an
+  existing script; C7 defines persist as a *new* executable file in a web root, so this needs a
+  decision first.
+- **F16.** `pip install`, `docker run` and `ssh user@host` show no host in their text, so the
+  command analysis sees no network use (a limit of judging text before it runs; a kernel sensor
+  sees the connection).
+- **F17.** A daemon whose startup scan skips the PID sweep sweeps first after the rootkit interval
+  (default 1 h); the full 1..pid_max sweep takes ~12 s per pass at pid_max 4194304 and runs only in
+  `separ scan-rootkit`.
+
+**Items not done or done differently** (docs/review-list.md R1 to R5): items 1 and 2 share one
+commit (R1); per-user policy ownership (R2); A80 to A82 are implemented but off until approved
+(R3); the containers of the CI install test and the `pytest -m root` test were not run here (R4);
+`ruff check .` and the publishability content test fail on files this task may not or should not
+change (R5).

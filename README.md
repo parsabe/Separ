@@ -3,7 +3,7 @@
 [![Version 2.4.0](https://img.shields.io/badge/Version-2.4.0-0f766e)](docs/v2.4-evaluation.md)
 [![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-2%2C354%20Passing-16a34a?logo=pytest&logoColor=white)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-2%2C548%20Passing-16a34a?logo=pytest&logoColor=white)](tests/)
 [![Privacy](https://img.shields.io/badge/Privacy-Zero--Raw%20HMAC%20Boundary-dc2626?logo=lock&logoColor=white)](src/refmon/calculus/privacy.py)
 [![Policy](https://img.shields.io/badge/Policy-Ed25519%20Signed-0550AE)](src/refmon/signing.py)
 [![Packages](https://img.shields.io/badge/Packages-.deb%20%7C%20.rpm-7c3aed?logo=linux&logoColor=white)](packaging/build_packages.py)

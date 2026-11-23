@@ -105,11 +105,15 @@ def line_findings(line: str, names: set[str]) -> list[str]:
             out.append(f"public IP {m.group(0)}")
     for m in URL.finditer(line):
         if not OK_URL.search(m.group(0)):
-            out.append(f"url {m.group(0)[:60]}")
+            # without the scheme, so a report that quotes this finding is not a finding itself
+            out.append(f"url {m.group(0).split('://', 1)[-1][:60]}")
     for name in names:
         if re.search(rf"\b{re.escape(name)}\b", line):
             out.append("a user or host name of this machine")
     return out
+
+
+OWN_BLOCK = ("<!-- BEGIN GENERATED: publishable -->", "<!-- END GENERATED: publishable -->")
 
 
 def scan_tree(names: set[str]) -> list[str]:
@@ -122,7 +126,14 @@ def scan_tree(names: set[str]) -> list[str]:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             continue
+        own_output = False  # docs/results.md embeds this script's earlier report: not new content
         for no, line in enumerate(text.splitlines(), 1):
+            if line.strip() == OWN_BLOCK[0]:
+                own_output = True
+            elif line.strip() == OWN_BLOCK[1]:
+                own_output = False
+            if own_output:
+                continue
             for kind in line_findings(line, names):
                 findings.append(f"{rel}:{no}: {kind}")
     return findings
