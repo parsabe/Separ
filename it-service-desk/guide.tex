@@ -90,7 +90,7 @@ Separ takes a different approach: it watches \textbf{how programs behave} and en
   \item \textbf{Zero Cleartext Telemetry Exposure:} Sensitive command arguments, URLs, and file paths are hashed in RAM using a local device key before anything is written to logs.
   \item \textbf{Cryptographically Signed Policies:} Every security rule and mode change is signed with an administrator Ed25519 key (\texttt{admin.key}) that stays on the admin's machine; the daemon only holds the public key (\texttt{admin.pub}) and cannot sign or switch its own mode. Unsigned or tampered configs are rejected automatically.
   \item \textbf{Standalone Desktop GUI:} Opens directly as a dedicated Linux application window (\texttt{separ gui}) showing live sensor events, blocked incidents, and quarantined files—like Wireshark for system behavior.
-  \item \textbf{Lightweight Native Packages:} Installs cleanly via \texttt{.deb} (568\,KB), \texttt{.rpm} (293\,KB), or \texttt{install.sh} with no bundled Python interpreter or Electron bloat.
+  \item \textbf{Self-Contained Native Packages:} Installs via \texttt{.deb}, \texttt{.rpm} (about 17\,MB each, per architecture) or \texttt{install.sh}: the system's Python 3.12+ runs a private venv built from pinned wheels shipped in the package, so installation needs no internet and never uses the distribution's pydantic. No bundled interpreter, no Electron.
 \end{itemize}
 \end{callout}
 
@@ -153,23 +153,23 @@ On an \textbf{interactive laptop}, an unanswered \texttt{HOLD} prompt eventually
 \section{Installation Guide}
 % ============================================================================
 
-Separ requires \textbf{Python 3.10 or newer} (Python 3.12+ recommended) along with standard OS packages (\texttt{python3-pydantic}, \texttt{python3-yaml}, \texttt{python3-cryptography}).
+Separ requires \textbf{Python 3.12 or newer} (3.12, 3.13 or 3.14). Its Python dependencies (pydantic 2, PyYAML, cryptography) are \emph{not} taken from the distribution: the packages ship pinned wheels and install them into a private venv in \texttt{/opt/separ/venv} during installation, without internet access. The distribution's \texttt{python3-pydantic} (1.x on Ubuntu 24.04 and Debian 12) is never used.
 
-\subsection{Option A: Debian / Ubuntu / Kali Linux (\texttt{.deb})}
+\subsection{Option A: Debian 13 / Ubuntu 24.04 (\texttt{.deb}, amd64)}
 \begin{lstlisting}[language=bash]
-sudo apt update
-sudo apt install ./separ_2.0.0_all.deb
+sudo apt install ./separ_2.0.0_amd64.deb
 \end{lstlisting}
 
-\subsection{Option B: RHEL / Rocky Linux / AlmaLinux / Fedora (\texttt{.rpm})}
+\subsection{Option B: Rocky / Alma / RHEL 9, Fedora (\texttt{.rpm}, x86\_64)}
 \begin{lstlisting}[language=bash]
-sudo dnf install ./separ-2.0.0-1.noarch.rpm
+sudo dnf install python3.12 ./separ-2.0.0-1.x86_64.rpm
 \end{lstlisting}
+Debian 12 is not supported (its Python is 3.11).
 
 \subsection{Option C: Universal POSIX Installer (\texttt{install.sh})}
-From the extracted Separ directory:
+From the extracted Separ directory, with the wheel directory made once by \texttt{python3.12 packaging/build\_packages.py --wheels-only} (\texttt{dist/wheels-amd64}):
 \begin{lstlisting}[language=bash]
-# System-wide installation (IT admins / servers -> /usr/local, /etc/separ)
+# System-wide installation (IT admins / servers -> /opt/separ/venv, /etc/separ)
 sudo ./install.sh
 
 # Unprivileged user installation (personal laptop -> ~/.local)
@@ -178,7 +178,8 @@ sudo ./install.sh
 
 \subsection{Verify Installation}
 \begin{lstlisting}[language=bash]
-separ --help
+separ --version
+separ health --json    # "not_running" (exit 1) until the daemon is started
 \end{lstlisting}
 If installed via \texttt{.deb} or \texttt{.rpm}, this registers \texttt{/usr/bin/separ}, \texttt{/etc/separ/} templates, systemd service units, and the \textbf{Separ} launcher in your Linux Application Menu.
 

@@ -1,8 +1,19 @@
 #!/usr/bin/env python3
-"""Build .deb and .rpm installation packages for Refmon without external networks.
+"""Build per-architecture .deb and .rpm packages of Separ (review 2026-11, item 6).
+
+Separ needs Python >= 3.12 and pydantic >= 2.7. Distribution packages cannot provide that
+(python3-pydantic is 1.x on Ubuntu 24.04 and Debian 12), so the packages carry their own pinned
+wheels (packaging/requirements-runtime.txt, one set per supported CPython: 3.12, 3.13, 3.14) and
+install them at install time into a private venv, /opt/separ/venv, with
+`pip install --no-index --require-hashes`: installing needs no internet. The compiled wheels
+(pydantic-core, pyyaml, cffi, cryptography) make the packages architecture-specific.
 
 Usage:
-    python packaging/build_packages.py [--deb] [--rpm] [--all]
+    python packaging/build_packages.py [--deb] [--rpm] [--all] [--arch amd64|arm64]
+                                       [--wheel-cache DIR] [--wheels-only]
+
+Building downloads the pinned wheels once (or reads them from --wheel-cache, for an offline
+build); `--wheels-only` writes dist/wheels-<arch>/ for install.sh.
 """
 
 from __future__ import annotations
@@ -10,15 +21,37 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
+import platform
+import re
 import shutil
 import subprocess
 import sys
 import tarfile
 from pathlib import Path
 
-VERSION = "2.0.0"
+ROOT_DIR = Path(__file__).resolve().parent.parent
+SRC_DIR = ROOT_DIR / "src" / "refmon"
+PACKAGING_DIR = ROOT_DIR / "packaging"
+BUILD_DIR = ROOT_DIR / "build" / "package_staging"
+DIST_DIR = ROOT_DIR / "dist"
+REQUIREMENTS = PACKAGING_DIR / "requirements-runtime.txt"
+
+
+def _version() -> str:
+    text = (SRC_DIR / "__init__.py").read_text(encoding="utf-8")
+    match = re.search(r'^__version__ = "([^"]+)"', text, re.M)
+    if not match:
+        raise SystemExit("no __version__ in src/refmon/__init__.py")
+    return match.group(1)
+
+
+VERSION = _version()
 RELEASE = "1"
 PKG_NAME = "separ"
+MIN_PYTHON = (3, 12)
+PYTHONS = ("3.12", "3.13", "3.14")  # one wheel set each; the installer picks the host's
+PIP_VERSION = "26.1.2"  # vendored so the venv needs neither ensurepip nor python3-venv
+PREFIX = "/opt/separ"
 MAINTAINER = "Separ Development Team <separ@example.org>"
 HOMEPAGE = "https://github.com/parsabe/Separ"
 SUMMARY = "Behavioral Reference Monitor & Live Attack Barrier"
@@ -29,44 +62,78 @@ DESCRIPTION = (
     "interactive Reference Monitor GUI (separ gui) similar to Wireshark\n"
     "for behavioral incident analysis."
 )
+# Debian name, RPM name, the manylinux platform tags pip may use
+ARCHES = {
+    "amd64": ("amd64", "x86_64", ("manylinux_2_28_x86_64", "manylinux2014_x86_64")),
+    "arm64": ("arm64", "aarch64", ("manylinux_2_28_aarch64", "manylinux2014_aarch64")),
+}
 
-ROOT_DIR = Path(__file__).resolve().parent.parent
-SRC_DIR = ROOT_DIR / "src" / "refmon"
-PACKAGING_DIR = ROOT_DIR / "packaging"
-BUILD_DIR = ROOT_DIR / "build" / "package_staging"
-DIST_DIR = ROOT_DIR / "dist"
-
-CLI_WRAPPER = """#!/usr/bin/env python3
-# Separ Reference Monitor executable launcher
-import os
-import shutil
-import sys
-from pathlib import Path
-
-# If started by an older platform Python (< 3.10), re-exec with modern Python
-if sys.version_info < (3, 10):
-    for candidate in ("python3.12", "python3.11", "python3.10"):
-        if shutil.which(candidate):
-            os.execvp(candidate, [candidate] + sys.argv)
-    sys.stderr.write(
-        "Error: Separ requires Python >= 3.10 (e.g. python3.12). "
-        "Currently running on Python %s\\n" % sys.version.split()[0]
-    )
-    sys.exit(1)
-
-# Look for separ/refmon package in
-# /usr/share/separ, /usr/share/refmon, /usr/lib/separ, /usr/lib/refmon
-for candidate in ("/usr/share/separ", "/usr/share/refmon", "/usr/lib/separ", "/usr/lib/refmon"):
-    cand_path = Path(candidate)
-    if cand_path.is_dir() and str(cand_path) not in sys.path:
-        sys.path.insert(0, str(cand_path))
-        break
-
-from refmon.cli import main
-
-if __name__ == "__main__":
-    sys.exit(main())
+CLI_WRAPPER = f"""#!/bin/sh
+# Separ launcher: runs the private venv that the package's post-install step created.
+VENV="{PREFIX}/venv"
+if [ ! -x "$VENV/bin/separ" ]; then
+    echo "separ: $VENV is missing; run {PREFIX}/install-venv (as root) to create it" >&2
+    exit 1
+fi
+exec "$VENV/bin/separ" "$@"
 """
+
+
+def host_arch() -> str:
+    machine = platform.machine().lower()
+    return "arm64" if machine in ("aarch64", "arm64") else "amd64"
+
+
+def _pip(*args: str) -> None:
+    subprocess.run([sys.executable, "-m", "pip", *args], check=True)
+
+
+def vendor_wheels(dest: Path, arch: str, cache: Path | None = None) -> list[Path]:
+    """The pinned wheels for every supported CPython, pip itself and the Separ wheel, plus a
+    hash-pinned requirements file per CPython (requirements-cp312.txt, ...)."""
+    dest.mkdir(parents=True, exist_ok=True)
+    platforms = ARCHES[arch][2]
+    for py in PYTHONS:
+        args = ["download", "--quiet", "--only-binary=:all:", "--no-deps",
+                "--python-version", py, "--implementation", "cp", "-d", str(dest),
+                "-r", str(REQUIREMENTS)]  # fmt: skip
+        for plat in platforms:
+            args += ["--platform", plat]
+        if cache is not None:
+            args += ["--no-index", "--find-links", str(cache)]
+        _pip(*args)
+    pip_args = ["download", "--quiet", "--no-deps", "--only-binary=:all:", "-d", str(dest),
+                f"pip=={PIP_VERSION}"]  # fmt: skip
+    if cache is not None:
+        pip_args += ["--no-index", "--find-links", str(cache)]
+    _pip(*pip_args)
+    for old in dest.glob("separ-*.whl"):
+        old.unlink()
+    _pip("wheel", "--quiet", "--no-deps", "-w", str(dest), str(ROOT_DIR))
+    wheels = sorted(dest.glob("*.whl"))
+    pins = [ln.split("==") for ln in REQUIREMENTS.read_text().splitlines()
+            if ln.strip() and not ln.startswith("#")]  # fmt: skip
+    for py in PYTHONS:
+        tag = "cp" + py.replace(".", "")
+        lines = []
+        for name, ver in [*pins, ["separ", VERSION]]:
+            norm = name.replace("-", "_").lower()
+            matches = [
+                w for w in wheels
+                if w.name.lower().startswith(f"{norm}-{ver}-")
+                and (f"-{tag}-" in w.name or "-abi3-" in w.name or "-py3-none-" in w.name
+                     or "-py2.py3-none-" in w.name)
+            ]  # fmt: skip
+            if not matches:
+                raise SystemExit(f"no wheel of {name}=={ver} for {tag} on {arch}")
+            hashes = " ".join(
+                f"--hash=sha256:{hashlib.sha256(w.read_bytes()).hexdigest()}" for w in matches
+            )
+            lines.append(f"{name}=={ver} {hashes}")
+        (dest / f"requirements-{tag}.txt").write_text("\n".join(lines) + "\n")
+    sums = [f"{hashlib.sha256(w.read_bytes()).hexdigest()}  {w.name}" for w in wheels]
+    (dest / "SHA256SUMS").write_text("\n".join(sums) + "\n")
+    return wheels
 
 
 def clean_dir(d: Path) -> None:
@@ -75,8 +142,8 @@ def clean_dir(d: Path) -> None:
     d.mkdir(parents=True, exist_ok=True)
 
 
-def stage_files(stage_root: Path) -> None:
-    """Populate Linux filesystem tree under stage_root."""
+def stage_files(stage_root: Path, arch: str, cache: Path | None = None) -> None:
+    """Populate the Linux filesystem tree under stage_root."""
     bin_dir = stage_root / "usr" / "bin"
     bin_dir.mkdir(parents=True, exist_ok=True)
     for bname in ("separ", "refmon"):
@@ -84,31 +151,22 @@ def stage_files(stage_root: Path) -> None:
         bin_file.write_text(CLI_WRAPPER, encoding="utf-8")
         bin_file.chmod(0o755)
 
-    # Python package modules under /usr/share/separ and /usr/share/refmon
-    for share_base in ("separ", "refmon"):
-        share_refmon = stage_root / "usr" / "share" / share_base / "refmon"
-        share_refmon.mkdir(parents=True, exist_ok=True)
-        for root, dirs, files in os.walk(SRC_DIR):
-            dirs[:] = [d for d in dirs if d != "__pycache__" and not d.startswith(".")]
-            rel = Path(root).relative_to(SRC_DIR)
-            dest_dir = share_refmon / rel
-            dest_dir.mkdir(parents=True, exist_ok=True)
-            for f in files:
-                if f.endswith((".pyc", ".pyo")):
-                    continue
-                src_f = Path(root) / f
-                dest_f = dest_dir / f
-                shutil.copy2(src_f, dest_f)
-                dest_f.chmod(0o644)
-        separ_src = ROOT_DIR / "src" / "separ"
-        if separ_src.is_dir():
-            share_separ = stage_root / "usr" / "share" / share_base / "separ"
-            share_separ.mkdir(parents=True, exist_ok=True)
-            for f in separ_src.iterdir():
-                if f.is_file() and not f.name.endswith((".pyc", ".pyo")):
-                    dest_f = share_separ / f.name
-                    shutil.copy2(f, dest_f)
-                    dest_f.chmod(0o644)
+    # the vendored wheels and the script that turns them into the private venv
+    opt = stage_root / PREFIX.lstrip("/")
+    vendor_wheels(opt / "wheels", arch, cache)
+    for f in (opt / "wheels").iterdir():
+        f.chmod(0o644)
+    installer = opt / "install-venv"
+    shutil.copy2(PACKAGING_DIR / "install-venv.sh", installer)
+    installer.chmod(0o755)
+
+    # the golden replay files the dashboard and the self-test can replay
+    golden = stage_root / "usr" / "share" / "separ" / "golden"
+    golden.mkdir(parents=True, exist_ok=True)
+    for f in sorted((ROOT_DIR / "tests" / "golden").iterdir()):
+        if f.is_file():
+            shutil.copy2(f, golden / f.name)
+            (golden / f.name).chmod(0o644)
 
     # Desktop entry & icon
     app_dir = stage_root / "usr" / "share" / "applications"
@@ -209,14 +267,15 @@ def stage_browser(stage_root: Path) -> None:
             (unit_dir / uname).chmod(0o644)
 
 
-def build_deb() -> Path:
-    """Build Debian .deb package."""
-    print("== Building Debian package (.deb) ==")
+def build_deb(arch: str, cache: Path | None = None) -> Path:
+    """Build the Debian .deb package for one architecture."""
+    deb_arch = ARCHES[arch][0]
+    print(f"== Building Debian package (.deb, {deb_arch}) ==")
     deb_staging = BUILD_DIR / "deb"
     clean_dir(deb_staging)
     data_dir = deb_staging / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
-    stage_files(data_dir)
+    stage_files(data_dir, arch, cache)
 
     # Installed-Size calculation (KiB)
     total_size = sum(f.stat().st_size for f in data_dir.glob("**/*") if f.is_file())
@@ -237,19 +296,21 @@ def build_deb() -> Path:
 Version: {VERSION}
 Section: utils
 Priority: optional
-Architecture: all
+Architecture: {deb_arch}
 Installed-Size: {installed_size_kb}
 Maintainer: {MAINTAINER}
 Homepage: {HOMEPAGE}
-Depends: python3 (>= 3.10), python3-pydantic, python3-yaml, python3-cryptography
+Depends: python3 (>= 3.12) | python3.12
 {deb_description}
 """
     (debian_dir / "control").write_text(control_content, encoding="utf-8")
     (debian_dir / "control").chmod(0o644)
 
     # Postinst script for desktop database update if desktop-file-utils is installed
-    postinst_content = """#!/bin/sh
+    postinst_content = f"""#!/bin/sh
 set -e
+# the private venv from the vendored, hash-pinned wheels (no internet)
+{PREFIX}/install-venv
 if command -v update-desktop-database >/dev/null 2>&1; then
     update-desktop-database -q /usr/share/applications || true
 fi
@@ -258,6 +319,18 @@ exit 0
     postinst = debian_dir / "postinst"
     postinst.write_text(postinst_content, encoding="utf-8")
     postinst.chmod(0o755)
+    prerm = debian_dir / "prerm"
+    prerm.write_text(
+        f"""#!/bin/sh
+set -e
+if [ "$1" = remove ] || [ "$1" = purge ]; then
+    rm -rf {PREFIX}/venv
+fi
+exit 0
+""",
+        encoding="utf-8",
+    )
+    prerm.chmod(0o755)
 
     # Compute md5sums of data files
     md5_lines = []
@@ -283,7 +356,7 @@ exit 0
         root_ti.pax_headers = {}
         tar.addfile(root_ti)
 
-        for entry in ("control", "postinst", "md5sums"):
+        for entry in ("control", "postinst", "prerm", "md5sums"):
             p = debian_dir / entry
             if p.is_file():
                 ti = tar.gettarinfo(str(p), arcname=f"./{entry}")
@@ -342,7 +415,7 @@ exit 0
     deb_binary.write_text("2.0\n", encoding="ascii")
 
     DIST_DIR.mkdir(parents=True, exist_ok=True)
-    deb_output = DIST_DIR / f"{PKG_NAME}_{VERSION}_all.deb"
+    deb_output = DIST_DIR / f"{PKG_NAME}_{VERSION}_{deb_arch}.deb"
     if deb_output.exists():
         deb_output.unlink()
 
@@ -360,9 +433,10 @@ exit 0
     return deb_output
 
 
-def build_rpm() -> Path:
-    """Build Red Hat .rpm package using rpmbuild."""
-    print("== Building RPM package (.rpm) ==")
+def build_rpm(arch: str, cache: Path | None = None) -> Path:
+    """Build the Red Hat .rpm package for one architecture with rpmbuild."""
+    rpm_arch = ARCHES[arch][1]
+    print(f"== Building RPM package (.rpm, {rpm_arch}) ==")
     rpm_topdir = BUILD_DIR / "rpmbuild"
     clean_dir(rpm_topdir)
     for sub in ("BUILD", "RPMS", "SOURCES", "SPECS", "SRPMS", "tmp"):
@@ -370,17 +444,19 @@ def build_rpm() -> Path:
 
     stage_dir = rpm_topdir / "BUILD" / f"{PKG_NAME}-{VERSION}"
     stage_dir.mkdir(parents=True, exist_ok=True)
-    stage_files(stage_dir)
+    stage_files(stage_dir, arch, cache)
 
     spec_content = f"""Name:           {PKG_NAME}
 Version:        {VERSION}
 Release:        {RELEASE}%{{?dist}}
 Summary:        {SUMMARY}
-License:        MIT
+License:        GPL-3.0-or-later
 URL:            {HOMEPAGE}
-BuildArch:      noarch
-Requires:       (python3.12 or python3.11 or python3 >= 3.10)
-Recommends:     python3-pydantic, python3-pyyaml, python3-cryptography
+BuildArch:      {rpm_arch}
+AutoReqProv:    no
+Requires:       (python3.12 or python3.13 or python3.14)
+%global debug_package %{{nil}}
+%global __os_install_post %{{nil}}
 
 %description
 {DESCRIPTION}
@@ -395,11 +471,19 @@ mkdir -p %{{buildroot}}
 cp -a {stage_dir}/* %{{buildroot}}/
 
 %post
+# the private venv from the vendored, hash-pinned wheels (no internet)
+{PREFIX}/install-venv
 if command -v update-desktop-database >/dev/null 2>&1; then
     update-desktop-database -q /usr/share/applications || true
 fi
 
+%preun
+if [ "$1" -eq 0 ]; then
+    rm -rf {PREFIX}/venv
+fi
+
 %files
+{PREFIX}
 /usr/bin/separ
 /usr/bin/refmon
 /usr/share/separ
@@ -424,6 +508,8 @@ fi
 %doc /usr/share/doc/refmon/copyright
 
 %changelog
+* Mon Nov 23 2026 Separ Team <separ@example.org> - {VERSION}-{RELEASE}
+- Private venv from vendored pinned wheels; per-architecture package.
 * Mon Nov 02 2026 Refmon Team <refmon@example.org> - 2.0.0-1
 - Release version 2.0.0 with Live Reference Monitor GUI and Audio Alerts.
 """
@@ -439,6 +525,8 @@ fi
         f"_tmppath {rpm_topdir}/tmp",
         "--define",
         "_build_id_links none",
+        "--target",
+        rpm_arch,
         str(spec_path),
     ]
     subprocess.run(cmd, check=True)
@@ -448,7 +536,7 @@ fi
         raise RuntimeError("rpmbuild completed but no .rpm file was found")
 
     DIST_DIR.mkdir(parents=True, exist_ok=True)
-    rpm_output = DIST_DIR / f"{PKG_NAME}-{VERSION}-{RELEASE}.noarch.rpm"
+    rpm_output = DIST_DIR / f"{PKG_NAME}-{VERSION}-{RELEASE}.{rpm_arch}.rpm"
     if rpm_output.exists():
         rpm_output.unlink()
     shutil.copy2(rpm_files[0], rpm_output)
@@ -461,14 +549,28 @@ def main() -> int:
     parser.add_argument("--deb", action="store_true", help="build .deb package")
     parser.add_argument("--rpm", action="store_true", help="build .rpm package")
     parser.add_argument("--all", action="store_true", help="build both .deb and .rpm")
+    parser.add_argument("--arch", choices=sorted(ARCHES), default=host_arch())
+    parser.add_argument("--wheel-cache", default=None, help="offline: take wheels from here")
+    parser.add_argument(
+        "--wheels-only", action="store_true", help="write dist/wheels-<arch>/ for install.sh"
+    )
     args = parser.parse_args()
+    if sys.version_info < MIN_PYTHON:
+        raise SystemExit("building the packages needs Python >= 3.12")
+    cache = Path(args.wheel_cache) if args.wheel_cache else None
 
+    if args.wheels_only:
+        out = DIST_DIR / f"wheels-{args.arch}"
+        clean_dir(out)
+        vendor_wheels(out, args.arch, cache)
+        print(f"wheels for {', '.join(PYTHONS)} on {args.arch}: {out}")
+        return 0
     build_both = args.all or (not args.deb and not args.rpm)
     built = []
     if build_both or args.deb:
-        built.append(build_deb())
+        built.append(build_deb(args.arch, cache))
     if build_both or args.rpm:
-        built.append(build_rpm())
+        built.append(build_rpm(args.arch, cache))
 
     print("\nSummary of built packages:")
     for p in built:

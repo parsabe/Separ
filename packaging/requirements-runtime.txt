@@ -1,0 +1,14 @@
+# Runtime dependencies of Separ, pinned exactly (review 2026-11, item 6).
+# The .deb/.rpm and install.sh vendor these wheels and install them into a private venv
+# (/opt/separ/venv) with --no-index --require-hashes: installing Separ needs no internet and
+# never uses the distribution's pydantic (1.x on Ubuntu 24.04 and Debian 12).
+# Change a pin only together with a full test run.
+pydantic==2.14.4
+pydantic-core==2.50.5
+annotated-types==0.8.0
+typing-extensions==4.16.0
+typing-inspection==0.4.5
+pyyaml==6.0.4
+cryptography==50.0.2
+cffi==2.1.1
+pycparser==3.12

@@ -120,17 +120,25 @@ Separ Rootkit & Stealth Scanner
 ## 🚀 Installation & Quick Start
 
 ### Option A: Native Linux Packages (Recommended)
+Separ needs **Python 3.12+** and pydantic 2. The packages carry their own pinned wheels and install
+them into a private venv (`/opt/separ/venv`) without internet access; they never use the
+distribution's `python3-pydantic` (1.x on Ubuntu 24.04 and Debian 12). Packages are
+per-architecture (amd64/x86_64; arm64 with `--arch arm64`) and are built, not committed:
 ```bash
-# Debian / Ubuntu / Kali Linux (568 KB)
-sudo apt install ./dist/separ_2.0.0_all.deb
+python3.12 packaging/build_packages.py --all --arch amd64    # -> dist/ (~17 MB each)
 
-# RHEL / Rocky Linux / AlmaLinux / Fedora (293 KB)
-sudo dnf install ./dist/separ-2.0.0-1.noarch.rpm
+# Debian 13 / Ubuntu 24.04 (Python 3.13 / 3.12)
+sudo apt install ./dist/separ_2.0.0_amd64.deb
+
+# Rocky / Alma / RHEL 9 (needs python3.12 from AppStream) and Fedora
+sudo dnf install python3.12 ./dist/separ-2.0.0-1.x86_64.rpm
 ```
 
 ### Option B: POSIX Installer Script (`install.sh`)
+Builds the same private venv from a wheel directory (`dist/wheels-<arch>`, made once with
+`python3.12 packaging/build_packages.py --wheels-only`); no internet at install time.
 ```bash
-# System-wide install (servers / IT admins -> /usr/local, /etc/separ)
+# System-wide install (servers / IT admins -> /opt/separ/venv, /usr/local/bin, /etc/separ)
 sudo ./install.sh
 
 # Unprivileged user install (laptop -> ~/.local)

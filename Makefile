@@ -5,7 +5,7 @@
 PY ?= .venv/bin/python
 PYTHON ?= python3.12
 
-.PHONY: test lint audit matrix publishable reproduce serve gui health scan-rootkit lab deb rpm packages all clean
+.PHONY: test lint audit matrix publishable reproduce serve gui health scan-rootkit lab deb rpm wheels packages all clean
 
 test:
 	$(PY) -m pytest -q
@@ -46,6 +46,9 @@ deb:  # build standalone .deb installer package in dist/
 
 rpm:  # build standalone .rpm installer package in dist/
 	$(PY) packaging/build_packages.py --rpm
+
+wheels:  # vendored, pinned wheels for install.sh in dist/wheels-<arch>/
+	$(PY) packaging/build_packages.py --wheels-only
 
 packages:  # build both .deb and .rpm installer packages in dist/
 	$(PY) packaging/build_packages.py --all

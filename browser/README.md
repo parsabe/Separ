@@ -50,7 +50,7 @@ Then load the extension:
 
 ## Deploy for every user on a server (admins, root)
 
-1. Install the package (`refmon_2.1.0_all.deb` / `.rpm`), then run
+1. Install the package (`separ_<version>_amd64.deb` / `.x86_64.rpm`), then run
    `refmon browser-install --system`. This writes `/usr/libexec/refmon/refmon-browser-host` and
    the manifests under `/usr/lib{,64}/mozilla/native-messaging-hosts/` (and under
    `/etc/chromium/…`, `/etc/opt/chrome/…` when given `--chromium-extension-id`).

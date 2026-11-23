@@ -2,12 +2,28 @@
 # Separ - Installation Script for Linux (Servers and Laptops)
 #
 # Usage:
-#   sudo ./install.sh        # System-wide installation (Servers / IT Admins)
-#   ./install.sh             # User-level installation (~/.local for personal laptop)
+#   sudo ./install.sh [--wheels DIR]   # system-wide: /opt/separ/venv, /usr/local/bin, /etc/separ
+#   ./install.sh [--wheels DIR]        # this user: ~/.local/share/separ/venv, ~/.local/bin
+#
+# Separ needs Python >= 3.12 and runs from a private venv built from vendored, hash-pinned wheels
+# (no internet, never the distribution's pydantic). DIR defaults to dist/wheels-<arch>, made with:
+#   python3.12 packaging/build_packages.py --wheels-only
 
 set -e
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+case "$(uname -m)" in
+    aarch64|arm64) ARCH=arm64 ;;
+    *) ARCH=amd64 ;;
+esac
+WHEELS="${SCRIPT_DIR}/dist/wheels-${ARCH}"
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --wheels) WHEELS="$2"; shift 2 ;;
+        --wheels=*) WHEELS="${1#--wheels=}"; shift ;;
+        *) echo "unknown option: $1" >&2; exit 2 ;;
+    esac
+done
 
 echo "========================================================"
 echo " Separ: Behavioral Reference Monitor & Incident Barrier"
@@ -16,64 +32,44 @@ echo "========================================================"
 # Detect privilege level
 if [ "$(id -u)" -eq 0 ]; then
     INSTALL_MODE="system"
+    PREFIX="/opt/separ"
     BIN_DIR="/usr/local/bin"
-    SHARE_DIR="/usr/local/share/separ"
     DESKTOP_DIR="/usr/share/applications"
     ICON_DIR="/usr/share/icons/hicolor/scalable/apps"
     CONFIG_DIR="/etc/separ"
     SYSTEMD_DIR="/etc/systemd/system"
-    echo "Installing system-wide (/usr/local, /etc/separ)..."
+    echo "Installing system-wide (${PREFIX}, /usr/local/bin, /etc/separ)..."
 else
     INSTALL_MODE="user"
+    PREFIX="${HOME}/.local/share/separ"
     BIN_DIR="${HOME}/.local/bin"
-    SHARE_DIR="${HOME}/.local/share/separ"
     DESKTOP_DIR="${HOME}/.local/share/applications"
     ICON_DIR="${HOME}/.local/share/icons/hicolor/scalable/apps"
     CONFIG_DIR="${HOME}/.config/separ"
     SYSTEMD_DIR="${HOME}/.config/systemd/user"
-    echo "Installing for current user (${HOME}/.local)..."
+    echo "Installing for current user (${PREFIX})..."
+fi
+
+if [ ! -f "${WHEELS}/requirements-cp312.txt" ]; then
+    echo "No vendored wheels in ${WHEELS}." >&2
+    echo "Make them once (on any machine with Python 3.12 and internet):" >&2
+    echo "  python3.12 packaging/build_packages.py --wheels-only --arch ${ARCH}" >&2
+    echo "then run: $0 --wheels dist/wheels-${ARCH}" >&2
+    exit 1
 fi
 
 # Ensure target directories exist
-mkdir -p "${BIN_DIR}" "${SHARE_DIR}" "${DESKTOP_DIR}" "${ICON_DIR}" "${CONFIG_DIR}"
+mkdir -p "${PREFIX}" "${BIN_DIR}" "${DESKTOP_DIR}" "${ICON_DIR}" "${CONFIG_DIR}"
+chmod 755 "${CONFIG_DIR}"
 
-# 1. Install Python package modules
-echo "Installing package modules into ${SHARE_DIR}..."
-cp -r "${SCRIPT_DIR}/src/refmon" "${SHARE_DIR}/"
-cp -r "${SCRIPT_DIR}/src/separ" "${SHARE_DIR}/"
+# 1. The private venv from the vendored wheels (Python >= 3.12; no internet)
+echo "Creating the private venv in ${PREFIX}/venv from ${WHEELS}..."
+SEPAR_PREFIX="${PREFIX}" SEPAR_WHEELS="${WHEELS}" sh "${SCRIPT_DIR}/packaging/install-venv.sh"
 
 # 2. Install executable launcher
 echo "Installing executable launcher to ${BIN_DIR}/separ..."
-cat << 'EOF' > "${BIN_DIR}/separ"
-#!/bin/sh
-# Separ Reference Monitor executable launcher
-for py in python3.12 python3.11 python3.10 python3; do
-    if command -v "$py" >/dev/null 2>&1; then
-        if "$py" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; then
-            exec "$py" -c '
-import sys
-from pathlib import Path
-
-# Search standard installed package locations
-for candidate in (
-    str(Path.home() / ".local/share/separ"),
-    "/usr/local/share/separ",
-    "/usr/share/separ",
-    "/usr/share/refmon",
-):
-    if Path(candidate).is_dir() and candidate not in sys.path:
-        sys.path.insert(0, candidate)
-
-from refmon.cli import main
-if __name__ == "__main__":
-    sys.exit(main())
-' "$@"
-        fi
-    fi
-done
-echo "Error: Separ requires Python >= 3.10 (e.g. python3.12). None found on PATH." >&2
-exit 1
-EOF
+printf '#!/bin/sh\n# Separ launcher: the private venv made by install.sh\nexec "%s/venv/bin/separ" "$@"\n' \
+    "${PREFIX}" > "${BIN_DIR}/separ"
 chmod 755 "${BIN_DIR}/separ"
 ln -sf separ "${BIN_DIR}/refmon" 2>/dev/null || true
 
@@ -119,7 +115,7 @@ echo ""
 echo "========================================================"
 echo " Installation Complete!"
 echo "========================================================"
-echo "Executable: ${BIN_DIR}/separ"
+echo "Executable: ${BIN_DIR}/separ (private venv: ${PREFIX}/venv)"
 echo "Config dir: ${CONFIG_DIR}"
 echo ""
 echo "Next Steps:"

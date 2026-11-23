@@ -6,7 +6,8 @@ __pycache__/
 .hypothesis/
 
 build/
-build/
+# packages and vendored wheels are built (packaging/build_packages.py), never committed
+dist/
 
 # LaTeX build files (the compiled main.pdf is kept; the diagram book is built with make diagrams)
 documentation/*.aux

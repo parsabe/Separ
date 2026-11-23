@@ -98,6 +98,9 @@ def main(argv: list[str] | None = None) -> int:
     if prog_name not in ("separ", "refmon"):
         prog_name = "separ"
     parser = argparse.ArgumentParser(prog=prog_name, description=__doc__.split("\n\n")[0])
+    from . import __version__
+
+    parser.add_argument("--version", action="version", version=f"separ {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     setup = sub.add_parser(

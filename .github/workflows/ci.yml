@@ -38,3 +38,52 @@ jobs:
           name: robustness-matrix
           path: build/
 
+
+  packages:
+    # review 2026-11, item 6: per-architecture packages with vendored, pinned wheels
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Tools
+        run: sudo apt-get update && sudo apt-get install -y rpm && pip install hatchling
+      - name: Build .deb and .rpm (amd64)
+        run: python packaging/build_packages.py --all --arch amd64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: |
+            dist/*.deb
+            dist/*.rpm
+
+  install-test:
+    needs: packages
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: ubuntu:24.04
+            install: apt-get update && apt-get install -y ./dist/separ_*_amd64.deb
+          - image: debian:13
+            install: apt-get update && apt-get install -y ./dist/separ_*_amd64.deb
+          - image: rockylinux:9
+            install: dnf install -y python3.12 && dnf install -y ./dist/separ-*.x86_64.rpm
+    container: ${{ matrix.image }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: packages
+          path: dist
+      - name: Install (Separ's own dependencies come from the package, not the internet)
+        run: ${{ matrix.install }}
+      - name: separ --version && separ health --json
+        run: |
+          separ --version
+          rc=0
+          separ health --json || rc=$?
+          # no daemon runs in the container: 1 (not running) is the expected answer; 2+ is a bug
+          echo "separ health exited $rc"
+          test "$rc" -le 1
