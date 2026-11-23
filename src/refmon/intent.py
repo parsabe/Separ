@@ -83,8 +83,9 @@ _SCHEDULE_RE = re.compile(
 
 # -- tampering ----------------------------------------------------------------------------------
 _SELF_FILES = (
-    r"(?:separ-live|refmon-live|/var/lib/separ|/etc/separ"
-    r"|\.separ\b|\.refmon\b|policy\.yaml|admin\.key|device\.key|api\.token)"
+    r"(?:separ-live|refmon-live|/var/lib/separ|/etc/separ|state/separ|config/separ"
+    r"|\.separ\b|\.separ-admin|\.refmon\b|policy\.yaml|admin\.(?:key|pub)|device\.key"
+    r"|pseudonym\.key|api\.token)"
 )
 _SELF_TAMPER_RE = re.compile(
     r"\b(?:pkill|killall)\b[^;&|]*(?:separ|refmon)|\bkill\b[^;&]*(?:separ|refmon)"

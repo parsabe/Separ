@@ -399,7 +399,7 @@ details summary {
   <div id="token-banner" class="notice" style="display:none; background:#fff8c5; border:1px solid #d4a72c; color:#734f00; margin-bottom:14px; padding:10px 14px; border-radius:6px;">
     <strong>API Token Required:</strong> The live barrier daemon requires authentication on shared cluster nodes.
     <div style="margin-top:6px; display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
-      <input id="token-input" placeholder="Paste API token from terminal or /tmp/refmon-live-*/api.token" style="flex:1; min-width:280px; font-family:var(--mono); padding:6px 9px; font-size:12px; border:1px solid #d4a72c; border-radius:4px;">
+      <input id="token-input" placeholder="Paste API token from terminal or ~/.local/state/separ/api.token" style="flex:1; min-width:280px; font-family:var(--mono); padding:6px 9px; font-size:12px; border:1px solid #d4a72c; border-radius:4px;">
       <button class="btn-sm" onclick="saveToken()" style="background:#0969da; color:#fff; border:none; padding:6px 14px; cursor:pointer; border-radius:4px; font-weight:600;">Save &amp; Authenticate</button>
     </div>
   </div>

@@ -19,7 +19,6 @@ import signal
 import socket
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 import urllib.error
@@ -35,9 +34,14 @@ from typing import Any
 from .calculus import evidence as calc
 from .config import (
     SETUP_HINT,
+    SYSTEM_WORKDIR,
     PolicyMissing,
     check_trusted,
+    default_workdir,
+    migrate_legacy_workdir,
     resolve_policy_paths,
+    secret_file,
+    secure_dir,
 )
 from .enforcer import SimulatedEnforcer
 from .families import NONE as NO_FAMILY
@@ -191,8 +195,9 @@ _PRESET_BY_ID = {item["id"]: item for item in PRESET_CATALOG}
 
 
 def default_live_workdir() -> Path:
-    uid = os.getuid() if hasattr(os, "getuid") else 1000
-    return Path(tempfile.gettempdir()) / f"separ-live-{uid}"
+    """/var/lib/separ for the system daemon, $XDG_STATE_HOME/separ (~/.local/state/separ) for a
+    per-user one (review 2026-11, item 4: no longer a predictable, shared path under /tmp)."""
+    return default_workdir()
 
 
 def default_golden_dir() -> Path:
@@ -206,26 +211,12 @@ def default_golden_dir() -> Path:
 
 
 def _secure_dir(path: Path) -> None:
-    """The work directory holds the signing key, the device key and the API token. It must be a
-    real directory owned by this user and closed to everyone else: the default path under /tmp is
-    predictable, and on a shared node another user could create it first with their own keys."""
-    mode = 0o755 if path == Path("/var/lib/separ") else 0o700
-    if not path.is_symlink() and not path.exists():
-        path.mkdir(mode=mode, parents=True)
-    if path.is_symlink() or not path.is_dir():
-        raise PermissionError(f"refusing work directory {path}: not a plain directory")
-    if hasattr(os, "getuid") and path.stat().st_uid != os.getuid():
-        raise PermissionError(f"refusing work directory {path}: it belongs to another user")
-    path.chmod(mode)
+    """The work directory holds the device key, the pseudonym key and the API token: a plain
+    directory owned by this user, closed to everyone else (config.secure_dir)."""
+    secure_dir(path, 0o755 if path == SYSTEM_WORKDIR else 0o700)
 
 
-def _secret_file(path: Path, make) -> str:
-    """Read a secret, creating it first (mode 0600 from the start, never briefly readable)."""
-    if not path.exists():
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(make() + "\n")
-    return path.read_text(encoding="utf-8").strip()
+_secret_file = secret_file  # 0600 from the start (O_EXCL), never through a symlink
 
 
 # Browser observations (v2.1, A68): what the extension may send, and the limits on it.
@@ -323,6 +314,7 @@ class LiveBarrier:
         `policy_path` and `public_key_path` default to /etc/separ (root) or the user's
         $XDG_CONFIG_HOME/separ. Without a signed policy there the barrier refuses to start: it
         never generates a policy and never holds a private key (review 2026-11, items 1 and 2)."""
+        default_location = workdir is None
         self.workdir = Path(workdir) if workdir is not None else default_live_workdir()
         self.policy_path, self.pub_path = resolve_policy_paths(policy_path, public_key_path)
         for path, what in ((self.policy_path, "signed policy"), (self.pub_path, "public key")):
@@ -371,7 +363,7 @@ class LiveBarrier:
         self.health: Any = None  # a HealthMonitor once `serve` starts one
         self._demo_depth = 0  # > 0 while a dashboard preset runs (under the lock)
 
-        self._bootstrap_workspace()
+        self._bootstrap_workspace(default_location=default_location)
         # Notifications: always logs/notifications.jsonl; `serve` adds the terminal and external
         # channels.
         self.hub = hub if hub is not None else NotificationHub()
@@ -414,8 +406,11 @@ class LiveBarrier:
 
     # -- workspace & signed policy -------------------------------------------------------------
 
-    def _bootstrap_workspace(self) -> None:
+    def _bootstrap_workspace(self, *, default_location: bool = False) -> None:
         _secure_dir(self.workdir)
+        if default_location:
+            # once: keep fingerprints and pseudonyms comparable with the old /tmp location
+            migrate_legacy_workdir(self.workdir, log=lambda m: print(f"separ: {m}", flush=True))
         for d in (
             self.web_root_dir,
             self.workspace_dir,
