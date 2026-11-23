@@ -313,7 +313,7 @@ systemctl --user enable --now separ-user.service
 \texttt{separ serve} & Run background daemon headlessly (for servers / \texttt{systemd}). \\
 \texttt{separ health --json} & External heartbeat check for Nagios, Icinga, cron, or Prometheus. \\
 \texttt{separ scan-rootkit} & Run the 6-engine, 2-pass read-only host rootkit \& stealth scan. \\
-\texttt{separ guard -- CMD} & Mediate and enforce policy on a single command before execution. \\
+\texttt{separ guard -- CMD} & Mediate and enforce policy on a single command before execution. The daemon decides origin and role; \texttt{--origin}/\texttt{--role} are accepted only by a daemon started with \texttt{serve --lab}. \\
 \texttt{separ lab --test-all} & Run all 35 harmless attack/benign verification templates and save report. \\
 \texttt{separ audit} & Run red-team privacy audit verifying zero cleartext leaks in logs. \\
 \texttt{separ ingest list} & List available external sensor templates and mapping files. \\

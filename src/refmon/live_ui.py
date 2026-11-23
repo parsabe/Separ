@@ -594,27 +594,11 @@ details summary {
       <div class="panel" style="background:#f8f9fa;">
         <h2>Manual Command Evaluation (CLI Guard)</h2>
         <div class="muted">Test any command line against active policy contracts before execution.</div>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:6px;">
-          <div>
-            <label>Origin Source</label>
-            <select id="cmd-origin">
-              <option value="web">web (Browser paste / lure)</option>
-              <option value="mail">mail (Email copy)</option>
-              <option value="agent_input">agent_input (AI prompt)</option>
-              <option value="inbound_request">inbound_request (HTTP)</option>
-              <option value="download">download (File)</option>
-              <option value="none">none (Typed locally by human)</option>
-            </select>
-          </div>
-          <div>
-            <label>Process Role</label>
-            <select id="cmd-role">
-              <option value="interactive_shell">interactive_shell</option>
-              <option value="web_worker">web_worker</option>
-              <option value="agent">agent</option>
-              <option value="package_installer">package_installer</option>
-            </select>
-          </div>
+        <div class="muted" style="margin-top:6px;">
+          The daemon decides the origin and the role: a command typed here is judged as typed
+          locally (origin <code>none</code>, role <code>interactive_shell</code>). Pasted-content
+          scenarios run from the presets or, in lab mode, with
+          <code>separ guard --origin web</code>.
         </div>
         <label style="margin-top:6px;">Command Line</label>
         <textarea id="cmd-text" placeholder="e.g. curl -s http://example.org/script.sh | sh"></textarea>
@@ -1003,14 +987,13 @@ async function runGolden() {
 }
 
 async function submitCommand() {
-  const origin = document.getElementById('cmd-origin').value;
-  const role = document.getElementById('cmd-role').value;
+  const origin = 'none';
   const command = document.getElementById('cmd-text').value;
   const b = document.getElementById('cmd-banner');
   b.style.display = 'block';
   b.textContent = 'Evaluating command through barrier...';
   try {
-    const res = await api('/api/guard', {command, origin, role, execute: true});
+    const res = await api('/api/guard', {command, execute: true});
     if (res.error) {
       b.innerHTML = `<strong>Error:</strong> ${esc(res.error)}`;
     } else {

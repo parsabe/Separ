@@ -208,7 +208,9 @@ def test_live_http_api_and_cli_guard_roundtrip(tmp_path: Path) -> None:
                 data = json.loads(resp.read().decode("utf-8"))
                 assert "error" not in data
 
-        # CLI `guard` returns exit code 1 on blocked ClickFix and 0 on benign command.
+        # CLI `guard` returns exit code 1 on blocked ClickFix and 0 on benign command. Naming the
+        # origin needs a daemon in lab mode (review 2026-11, item 7; tests/test_api_hardening.py).
+        barrier.lab = True
         rc_bad = cli_main(
             [
                 "guard",

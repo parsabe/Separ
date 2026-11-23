@@ -215,6 +215,12 @@ def main(argv: list[str] | None = None) -> int:
     srv.add_argument("--ingest", default=None, help="ingest.yaml: external sensors (mapping files)")
     _policy_args(srv)
     srv.add_argument(
+        "--lab",
+        action="store_true",
+        help="lab mode: `separ guard --origin/--role` may choose the origin and role of a "
+        "command (otherwise the daemon decides them)",
+    )
+    srv.add_argument(
         "--enforce",
         action="store_true",
         help="contain for real (SIGSTOP/SIGKILL, nftables, root quarantine); needs root. "
@@ -500,6 +506,7 @@ def _run(args: argparse.Namespace) -> int:
             policy_path=args.policy,
             public_key_path=args.public_key,
             enforce=args.enforce,
+            lab=args.lab,
         )
     elif args.command == "ingest":
         from .ingest.cli import run as run_ingest

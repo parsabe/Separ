@@ -308,6 +308,7 @@ class LiveBarrier:
         golden_dir: Path | None = None,
         hub: NotificationHub | None = None,
         enforcer: Any = None,
+        lab: bool = False,
     ) -> None:
         """`enforcer`: a LinuxEnforcer to contain for real (`serve --enforce` as root); by
         default a SimulatedEnforcer, and health reports "containment: simulated".
@@ -316,6 +317,7 @@ class LiveBarrier:
         $XDG_CONFIG_HOME/separ. Without a signed policy there the barrier refuses to start: it
         never generates a policy and never holds a private key (review 2026-11, items 1 and 2)."""
         default_location = workdir is None
+        self.lab = lab  # serve --lab: the CLI client may choose origin and role (item 7)
         self.workdir = Path(workdir) if workdir is not None else default_live_workdir()
         self.policy_path, self.pub_path = resolve_policy_paths(policy_path, public_key_path)
         for path, what in ((self.policy_path, "signed policy"), (self.pub_path, "public key")):
@@ -1917,6 +1919,7 @@ class LiveBarrier:
                 "sandbox_dir": str(self.sandbox_dir),
                 "policy_path": str(self.policy_path),
                 "server_configured": bool(len(self.ingest_runners) > 0),
+                "lab": self.lab,
                 "presets": PRESET_CATALOG,
                 "counts": {
                     "stories": len(all_records),
@@ -2026,6 +2029,16 @@ def _summarize_contract(contract: Any) -> str:
 # -- HTTP Server & CLI Client ------------------------------------------------------------------
 
 
+API_MAX_BODY = 64 * 1024  # bytes; the largest legitimate body is a 16 KiB clipboard text
+GUARD_ORIGINS = ("none", "web", "mail", "agent_input", "inbound_request", "download", "package")
+
+
+class _ApiError(Exception):
+    def __init__(self, status: int, message: str) -> None:
+        super().__init__(message)
+        self.status, self.message = status, message
+
+
 def make_http_server(
     barrier: LiveBarrier, host: str = "127.0.0.1", port: int = 8765
 ) -> ThreadingHTTPServer:
@@ -2069,9 +2082,32 @@ def make_http_server(
             self.wfile.write(raw)
 
         def _read_json(self) -> dict[str, Any]:
-            length = int(self.headers.get("Content-Length", "0"))
-            body = self.rfile.read(length) if length > 0 else b"{}"
-            return json.loads(body.decode("utf-8"))
+            """A JSON object of at most API_MAX_BODY bytes, announced by a valid Content-Length
+            (review 2026-11, item 7). Anything else is refused before it is read."""
+            raw = self.headers.get("Content-Length")
+            if raw is None:
+                raise _ApiError(HTTPStatus.BAD_REQUEST, "Content-Length is required")
+            try:
+                length = int(raw.strip())
+            except ValueError:
+                raise _ApiError(HTTPStatus.BAD_REQUEST, "Content-Length is not a number") from None
+            if length < 0:
+                raise _ApiError(HTTPStatus.BAD_REQUEST, "Content-Length is negative")
+            if length > API_MAX_BODY:
+                self.close_connection = True  # the body is not read
+                raise _ApiError(
+                    HTTPStatus.REQUEST_ENTITY_TOO_LARGE, f"body over {API_MAX_BODY} bytes"
+                )
+            body = self.rfile.read(length) if length else b""
+            if not body.strip():
+                return {}
+            try:
+                data = json.loads(body.decode("utf-8"))
+            except (UnicodeDecodeError, ValueError):
+                raise _ApiError(HTTPStatus.BAD_REQUEST, "the body is not valid JSON") from None
+            if not isinstance(data, dict):
+                raise _ApiError(HTTPStatus.BAD_REQUEST, "the JSON body must be an object")
+            return data
 
         def do_GET(self) -> None:
             if not self._authorized():
@@ -2097,9 +2133,23 @@ def make_http_server(
             try:
                 data = self._read_json()
                 if self.path == "/api/guard":
+                    # The daemon decides where a command came from and which role runs it: a
+                    # caller that could name them could make any command look typed locally.
+                    # Only the CLI client of a daemon in lab mode (serve --lab) may set them.
+                    chosen = sorted(k for k in ("origin", "role") if k in data)
+                    from_cli = self.headers.get("X-Separ-Client", "") == "cli"
+                    if chosen and not (barrier.lab and from_cli):
+                        raise _ApiError(
+                            HTTPStatus.FORBIDDEN,
+                            f"{' and '.join(chosen)} can only be set by the CLI client of a daemon "
+                            "in lab mode (separ serve --lab); the daemon decides them",
+                        )
+                    origin = str(data.get("origin", "none"))
+                    if origin not in GUARD_ORIGINS:
+                        raise _ApiError(HTTPStatus.BAD_REQUEST, f"unknown origin {origin!r}")
                     outcome = barrier.guard_command(
                         str(data.get("command", "")),
-                        origin=str(data.get("origin", "web")),
+                        origin=origin,
                         role=str(data.get("role", "interactive_shell")),
                         execute=bool(data.get("execute", False)),
                         allow_non_block_exec=bool(data.get("allow_non_block_exec", False)),
@@ -2146,8 +2196,10 @@ def make_http_server(
                     self._send_json(HTTPStatus.OK, res)
                     return
                 self._send_json(HTTPStatus.NOT_FOUND, {"error": "unknown endpoint"})
-            except (KeyError, ValueError, OSError) as exc:
-                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+            except _ApiError as exc:
+                self._send_json(exc.status, {"error": exc.message})
+            except (KeyError, ValueError, OSError, TypeError, AttributeError) as exc:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": f"bad request: {exc}"[:300]})
 
     return ThreadingHTTPServer((host, port), Handler)
 
@@ -2164,27 +2216,28 @@ def send_guard_request(
 ) -> dict[str, Any]:
     """Send a command through the running local daemon, or fall back to an in-process barrier."""
     url = f"http://{host}:{port}/api/guard"
-    headers = {"Content-Type": "application/json"}
+    headers = {"Content-Type": "application/json", "X-Separ-Client": "cli"}
     token_path = (Path(workdir) if workdir is not None else default_live_workdir()) / "api.token"
     with contextlib.suppress(OSError):  # no daemon ran in this work directory: falls back below
         headers["X-Refmon-Token"] = token_path.read_text(encoding="utf-8").strip()
-    payload = json.dumps(
-        {
-            "command": command,
-            "origin": origin,
-            "role": role,
-            "execute": execute,
-            "allow_non_block_exec": True,
-        }
-    ).encode("utf-8")
+    body: dict[str, Any] = {"command": command, "execute": execute, "allow_non_block_exec": True}
+    # origin and role go to the daemon only when chosen; it accepts them in lab mode only
+    if origin != "none":
+        body["origin"] = origin
+    if role != "interactive_shell":
+        body["role"] = role
+    payload = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=6.0) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         # The daemon answered and refused: never fall back to running the command in-process.
+        detail = ""
+        with contextlib.suppress(Exception):
+            detail = ": " + json.loads(exc.read().decode("utf-8")).get("error", "")
         raise ValueError(
-            f"the Separ daemon refused the request (HTTP {exc.code}); "
+            f"the Separ daemon refused the request (HTTP {exc.code}){detail}; "
             "pass --workdir of the running daemon"
         ) from exc
     except (urllib.error.URLError, TimeoutError, ConnectionError):
@@ -2223,6 +2276,7 @@ def serve_forever(
     policy_path: str | Path | None = None,
     public_key_path: str | Path | None = None,
     enforce: bool = False,
+    lab: bool = False,
 ) -> int:
     from .health import LIVE_CAPABILITIES, HealthMonitor
     from .notify import ConsoleChannel
@@ -2232,7 +2286,7 @@ def serve_forever(
     enforcer, why_simulated = make_enforcer(enforce, workdir)
     barrier = LiveBarrier(
         workdir=workdir, hub=hub, policy_path=policy_path, public_key_path=public_key_path,
-        enforcer=enforcer,
+        enforcer=enforcer, lab=lab,
     )  # fmt: skip
     if isinstance(barrier.enforcer, SimulatedEnforcer) and why_simulated:
         barrier._log_line(f"containment: simulated ({why_simulated})")
