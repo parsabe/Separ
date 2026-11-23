@@ -1101,6 +1101,9 @@ async function refresh() {
       <div class="kv-row"><span>Ed25519 Digest</span><span class="mono">${esc(st.policy.digest.slice(0, 20))}...</span></div>
       <div class="kv-row"><span>Prior / Hold / Block (nats)</span><span class="mono">${st.policy.prior_lo} / ${st.policy.hold_thr} / ${st.policy.block_thr}</span></div>
       <div class="kv-row"><span>Canaries</span><span class="mono">${esc(st.policy.canaries.join(', '))}</span></div>
+      <div class="kv-row"><span>Containment</span><span class="mono">${esc(st.containment.backend)}: ${esc(Object.entries(st.containment.actions).filter(([k, v]) => v === 'available').map(([k]) => k).join(', ') || 'no action available')}</span></div>
+      ${st.containment.recent.slice(-5).reverse().map(a =>
+        `<div class="kv-row"><span>${esc(a.ts)} ${esc(a.action)}</span><span class="mono">${esc(a.target)} -> ${esc(a.detail)} (${esc(a.backend)})</span></div>`).join('')}
     `;
 
     const rk = st.rootkit;

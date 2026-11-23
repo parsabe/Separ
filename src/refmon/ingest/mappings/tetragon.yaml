@@ -52,6 +52,7 @@ rules:
       # the starter (parent) is the actor of an exec (CLAUDE.md C2 convention)
       actor:
         id: {from: process_exec.parent.exec_id}
+        pid: {from: process_exec.parent.pid}  # host pid, for the enforcer only
         parent: {from: process_exec.parent.parent_exec_id}
         role:
           first:
@@ -86,6 +87,7 @@ rules:
       ts: {from: time}
       actor:
         id: {from: process_kprobe.process.exec_id}
+        pid: {from: process_kprobe.process.pid}  # host pid, for the enforcer only
         parent: {from: process_kprobe.process.parent_exec_id}
         role: &kprobe_role
           first:
@@ -107,6 +109,7 @@ rules:
       ts: {from: time}
       actor:
         id: {from: process_kprobe.process.exec_id}
+        pid: {from: process_kprobe.process.pid}  # host pid, for the enforcer only
         parent: {from: process_kprobe.process.parent_exec_id}
         role: *kprobe_role
         user: {from: process_kprobe.process.uid, default: unknown}

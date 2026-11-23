@@ -151,7 +151,12 @@ class HealthMonitor:
                 "sandbox_watcher",
             )  # fmt: skip
         # v2.1 deception, v2.2 ingest, review 2026-11: who can change the policy, containment
-        for name in ("decoy_conditions", "ingest_conditions", "policy_conditions"):
+        for name in (
+            "decoy_conditions",
+            "ingest_conditions",
+            "policy_conditions",
+            "containment_conditions",
+        ):
             extra = getattr(self.barrier, name, None)
             for key, category, severity, title, message, subject in extra() if extra else ():
                 out[key] = Condition(key, category, severity, title, message, subject)
@@ -261,6 +266,10 @@ class HealthMonitor:
             "pid": os.getpid(),
             "started": self.state.started.isoformat(timespec="seconds"),
             "mode": mode,
+            "containment": {
+                "backend": barrier.enforcer.backend,
+                "actions": barrier.enforcer.capabilities(),
+            },
             "interval": interval,
             "stale_after": stale_after,
             "problems": [
@@ -389,6 +398,7 @@ def check_health(workdir: Path, now: datetime | None = None) -> tuple[int, dict[
         "device": beat.get("device", "unknown"),
         "pid": doc.get("pid"),
         "mode": doc.get("mode"),
+        "containment": doc.get("containment"),
         "heartbeat_age_s": round(age, 1),
         "stale_after_s": stale_after,
         "policy_digest": beat.get("policy_digest"),

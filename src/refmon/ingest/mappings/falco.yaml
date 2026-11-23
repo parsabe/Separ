@@ -51,6 +51,7 @@ rules:
       # the starter is the actor of an exec; the new program shows up as the actor of its own events
       actor:
         id: "{output_fields[proc.ppid]}@{output_fields[container.id]}"
+        pid: {from: "output_fields[proc.ppid]"}  # host pid, for the enforcer only
         role: {from: "output_fields[proc.pname]", basename: true, strip_version: true, map: roles, default: other}
         user: {from: "output_fields[user.name]", default: unknown}
       object:
@@ -68,6 +69,7 @@ rules:
       ts: {from: time}
       actor:
         id: "{output_fields[proc.pid]}@{output_fields[container.id]}"
+        pid: {from: "output_fields[proc.pid]"}  # host pid, for the enforcer only
         parent: "{output_fields[proc.ppid]}@{output_fields[container.id]}"
         role: {from: "output_fields[proc.name]", basename: true, strip_version: true, map: roles, default: other}
         user: {from: "output_fields[user.name]", default: unknown}
@@ -87,6 +89,7 @@ rules:
       ts: {from: time}
       actor:
         id: "{output_fields[proc.pid]}@{output_fields[container.id]}"
+        pid: {from: "output_fields[proc.pid]"}  # host pid, for the enforcer only
         parent: "{output_fields[proc.ppid]}@{output_fields[container.id]}"
         role: {from: "output_fields[proc.name]", basename: true, strip_version: true, map: roles, default: other}
         user: {from: "output_fields[user.name]", default: unknown}

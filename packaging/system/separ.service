@@ -10,6 +10,9 @@ RuntimeDirectory=separ
 RuntimeDirectoryMode=0755
 StateDirectory=separ
 WorkingDirectory=/var/lib/separ
+# Containment is simulated (decisions logged, nothing paused, killed or cut off) until you add
+# --enforce to ExecStart: then SIGSTOP/SIGKILL on real pids from the sensors, nftables rules in
+# table `inet separ`, and a root-owned quarantine. `separ health` lists what is available.
 # The daemon refuses to start without a signed /etc/separ/policy.yaml + admin.pub (separ setup).
 ExecStart=/usr/bin/separ serve --port 8765 --workdir /var/lib/separ --ingest /etc/separ/ingest.yaml --policy /etc/separ/policy.yaml --public-key /etc/separ/admin.pub
 # re-read and verify the signed policy (it never signs or changes it)

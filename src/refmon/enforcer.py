@@ -12,6 +12,17 @@ from .simworld import SimWorld
 
 
 class SimulatedEnforcer:
+    backend = "simulated"
+
+    def capabilities(self) -> dict[str, str]:
+        """Nothing on the host is touched: every action is recorded only."""
+        from .enforcer_linux import ACTIONS
+
+        return dict.fromkeys(ACTIONS, "simulated")
+
+    def note_pid(self, actor_id: str, pid: int) -> None:
+        """A simulated enforcer never acts on a real process; the pid is not kept."""
+
     def __init__(self, world: SimWorld | None = None) -> None:
         self.world = world
         self.actions: list[Action] = []

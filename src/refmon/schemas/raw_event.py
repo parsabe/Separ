@@ -46,6 +46,10 @@ class RawObjectRef(BaseModel):
 class RawEvent(EventBase):
     object: RawObjectRef
     attrs: dict[Identifier, RawAttrValue] = Field(default_factory=dict)
+    # The real process id of the actor, when the sensor gives one (review 2026-11, item 3). It is
+    # platform data for the enforcer, not evidence: Observe hands it to the enforcer's pid map and
+    # drops it, so no Event, log or verdict carries it. Without it containment is `unavailable`.
+    pid: int | None = Field(default=None, gt=0)
 
     @field_validator("attrs")
     @classmethod

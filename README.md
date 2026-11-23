@@ -49,6 +49,11 @@ Sensors (CLI Guard, Tetragon eBPF, Falco, SSHD, Shibboleth, 6-Engine Rootkit)
    ▼
 [ 6. Contain ] ──► Kill process tree, cut network, quarantine files (0400), notify GUI & webhooks
 ```
+Containment is **simulated** by default (decisions are logged, nothing is touched; `separ health`
+says so). The system daemon contains for real with `separ serve --enforce` as root: SIGSTOP/SIGKILL
+of real pids reported by a sensor (Tetragon, Falco), an nftables cut per cgroup, a root-owned
+quarantine. A process without a sensor-reported pid is never guessed at; the action is logged as
+`unavailable`.
 
 ### The Three Questions
 | Question | What It Checks | Why It Matters |

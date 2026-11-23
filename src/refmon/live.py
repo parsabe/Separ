@@ -39,6 +39,7 @@ from .config import (
     check_trusted,
     resolve_policy_paths,
 )
+from .enforcer import SimulatedEnforcer
 from .families import NONE as NO_FAMILY
 from .families import classify, classify_judgement
 from .golden import load_golden_cases
@@ -53,7 +54,7 @@ from .pseudonym import Pseudonymizer
 from .replay import ReplaySource
 from .report import Reporter, action_taken, what_happened
 from .rootkit import RootkitScanReport, ScanConfig, evaluate_rootkit_scan
-from .schemas import Actor, Decision, EventType, Mode, RawEvent, RawObjectRef
+from .schemas import Action, Actor, Decision, EventType, Mode, RawEvent, RawObjectRef
 from .tactics import tactics_for
 
 _WEB_EXEC_SUFFIXES = {
@@ -314,8 +315,12 @@ class LiveBarrier:
         public_key_path: str | Path | None = None,
         golden_dir: Path | None = None,
         hub: NotificationHub | None = None,
+        enforcer: Any = None,
     ) -> None:
-        """`policy_path` and `public_key_path` default to /etc/separ (root) or the user's
+        """`enforcer`: a LinuxEnforcer to contain for real (`serve --enforce` as root); by
+        default a SimulatedEnforcer, and health reports "containment: simulated".
+
+        `policy_path` and `public_key_path` default to /etc/separ (root) or the user's
         $XDG_CONFIG_HOME/separ. Without a signed policy there the barrier refuses to start: it
         never generates a policy and never holds a private key (review 2026-11, items 1 and 2)."""
         self.workdir = Path(workdir) if workdir is not None else default_live_workdir()
@@ -394,6 +399,11 @@ class LiveBarrier:
         self.device_pseudonym = self.pseudonymizer.device(self.device_name)
         # a daemon runs for weeks: keep six hours of stories (A62); verdicts are already logged
         self.pipeline = Pipeline(self.policy, key=self._device_key, gate=True, retain=_RETAIN_S)
+        # review 2026-11, item 3: every Action the gate decides goes to the enforcer; real pids
+        # reach it from the sensors through Observe (and are dropped there)
+        self.enforcer = enforcer if enforcer is not None else SimulatedEnforcer()
+        self.pipeline.observe.pid_sink = self.enforcer.note_pid
+        self._actions_tail: deque[dict[str, Any]] = deque(maxlen=60)
         self.reporter = Reporter(self.pipeline)
         self.last_rootkit: RootkitScanReport = self._run_rootkit_scan()
         self._snapshot_existing_sandbox()
@@ -538,6 +548,7 @@ class LiveBarrier:
         strongest: dict[str, Any] = {}  # one notification per story: its final decision
         for raw_ev in events:
             outputs = self.pipeline.process(raw_ev)
+            self._enforce(outputs)
             observed = self.pipeline.observe.buffer[-1]
             ev_json = observed.to_json_line()
             self._events_count += 1
@@ -574,6 +585,54 @@ class LiveBarrier:
             last_story_id = next(reversed(self.pipeline.linker.records))
         judgement = self.pipeline.judge(self.pipeline.record(last_story_id))
         return last_story_id, judgement
+
+    def _enforce(self, outputs: list[Any], undo: list[str] = ()) -> None:
+        """Carry out the gate's Actions (and undo earlier ones) and log every result."""
+        backend = self.enforcer.backend
+        for action_id in undo:
+            res = self.enforcer.undo(action_id)
+            self._record_action("undo", action_id, "", res, backend)
+        for item in outputs:
+            if isinstance(item, Action):
+                res = self.enforcer.act(item)
+                self._record_action(item.type.value, item.action_id, item.target.ref, res, backend)
+
+    def _record_action(self, kind: str, action_id: str, ref: str, res: Any, backend: str) -> None:
+        entry = {
+            "ts": datetime.now(UTC).strftime("%H:%M:%S"),
+            "action": kind,
+            "action_id": action_id,
+            "target": ref[:24],
+            "ok": bool(res.ok),
+            "detail": res.detail,
+            "backend": backend,
+        }
+        self._actions_tail.append(entry)
+        self._log_line(f"ACTION {kind} {entry['target'] or action_id} -> {res.detail} ({backend})")
+
+    def containment_conditions(self) -> list[tuple[str, str, str, str, str, str]]:
+        """Degraded protection for every containment action that cannot happen on this host."""
+        if self.enforcer.backend == "simulated":
+            return [
+                (
+                    "degraded:containment_simulated", "degraded", "warning",
+                    "Degraded protection",
+                    "containment: simulated. Decisions are made and logged, but no process is "
+                    "paused or killed and no network is cut (run the system daemon as root with "
+                    "--enforce)",
+                    "containment_simulated",
+                )
+            ]  # fmt: skip
+        missing = sorted(k for k, v in self.enforcer.capabilities().items() if v != "available")
+        if not missing:
+            return []
+        return [
+            (
+                "degraded:containment_partial", "degraded", "warning", "Degraded protection",
+                f"containment actions not available on this host: {', '.join(missing)}",
+                "containment:" + ",".join(missing),
+            )
+        ]  # fmt: skip
 
     def _notify_verdict(self, rep: Any) -> None:
         v = rep.verdict
@@ -1700,6 +1759,7 @@ class LiveBarrier:
             else:
                 res = self.pipeline.gate.answer_user(hold_id, answer, now)
             self.reporter.consume(res.actions)
+            self._enforce(res.actions, undo=res.undo)
             case = self.pipeline.gate.holds[hold_id]
             self._log_line(
                 f"HOLD RESOLVED {hold_id} ({platform}) answer={answer} -> state={case.state.value}"
@@ -1852,6 +1912,11 @@ class LiveBarrier:
                 "holds": holds,
                 "quarantined": quarantined,
                 "rootkit": self.last_rootkit.to_dict(),
+                "containment": {
+                    "backend": self.enforcer.backend,
+                    "actions": self.enforcer.capabilities(),
+                    "recent": list(self._actions_tail)[-20:],
+                },
                 "health": self.health.snapshot() if self.health is not None else None,
                 "barrier_log": list(self._barrier_tail)[-50:],
                 "events_log": list(self._events_tail)[-25:],
@@ -2076,6 +2141,18 @@ def send_guard_request(
         ).to_dict()
 
 
+def make_enforcer(enforce: bool, workdir: str | Path | None) -> tuple[Any, str]:
+    """(enforcer, why it is simulated). Real containment only with --enforce and as root."""
+    if not enforce:
+        return None, "start with --enforce to contain for real"
+    if not (hasattr(os, "geteuid") and os.geteuid() == 0):
+        return None, "--enforce needs root"
+    from .enforcer_linux import LinuxEnforcer
+
+    base = Path(workdir) if workdir is not None else default_live_workdir()
+    return LinuxEnforcer(base / "quarantine-root"), ""
+
+
 def serve_forever(
     *,
     host: str = "127.0.0.1",
@@ -2088,15 +2165,22 @@ def serve_forever(
     ingest: str | Path | None = None,
     policy_path: str | Path | None = None,
     public_key_path: str | Path | None = None,
+    enforce: bool = False,
 ) -> int:
     from .health import LIVE_CAPABILITIES, HealthMonitor
     from .notify import ConsoleChannel
 
     hub = hub if hub is not None else NotificationHub()
     hub.local.append(ConsoleChannel())
+    enforcer, why_simulated = make_enforcer(enforce, workdir)
     barrier = LiveBarrier(
-        workdir=workdir, hub=hub, policy_path=policy_path, public_key_path=public_key_path
-    )
+        workdir=workdir, hub=hub, policy_path=policy_path, public_key_path=public_key_path,
+        enforcer=enforcer,
+    )  # fmt: skip
+    if isinstance(barrier.enforcer, SimulatedEnforcer) and why_simulated:
+        barrier._log_line(f"containment: simulated ({why_simulated})")
+    elif not isinstance(barrier.enforcer, SimulatedEnforcer):
+        barrier.enforcer.log = barrier._log_line
     barrier.start_background_watcher()
     if decoys is not None:
         from .deception.runtime import load_settings
@@ -2133,6 +2217,14 @@ def serve_forever(
     )
     print(f"  Sandbox watch : {barrier.sandbox_dir}", flush=True)
     print(f"  Quarantine    : {barrier.quarantine_dir}", flush=True)
+    caps = barrier.enforcer.capabilities()
+    print(
+        f"  Containment   : {barrier.enforcer.backend}"
+        + (f" ({why_simulated})" if why_simulated else "")
+        + " | "
+        + ", ".join(f"{k}={v.split(':')[0]}" for k, v in caps.items()),
+        flush=True,
+    )
     print(f"  Live logs     : {barrier.logs_dir}", flush=True)
     print(f"  API token     : {barrier.api_token_path} (required by every /api/ call)", flush=True)
     print(
@@ -2323,6 +2415,7 @@ def launch_gui(
     ingest: str | Path | None = None,
     policy_path: str | Path | None = None,
     public_key_path: str | Path | None = None,
+    enforce: bool = False,
 ) -> int:
     """Launch the Separ Reference Monitor GUI, connecting to an active daemon if one exists."""
     import urllib.request
@@ -2393,4 +2486,5 @@ def launch_gui(
         ingest=ingest_cfg,
         policy_path=policy_path,
         public_key_path=public_key_path,
+        enforce=enforce,
     )

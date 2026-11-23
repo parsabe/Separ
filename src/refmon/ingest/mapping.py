@@ -281,6 +281,8 @@ class ActorSpec(BaseModel):
     user: Any = "unknown"
     parent: Any = None
     interactive: Any = False
+    # the actor's real process id, where the sensor gives one: only the enforcer uses it
+    pid: Any = None
 
 
 class ObjectSpec(BaseModel):
@@ -431,6 +433,8 @@ class Mapper:
             parent = value_spec(a.parent).evaluate(record, tb) if a.parent is not None else None
             if parent not in (None, ""):
                 actor["parent"] = clean_identifier(parent)
+            pid = value_spec(a.pid).evaluate(record, tb) if a.pid is not None else None
+            pid = int(pid) if pid not in (None, "") and str(pid).isdigit() else None
             content = (
                 value_spec(ev.object.content).evaluate(record, tb) if ev.object.content else None
             )
@@ -463,6 +467,7 @@ class Mapper:
                         "content": None if content is None else str(content)[:65536],
                     },
                     "attrs": values,
+                    "pid": pid if pid else None,
                 },
                 context={"extra_roles": self.extra_roles},
             )

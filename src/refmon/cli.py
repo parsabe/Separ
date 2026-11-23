@@ -211,6 +211,12 @@ def main(argv: list[str] | None = None) -> int:
     srv.add_argument("--decoys", default=None, help="decoys.yaml: run decoy services and watcher")
     srv.add_argument("--ingest", default=None, help="ingest.yaml: external sensors (mapping files)")
     _policy_args(srv)
+    srv.add_argument(
+        "--enforce",
+        action="store_true",
+        help="contain for real (SIGSTOP/SIGKILL, nftables, root quarantine); needs root. "
+        "Default off: decisions are logged, containment is simulated",
+    )
     _notify_args(srv)
     srv.add_argument(
         "--rootkit-interval",
@@ -490,6 +496,7 @@ def _run(args: argparse.Namespace) -> int:
             ingest=ingest_cfg,
             policy_path=args.policy,
             public_key_path=args.public_key,
+            enforce=args.enforce,
         )
     elif args.command == "ingest":
         from .ingest.cli import run as run_ingest
@@ -572,6 +579,11 @@ def _run(args: argparse.Namespace) -> int:
             for key in ("pid", "mode", "heartbeat_age_s", "policy_digest"):
                 if info.get(key) is not None:
                     print(f"  {key:16} {info[key]}")
+            cont = info.get("containment") or {}
+            if cont:
+                print(f"  {'containment':16} {cont.get('backend')}")
+                for action, state in (cont.get("actions") or {}).items():
+                    print(f"    {action:20} {state}")
             st = info.get("self_test") or {}
             if st:
                 failed = ", ".join(st.get("failed") or []) or "none"

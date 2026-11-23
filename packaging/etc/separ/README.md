@@ -41,7 +41,17 @@ journalctl -o json -f _COMM=sshd _COMM=sshd-session | socat - UNIX-CONNECT:/run/
 tetra getevents -o json | socat - UNIX-CONNECT:/run/separ/tetragon.sock
 ```
 
-### 4. Enable and Start the System Service
+### 4. Containment: simulated until you enable it
+By default the daemon decides and logs, but contains nothing (`separ health` says
+`containment: simulated`). Add `--enforce` to `ExecStart` in `separ.service` (it needs root) to
+make holds and blocks real: SIGSTOP/SIGKILL of the process tree (cgroup v2 freezer when the
+process has its own cgroup), an nftables rule in table `inet separ` that cuts the process's
+network (needs `nft` and cgroup v2), and a root-owned quarantine for files. Only processes whose
+real pid a sensor reported (Tetragon, Falco) can be touched; without one the action is logged as
+`unavailable`. Never PID 1, never Separ itself. `separ health` lists each action as available or
+unavailable.
+
+### 5. Enable and Start the System Service
 ```bash
 systemctl daemon-reload
 systemctl enable --now separ.service

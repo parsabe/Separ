@@ -307,6 +307,7 @@ systemctl --user enable --now separ-user.service
 \texttt{separ setup --server|--laptop} & Initialize keys and generate signed \texttt{policy.yaml} upfront. \\
 \texttt{separ policy show|sign|set-mode} & Verify, re-sign or change the mode of the policy (admin key via \texttt{--key}). \\
 \texttt{separ reload} & Make the running daemon re-read and verify its signed policy. \\
+\texttt{separ serve --enforce} & Contain for real (root only): SIGSTOP/SIGKILL, nftables network cut, root quarantine. Without it containment is simulated. \\
 \texttt{separ gui} & Open standalone Reference Monitor GUI (attaches to active daemon). \\
 \texttt{separ serve} & Run background daemon headlessly (for servers / \texttt{systemd}). \\
 \texttt{separ health --json} & External heartbeat check for Nagios, Icinga, cron, or Prometheus. \\
@@ -342,6 +343,10 @@ separ health --workdir /var/lib/separ \
   \item \textbf{Warning: \texttt{Degraded protection: no host sensor}} \\
   \emph{Cause:} Separ is running without any external sensors connected in \texttt{ingest.yaml}, so it only sees commands passed through \texttt{separ guard} or files in its watched sandbox. \\
   \emph{Fix:} Normal on laptops; on servers, configure \texttt{sshd-journald} or \texttt{tetragon} in \texttt{/etc/separ/ingest.yaml} and restart \texttt{separ.service}.
+
+  \item \textbf{Warning: \texttt{Degraded protection: containment: simulated}} \\
+  \emph{Cause:} The daemon runs without \texttt{--enforce} (or not as root): it decides and logs, but pauses, kills and cuts off nothing. \\
+  \emph{Fix:} On servers with Tetragon or Falco connected, add \texttt{--enforce} to \texttt{ExecStart} in \texttt{separ.service}. \texttt{separ health} then lists which actions are available (the network cut needs \texttt{nft} and cgroup v2). A process no sensor reported a real pid for is never touched (logged as \texttt{unavailable}).
 
   \item \textbf{A legitimate internal script or campus portal was blocked} \\
   \emph{Cause:} The destination host is not listed in the policy's trusted hosts/subnets. \\

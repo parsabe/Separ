@@ -109,6 +109,8 @@ class Observe:
         self.buffer: deque[Event] = deque()
         # Optional: receives (canary name, raw source address, time) of a decoy hit (A71).
         self.decoy_sink: Callable[[str, str, datetime], None] | None = None
+        # Optional: receives (actor id, real pid) for the enforcer; the pid is then dropped.
+        self.pid_sink: Callable[[str, int], None] | None = None
 
     def fingerprint(self, content: str) -> str:
         return (
@@ -129,6 +131,8 @@ class Observe:
             self.buffer.popleft()
 
     def _observe(self, ev: RawEvent) -> Event:
+        if ev.pid is not None and self.pid_sink is not None:
+            self.pid_sink(ev.actor.id, ev.pid)
         raw = ev.attrs
         attrs = {k: v for k, v in raw.items() if k in EVENT_ATTR_KEYS and k not in OBSERVE_OWNED}
         content = ev.object.content
