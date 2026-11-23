@@ -16,7 +16,7 @@ Earlier evaluations on retired seeds are listed at the end.
 | tag | commit | |
 |---|---|---|
 | v2.3.1-base | cbf07d0 | v2.3 plus the review 2026-11 Part 1 fixes (no evaluated decision changed) |
-| v2.4 | f1f313f | review 2026-11 Part 2; A80 to A82 behind policy flags, off until approved |
+| v2.4 | 79cae65 | review 2026-11 Part 2; A80 to A82 behind policy flags, off until approved |
 <!-- END GENERATED: versions -->
 
 `v1.0` is frozen. Each later version changes structural rules in response to the findings of the
@@ -294,7 +294,7 @@ Privacy audit
 ## 6. Tests
 
 <!-- BEGIN GENERATED: tests -->
-`1 failed, 2557 passed, 5 skipped, 1 xfailed`
+`2559 passed, 5 skipped, 1 xfailed`
 <!-- END GENERATED: tests -->
 
 The suite includes property tests (labels never lost along process chains, no raw content in any
@@ -405,48 +405,15 @@ regenerated; `make publishable` runs it alone). The content is clean. These are 
 <!-- BEGIN GENERATED: publishable -->
 ```
 tracked files scanned: 482, history: every ref
-findings in the working tree: 31
-  README.md:200: url docs.pydantic.dev/
-  README.md:200: url pyyaml.org/
-  README.md:200: url cryptography.io/
-  README.md:201: url tetragon.io/
-  README.md:201: url falco.org/
-  README.md:201: url systemd.io/
-  README.md:201: url www.shibboleth.net/
-  README.md:201: url kubernetes.io/
-  README.md:201: url www.postfix.org/
-  README.md:201: url www.keycloak.org/
-  README.md:202: url matplotlib.org/
-  README.md:202: url www.latex-project.org/
-  documentation/main.tex:369: url doi.org/10.1214/aoms/1177731118
-  documentation/main.tex:372: url doi.org/10.1093/biomet/41.1-2.100
-  documentation/main.tex:375: url doi.org/10.1016/C2009-0-27609-4
-  documentation/main.tex:378: url doi.org/10.1007/3-540-68697-5_1
-  documentation/main.tex:381: url doi.org/10.1007/11681878_14
-  documentation/main.tex:384: url www.usenix.org/conference/usenixsecurity17/technical-session
-  documentation/main.tex:387: url doi.org/10.1109/SP.2019.00026
-  documentation/main.tex:390: url doi.org/10.14722/ndss.2020.24046
-findings in the history (added lines of every commit of every ref): 34
+findings in the working tree: 0
+findings in the history (added lines of every commit of every ref): 7
+  123d893: public IP 139.18.x.x
   5210f89: public IP 139.18.x.x
   558ef68: e-mail address p***@s***.de
   558ef68: e-mail address s***@t***.de
   558ef68: home path
   558ef68: public IP 139.18.x.x
-  558ef68: url attack.mitre.org/techniques/T1204/004/
-  558ef68: url cryptography.io/
-  558ef68: url docs.pydantic.dev/
-  558ef68: url doi.org/10.1007/11681878_14
-  558ef68: url doi.org/10.1007/3-540-68697-5_1
-  558ef68: url doi.org/10.1016/C2009-0-27609-4
-  558ef68: url doi.org/10.1093/biomet/41.1-2.100
-  558ef68: url doi.org/10.1109/DSN.2005.39
-  558ef68: url doi.org/10.1109/SP.2019.00026
-  558ef68: url doi.org/10.1145/3605764.3623985
-  558ef68: url doi.org/10.1214/aoms/1177731118
-  558ef68: url doi.org/10.14722/ndss.2020.24046
-  558ef68: url falco.org/
-  558ef68: url falco.org/docs/
-  558ef68: url gitlab.com/apparmor/apparmor
+  e5574db: public IP 139.18.x.x
 replay events checked as post-Observe events: 528, rejected: 0
 identities recorded by git as author or committer: 5 (masked here so that this output can be published)
   G***b <n***y@g***b.com>
