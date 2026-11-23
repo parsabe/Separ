@@ -1,0 +1,453 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[ngerman]{babel}
+\input{style.tex}
+
+\title{\Large\bfseries Separ v2.4 auf Linux-Rechnern der TU Bergakademie Freiberg\\[4pt]
+\large Leitfaden für den IT-Sicherheitsbeauftragten, die Administratorinnen und Administratoren des
+URZ und den Datenschutzbeauftragten}
+\author{Parsa Besharat (studentisches Forschungsprojekt)\\ \contact \quad|\quad \repo}
+\date{November 2026 \quad|\quad gilt für Separ 2.4.0}
+
+\begin{document}
+\maketitle
+
+\begin{callout}
+\textbf{Zum Gebrauch dieses Leitfadens.} Abschnitt~\ref{sec:summary} ist eine einseitige
+Zusammenfassung für Entscheidungsträger. Die Abschnitte~\ref{sec:does}--\ref{sec:approvals}
+erklären, was Separ tut und welche Freigaben nötig sind. Die
+Abschnitte~\ref{sec:req}--\ref{sec:pilot} richten sich an die Administratorinnen und
+Administratoren, die den Pilotbetrieb durchführen. Jeder Befehl und jede Option in diesem
+Leitfaden stammt aus \texttt{docs/it-facts.md} im Repository, das die genauen Hilfetexte von
+Separ 2.4.0 festhält. Netzbereiche, Namen und Adressen in Beispielen sind Platzhalter wie
+\texttt{<your campus range>}. Meldungen und Befehlsausgaben von Separ sind englisch und werden
+hier im Original wiedergegeben.
+\end{callout}
+
+\tableofcontents
+\newpage
+
+% ============================================================================
+\section{Zusammenfassung für Entscheidungsträger}
+\label{sec:summary}
+
+\paragraph{Was Separ ist.} Ein studentisches Forschungsprojekt (Version 2.4.0), das Vorgänge auf
+einem Linux-Rechner betrachtet und drei Fragen stellt: Kam die Eingabe von außen (eine Webseite,
+eine E-Mail, ein Download, die Eingabe eines KI-Agenten, eine Anfrage an einen Webdienst)? Tut das
+Programm etwas, das seine Rolle nie tut (ein Webserver startet eine Shell)? Versucht es etwas
+Gefährliches (Code herunterladen und ausführen, sich verstecken, sich beim Systemstart
+eintragen, Passwörter lesen)? Für Befehle, die über Separ geleitet werden, entscheidet Separ
+\emph{bevor} sie laufen: zulassen, anhalten (nachfragen) oder blockieren. Für Sensordaten, die
+eine Administratorin oder ein Administrator anbindet, entscheidet es im Nachhinein. Separ enthält
+kein maschinelles Lernen und sendet nichts ins Internet.
+
+\paragraph{Worum gebeten wird.} Ein \textbf{reiner Beobachtungs-Pilot auf 3 bis 5 Linux-Rechnern
+für etwa zwei Wochen}. Im Beobachtungsmodus (\cmd{observe}) blockiert Separ nichts: Es hält nur
+fest, was es anhalten oder blockieren \emph{würde}, damit Fehlalarme bei echter Arbeit gezählt
+werden können, bevor jemand eine Durchsetzung erwägt.
+
+\paragraph{Was es aufzeichnet.} Auf jedem Rechner eine Zeile je beobachtetem Ereignis und je
+Entscheidung. Darin sind Befehle, Webadressen, Dateipfade und Dateiinhalte durch verschlüsselte
+Fingerabdrücke ersetzt (HMAC-SHA256 mit einem zufälligen Schlüssel je Rechner). Einige Kennungen
+speichert es jedoch im Klartext: Anmeldenamen, von Sensoren gemeldete Rechnernamen und die Namen
+in Quarantäne verschobener Dateien (Abschnitt~\ref{sec:facts}). Nichts verlässt den Rechner, es
+sei denn, eine Administratorin oder ein Administrator richtet einen Benachrichtigungskanal ein;
+diese Nachrichten nennen den Rechner nur unter einem Pseudonym und enthalten keinen Benutzernamen.
+
+\paragraph{Was es nicht kann.}
+\begin{itemize}
+  \item Es sieht nur, was ihm zugeleitet wird: Befehle über \cmd{separ guard}, die
+        Browsererweiterung, einen überwachten Ordner und angebundene Sensoren. Ein Befehl, der ohne
+        \cmd{separ guard} in ein Terminal eingefügt wird, oder ein Skript, das über seinen Namen
+        gestartet wird, wird vor der Ausführung nicht gesehen.
+  \item Im Blockiermodus blockiert es auch legitime Installationsanweisungen, die von einer
+        Webseite eingefügt werden (im Test wurden 5 von 10 alltäglichen eingefügten Befehlen
+        blockiert). Deshalb ist der Pilot ein reiner Beobachtungsbetrieb.
+  \item Echte Prozesse werden nur eingedämmt, wenn der Systemdienst als root mit \cmd{--enforce}
+        läuft; sonst wird die Eindämmung nur simuliert. root, und bei Einrichtungen je Benutzer
+        derselbe Benutzer, kann Separ beenden.
+  \item Es wurde nicht an echten Benutzern oder Servern gemessen. CPU- und Speicherbedarf sind
+        unbekannt und sollen im Pilotbetrieb gemessen werden.
+\end{itemize}
+
+\paragraph{Benötigte Entscheidungen.} Die Freigabe durch den IT-Sicherheitsbeauftragten, eine
+datenschutzrechtliche Entscheidung des Datenschutzbeauftragten und, bei Rechnern von
+Beschäftigten oder Servern, an denen sich Beschäftigte anmelden, die Beteiligung des
+Personalrats (Abschnitt~\ref{sec:approvals}).
+
+% ============================================================================
+\section{Was Separ tut und was nicht}
+\label{sec:does}
+
+\subsection{Die drei Fragen}
+\begin{description}
+  \item[Herkunft (Origin).] Kam die auslösende Eingabe von außerhalb der Vertrauensgrenze? Inhalte
+    von einer Webseite, aus einer E-Mail, aus einem Download, von einem Wechseldatenträger, eine
+    Anfrage aus dem Internet oder die Eingabe eines KI-Agenten erhalten eine \emph{Markierung}
+    (Label), die über 30 Minuten verblasst, sofern der Vorgang nicht gefährlich wird.
+  \item[Vertrag (Contract).] Handelt das Programm außerhalb seiner Rolle? Jede Rolle (interaktive
+    Shell, Webserver-Prozess, Paketinstallation, \ldots) hat einen signierten Vertrag darüber, was
+    sie darf.
+  \item[Wirkung (Effect).] Versucht der Vorgang etwas Gefährliches: von einem unbekannten Ort
+    nachladen, sich verstecken, sich dauerhaft einnisten, Rechte ausweiten, sich im Netz seitwärts
+    bewegen, Zugangsdaten lesen, Sicherheitswerkzeuge manipulieren, viele Dateien auf einmal
+    ändern?
+\end{description}
+Separ addiert die Belege der drei Fragen zu einem Wert. Über einer Schwelle hält es an (fragt
+nach), über einer höheren blockiert es; ohne Vertragsverletzung blockiert es nie allein auf
+Verdacht. Einige Ereignisse blockieren immer: das Lesen eines Köder-Passworts (Canary), der
+Zugriff eines markierten Programms auf ein geschütztes Gut und Versuche, Separ zu beenden oder zu
+verändern.
+
+\subsection{Wo es hinsieht}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+\textbf{Kontrollpunkt} & \textbf{Wann es entscheidet} \\
+\midrule
+\cmd{separ guard -- <command>} & bevor der Befehl läuft \\
+Browsererweiterung & wenn eine Seite in die Zwischenablage schreibt, ein Download beginnt,
+  optional beim Öffnen einer Seite \\
+Überwachte Sandbox und Web-Root & wenn eine Datei erscheint \\
+Angebundene Sensoren (Tetragon, Falco, sshd, Shibboleth, \ldots) & nach dem Ereignis, aus deren
+  Protokollen \\
+Rootkit-Prüfung (\cmd{separ scan-rootkit}) & regelmäßig, nur lesend \\
+\bottomrule
+\end{tabularx}
+
+\subsection{Ehrliche Grenzen}
+\begin{itemize}
+  \item \textbf{Eingefügte Installationsbefehle werden im Blockiermodus blockiert.} Ein von einer
+    Webseite eingefügter Befehl, der sichtbar herunterlädt, Rechte ausweitet oder in eine Shell
+    weiterleitet, scheitert an allen drei Fragen. Im Testsatz wurden so \cmd{git clone}, das
+    \cmd{rustup}-Installationsprogramm, \cmd{sudo apt update} und \cmd{wget} blockiert. Vertrauenswürdige
+    Ziele einzutragen ändert daran nichts.
+  \item \textbf{Getippte Befehle, die nachladen oder Rechte ausweiten, werden angehalten}
+    (nachgefragt), nie blockiert.
+  \item \textbf{Nicht gesehen:} ein Einfügen ins Terminal ohne \cmd{separ guard} oder die
+    Erweiterung, ein über seinen Namen gestartetes Skript, ein kompiliertes Programm, alles nicht
+    Angebundene.
+  \item \textbf{Beenden von Separ:} root kann den Systemdienst beenden; ein Benutzer kann seinen
+    eigenen Dienst je Benutzer beenden. Separ meldet sein Beenden, und eine externe
+    Zustandsprüfung bemerkt einen fehlenden Heartbeat, aber beides verhindert es nicht.
+  \item \textbf{Eindämmung} wird nur simuliert, es sei denn, der Systemdienst läuft als root mit
+    \cmd{--enforce} (Abschnitt~\ref{sec:extras}); auch dann werden nur Prozesse angefasst, die ein
+    Sensor mit Prozess-ID gemeldet hat.
+\end{itemize}
+
+% ============================================================================
+\section{Freigaben vor der Installation}
+\label{sec:approvals}
+
+\begin{enumerate}
+  \item \textbf{IT-Sicherheitsbeauftragter}: gibt den Pilotbetrieb, die Rechner und die Personen
+    mit Zugriff auf die Protokolle frei.
+  \item \textbf{Datenschutzbeauftragter}: entscheidet, ob eine Datenschutz-Folgenabschätzung nach
+    Art.~35 DSGVO erforderlich ist, und nimmt die Verarbeitung in das Verzeichnis von
+    Verarbeitungstätigkeiten auf (Art.~30 DSGVO). Das Datenblatt in Abschnitt~\ref{sec:facts}
+    listet auf, was gespeichert wird.
+  \item \textbf{Personalrat}: bei Rechnern von Beschäftigten und bei Servern, an denen sich
+    Beschäftigte anmelden, weil Separ dort Benutzeraktivität aufzeichnet.
+  \item \textbf{Schriftliche Information der Benutzerinnen und Benutzer} der Pilotrechner vor
+    Beginn: was aufgezeichnet wird, wie lange, wer es sehen kann und an wen man sich wendet.
+  \item \textbf{Private Geräte}: nur mit ausdrücklicher Einwilligung der Eigentümerin oder des
+    Eigentümers.
+\end{enumerate}
+
+\subsection{Datenblatt Datenschutz}
+\label{sec:facts}
+Aus einem Laborlauf von Separ 2.4.0 (\texttt{docs/it-facts.md}, Abschnitt 4).
+
+\noindent{\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{0.3\textwidth}X>{\raggedright\arraybackslash}p{0.22\textwidth}@{}}
+\toprule
+\textbf{Datei} & \textbf{Daten} & \textbf{Form} \\
+\midrule
+\cmd{logs/events.jsonl} & Befehl, URL, Pfad, Dateiinhalt, Anmeldezeile & verschlüsselter Fingerabdruck \\
+ & Rechner bei überwachten Befehlen, Browser, Sandbox & Pseudonym \\
+ & Rechner bei Ereignissen angebundener Sensoren & Rechnername im \textbf{Klartext} \\
+ & Anmeldename (\cmd{actor.user}); Konto bei Anmelde-Sensoren & \textbf{Klartext} \\
+ & Quelladresse einer Anmeldung & Klasse oder verschlüsselter Fingerabdruck \\
+\cmd{logs/verdicts.jsonl} & Entscheidung, Wert, Erklärung; Benutzernamen & \textbf{Benutzernamen im Klartext} \\
+\cmd{logs/notifications.jsonl}, Webhook & Rechner, feste Sätze, Entscheidung & Pseudonym, kein Benutzer \\
+\cmd{logs/barrier.log}, Dashboard & Namen von Dateien in Quarantäne; Pfad des Arbeitsverzeichnisses & \textbf{Klartext} \\
+\cmd{heartbeat.json} & Rechner, Prozess-ID des Dienstes & Pseudonym \\
+Köder-Vorschläge (nur mit Ködern) & Adresse einer externen / internen Quelle & Klartext / versiegelt \\
+\bottomrule
+\end{tabularx}}
+
+\begin{warnbox}
+\textbf{Rechte der Protokolldateien.} Der Systemdienst legt seine Protokolle mit der
+Standard-umask in \cmd{/var/lib/separ} (Modus 0755) an, daher können in Separ 2.4.0
+\textbf{alle lokalen Benutzer sie lesen}. Schränken Sie dies vor dem Pilotbetrieb mit einer
+Drop-in-Datei ein: \cmd{sudo systemctl edit separ}, die beiden Zeilen \cmd{[Service]} und
+\cmd{UMask=0077} hinzufügen, dann \cmd{sudo systemctl restart separ} (bereits angelegte Dateien
+behalten ihre Rechte). Separ rotiert seine Protokolle nicht; löschen oder archivieren Sie sie am
+Ende des Pilotbetriebs wie mit dem Datenschutzbeauftragten vereinbart.
+\end{warnbox}
+
+Aufbewahrung, Zugriff und Löschung legt der Datenschutzbeauftragte fest; Separ selbst löscht
+nichts. Das Dashboard zeigt die letzten Ereignisse, auf einem Server mit angebundenen Sensoren also
+auch Kontonamen anderer Benutzer; geben Sie den Zugang zum Dashboard nur den in der Freigabe
+genannten Personen.
+
+% ============================================================================
+\section{Mindestanforderungen}
+\label{sec:req}
+\begin{itemize}
+  \item Linux auf x86\_64 (\cmd{uname -m} zeigt \cmd{x86\_64}) mit systemd; Ubuntu 24.04,
+    Debian 13 oder ein System der RHEL-Familie 9 mit Python 3.12 (wird mit dem Paket installiert,
+    siehe Abschnitt~\ref{sec:install}). Debian 12 wird nicht unterstützt (Python 3.11).
+  \item Einmalig root-Rechte, um das Paket und die signierte Richtlinie zu installieren.
+  \item Kein Internetzugang bei der Installation nötig (das Paket enthält seine
+    Python"=Abhängigkeiten), keine eingehenden Verbindungen: der Dienst lauscht nur
+    auf \cmd{127.0.0.1} (standardmäßig auf Port 8765).
+  \item Kein Kernelmodul, kein Cloud-Konto, keine Lizenz.
+  \item Hardware: \textbf{nicht gemessen}. CPU-, Speicher- und Plattenbedarf sollen im
+    Pilotbetrieb gemessen werden. Eine vollständige Rootkit-Prüfung dauerte auf einem
+    Entwicklungs-Laptop etwa 26 Sekunden.
+\end{itemize}
+
+% ============================================================================
+\section{Rollen und Schlüsselverwahrung}
+\label{sec:roles}
+\begin{description}
+  \item[Richtlinienverantwortliche] (eine Administratorin oder ein Administrator des URZ und eine
+    Vertretung). Verwahrt den privaten Signaturschlüssel \cmd{admin.key} auf einem
+    \textbf{Administrationsrechner} (Standard \cmd{\textasciitilde/.separ-admin/admin.key}, Modus
+    0600), \textbf{nie auf einem geschützten Rechner}. Hält eine Offline-Sicherung vor (zum
+    Beispiel einen verschlüsselten USB-Stick in einem Tresor). Signiert jede Änderung der
+    Richtlinie.
+  \item[Bearbeitende (Responder).] Lesen Benachrichtigungen und das Dashboard, beantworten
+    Anhaltungen auf Servern und erheben die Kennzahlen des Pilotbetriebs.
+\end{description}
+Die geschützten Rechner erhalten nur \cmd{policy.yaml} und \cmd{admin.pub}; der Dienst prüft die
+Signatur und kann selbst nichts signieren.
+
+\paragraph{Wenn der Schlüssel verloren geht.} Bereits installierte Richtlinien funktionieren
+weiter, aber keine Änderung kann signiert werden. Erzeugen Sie auf dem Administrationsrechner einen
+neuen Schlüssel und eine neue Richtlinie (Abschnitt~\ref{sec:policy}, mit einem neuen Pfad für
+\cmd{--key} und einem neuen \cmd{--config-dir}), installieren Sie die neue \cmd{admin.pub} und
+\cmd{policy.yaml} auf jedem Rechner und laden Sie neu.
+
+\paragraph{Wenn der Schlüssel gestohlen wird.} Wer ihn besitzt, kann eine Richtlinie signieren,
+die Separ in den Beobachtungsmodus schaltet oder alles erlaubt. Separ hat keine Sperrliste:
+Ersetzen Sie \cmd{admin.pub} und \cmd{policy.yaml} auf allen Rechnern gleichzeitig (wie oben),
+vergleichen Sie den Digest, den \cmd{separ policy show} auf jedem Rechner ausgibt, mit dem von
+Ihnen signierten, und melden Sie den Vorfall dem IT-Sicherheitsbeauftragten.
+
+% ============================================================================
+\section{Installation}
+\label{sec:install}
+Laden Sie das Paket und \cmd{SHA256SUMS} der Version von \releases{} herunter, prüfen und
+installieren Sie es:
+\begin{lstlisting}
+BASE=https://github.com/parsabe/Separ/releases/download/v2.4
+curl -fLO $BASE/SHA256SUMS
+# Ubuntu 24.04 / Debian 13
+curl -fLO $BASE/separ_2.4.0_amd64.deb
+sha256sum --ignore-missing -c SHA256SUMS
+sudo apt install ./separ_2.4.0_amd64.deb
+# RHEL-family 9
+curl -fLO $BASE/separ-2.4.0-1.x86_64.rpm
+sha256sum --ignore-missing -c SHA256SUMS
+sudo dnf install python3.12 ./separ-2.4.0-1.x86_64.rpm
+\end{lstlisting}
+Die Version wird von der CI des Projekts auf Ubuntu 24.04, Debian 13 und Rocky Linux 9 gebaut und
+installationsgetestet \todo{bestätigen, dass die Version v2.4 mit ihren Paketen veröffentlicht
+ist}.
+
+\paragraph{Wohin die Dateien kommen.} \cmd{/usr/bin/separ}; eine eigene Python-Umgebung in
+\path{/opt/separ/venv}, gebaut aus den Wheels in \path{/opt/separ/wheels}; Vorlagen in
+\cmd{/etc/separ/} (\cmd{ingest.yaml}, Beispiele, \cmd{mappings/}); die System-Unit
+\path{/usr/lib/systemd/system/separ.service} und die Benutzer-Unit
+\path{/usr/lib/systemd/user/separ-user.service}, beide nicht aktiviert; die Browsererweiterung und
+ihre Richtlinienvorlagen in \cmd{/usr/share/separ/}. \textbf{Es werden weder Richtlinie noch
+Schlüssel installiert.} Zustand und Protokolle liegen in \cmd{/var/lib/separ}.
+
+\paragraph{Prüfung.}
+\begin{lstlisting}
+separ --version            # separ 2.4.0
+separ health --json        # "not_running" (exit code 1) until the service is started
+\end{lstlisting}
+
+% ============================================================================
+\section{Arbeitsablauf für die Richtlinie}
+\label{sec:policy}
+
+\subsection{Richtlinie auf dem Administrationsrechner erstellen}
+\begin{lstlisting}
+separ setup --server --mode observe --config-dir ./tubaf-policy \
+  --campus-cidr <your campus range> --vpn-cidr <your VPN range> \
+  --wlan-cidr <your WLAN range> --mail-domain <your mail domain> \
+  --key ~/.separ-admin/admin.key
+\end{lstlisting}
+Verwenden Sie für Arbeitsplatzrechner \cmd{--laptop} statt \cmd{--server}. Mit \cmd{--server} ist
+\cmd{--campus-cidr} Pflicht; Separ hat keinen Campus-Bereich fest eingebaut. Der Befehl gibt genau
+aus, was er eingerichtet hat, und schreibt \cmd{policy.yaml} und \cmd{admin.pub} nach
+\cmd{./tubaf-policy}; der Schlüssel wird angelegt, falls er noch nicht existiert.
+
+\subsection{Auf einem geschützten Rechner installieren}
+\begin{lstlisting}
+scp tubaf-policy/policy.yaml tubaf-policy/admin.pub <host>:
+sudo install -o root -g root -m 0644 policy.yaml /etc/separ/policy.yaml
+sudo install -o root -g root -m 0644 admin.pub /etc/separ/admin.pub
+separ policy show --policy /etc/separ/policy.yaml     # signature, mode, digest
+sudo systemctl enable --now separ.service
+\end{lstlisting}
+Der Dienst startet nicht ohne signierte Richtlinie und weist eine Richtlinie oder einen Schlüssel
+zurück, die ein symbolischer Link sind, nicht root gehören oder für Gruppe oder andere schreibbar
+sind. Dienste je Benutzer auf vom URZ verwalteten Rechnern verwenden \cmd{/etc/separ}, sobald dort
+eine Richtlinie liegt, nach denselben Regeln.
+
+\subsection{Modus oder Richtlinie ändern}
+Auf dem Administrationsrechner, dann wie oben kopieren und installieren, dann neu laden:
+\begin{lstlisting}
+separ policy set-mode warn --policy tubaf-policy/policy.yaml --key ~/.separ-admin/admin.key
+separ policy sign --policy tubaf-policy/policy.yaml --key ~/.separ-admin/admin.key  # after editing
+sudo separ reload --workdir /var/lib/separ        # or: sudo systemctl reload separ
+\end{lstlisting}
+Das Neuladen liest die Datei nur neu ein und prüft sie; eine zurückgewiesene Datei lässt die
+letzte gültige Richtlinie in Kraft, und \cmd{separ health} meldet \emph{Policy rejected}.
+
+% ============================================================================
+\section{Plan für den Pilotbetrieb}
+\label{sec:pilot}
+
+\paragraph{Aufbau.} 3--5 Linux-Rechner, Beobachtungsmodus, etwa zwei Wochen, Freigaben liegen vor,
+Benutzerinnen und Benutzer sind informiert, Rechte der Protokolle eingeschränkt
+(Abschnitt~\ref{sec:facts}). Wer eingefügte Befehle beurteilen lassen möchte, startet sie über
+\cmd{separ guard -- <command>}; mit der (optionalen) Browsererweiterung werden Schreibvorgänge von
+Seiten in die Zwischenablage auch ohne dies beurteilt.
+
+\paragraph{Wöchentlich, je Rechner.}
+\begin{lstlisting}
+sudo grep -c 'Would hold (not enforced)'  /var/lib/separ/logs/notifications.jsonl
+sudo grep -c 'Would block (not enforced)' /var/lib/separ/logs/notifications.jsonl
+\end{lstlisting}
+Halten Sie fest: die Zahl der Vorgänge, die angehalten oder blockiert worden wären; für jeden, was
+es war (Benachrichtigung und Dashboard erklären es in Sätzen; Separ speichert den Befehlstext nicht,
+fragen Sie daher die Benutzerin oder den Benutzer, was zu dieser Zeit ausgeführt wurde); und ob es
+ein Fehlalarm war. Notieren Sie außerdem CPU- und Speicherbedarf des Prozesses \cmd{separ} und die
+Größe von \cmd{/var/lib/separ/logs}.
+
+\paragraph{Das Dashboard.} \cmd{sudo separ gui --workdir /var/lib/separ --no-browser} gibt die
+lokale Adresse mit ihrem Token aus; öffnen Sie sie auf dem Rechner selbst (oder über einen
+SSH-Tunnel zu Port 8765). Es zeigt jeden Vorgang mit seinen drei Fragen, seinem Wert und seiner
+Erklärung.
+
+\paragraph{Kriterien für den nächsten Schritt} (vor dem Pilotbetrieb mit dem
+IT-Sicherheitsbeauftragten festzulegen):
+\begin{itemize}
+  \item für den \textbf{Warnmodus} (\cmd{warn}; Benutzer sehen einen Hinweis, nichts wird
+    gestoppt): keine Blockierung bei Routinearbeit, die sich nicht über die Richtlinie beheben
+    lässt, und höchstens etwa eine Anhaltung je Benutzer und Woche;
+  \item für den \textbf{Blockiermodus} (\cmd{block}): ein weiterer Zeitraum im Warnmodus mit
+    denselben Zielen, eine Entscheidung über eingefügte Installationsbefehle (sie werden
+    blockiert) und ein vereinbarter Ablauf für die Reaktion.
+\end{itemize}
+
+% ============================================================================
+\section{Optionale Erweiterungen}
+\label{sec:extras}
+Jede Erweiterung hat eigene Voraussetzungen und wird für den Pilotbetrieb nicht benötigt.
+\begin{description}
+  \item[Browsererweiterung.] Erfordert Firefox ESR 128+ oder Chromium/Chrome 121+ und einen Dienst
+    je Benutzer. Als root (für Chromium zusätzlich \cmd{--chromium-extension-id <id>}):
+\begin{lstlisting}
+sudo separ browser-install --system
+\end{lstlisting}
+    anschließend die Erweiterung mit den Vorlagen für Unternehmensrichtlinien in
+    \path{/usr/share/separ/browser/} verteilen.
+  \item[Echte Durchsetzung.] Erfordert den Systemdienst als root, cgroup v2 und \cmd{nft} für die
+    Netztrennung sowie einen Sensor, der Prozess-IDs meldet (Tetragon oder Falco). Ergänzen Sie
+    \cmd{--enforce} in der Zeile \cmd{ExecStart} der Unit mit \cmd{sudo systemctl edit separ}.
+    \cmd{separ health} listet danach jede Eindämmungsmaßnahme als verfügbar oder nicht.
+  \item[Kernel-Sensoren] (Tetragon, Falco). Installieren Sie den Sensor, aktivieren Sie seine
+    Zuordnung (Mapping) in \path{/etc/separ/ingest.yaml} und testen Sie zuerst eine Stichprobe:
+\begin{lstlisting}
+separ ingest list
+separ ingest check /etc/separ/mappings/<mapping>.yaml --input <sample> --judge
+\end{lstlisting}
+  \item[Anmelde- und Mail-Sensoren] (sshd, Shibboleth IdP, Keycloak, Postfix/Dovecot,
+    M365-Audit). Ihre Regeln beginnen im Beobachtungsmodus, und ein Vorgang, den nur sie erzeugt
+    haben, wird höchstens angehalten. Sie zeichnen Kontonamen im Klartext auf; beziehen Sie sie in
+    die datenschutzrechtliche Entscheidung ein.
+  \item[Benachrichtigungen.] Optionen von \cmd{separ serve} (in \cmd{ExecStart} ergänzen);
+    \cmd{--notify-on} wählt die Kategorien. Nachrichten nennen den Rechner nur unter einem
+    Pseudonym.
+\begin{lstlisting}
+--notify-webhook <url>          # a Mattermost or Slack incoming webhook
+--notify-command "mail -s Separ admin@example.org"
+\end{lstlisting}
+\end{description}
+
+% ============================================================================
+\section{Betrieb}
+\label{sec:ops}
+
+\paragraph{Zustandsprüfung und Überwachung.} \cmd{separ health} liest die Heartbeat-Datei:
+Rückgabewert 0 gesund, 1 nicht laufend oder veraltet, 2 laufend mit einem Problem. Ein
+cron-Eintrag (\cmd{crontab -e} als root) benachrichtigt einmal je Ausfall und einmal bei der
+Wiederherstellung:
+\begin{lstlisting}
+*/5 * * * * separ health --workdir /var/lib/separ --notify-command "mail -s Separ admin@example.org"
+\end{lstlisting}
+
+\paragraph{Rootkit-Prüfungen.} Der Dienst prüft stündlich (\cmd{--rootkit-interval}, Standard
+3600~s) und durchsucht dabei nur die bisher vergebenen Prozess-IDs. Eine vollständige manuelle
+Prüfung: \cmd{sudo separ scan-rootkit} (etwa 26~s auf einem Entwicklungs-Laptop;
+\cmd{--pid-sweep bounded} ist schneller). Messen Sie die Rate vorübergehender Abweichungen einmal
+auf einem sauberen Rechner:
+\begin{lstlisting}
+sudo separ scan-rootkit --calibrate 20 --workdir /var/lib/separ
+\end{lstlisting}
+Rückgabewerte: 0 nichts zu prüfen, 1 Befunde zu prüfen, 2 Befunde auf Blockierniveau.
+
+\paragraph{Aktualisieren.} Installieren Sie das Paket der neuen Version wie in
+Abschnitt~\ref{sec:install}, dann \cmd{sudo systemctl restart separ}. Die Richtlinie in
+\cmd{/etc/separ} und der Zustand in \cmd{/var/lib/separ} bleiben erhalten.
+
+\paragraph{Deinstallieren und Zurückrollen.} \cmd{sudo apt remove separ} oder \cmd{sudo dnf remove
+separ} entfernt das Programm, die eigene Python-Umgebung und die vom Paket in \cmd{/etc/separ}
+installierten Dateien; Richtlinie, öffentlicher Schlüssel und \cmd{/var/lib/separ} (Protokolle)
+bleiben und müssen wie vereinbart gelöscht oder archiviert werden. Zum Zurückrollen entfernen Sie
+das Paket und installieren die Paketdatei der vorherigen Version.
+
+\paragraph{Fehlerbehebung.}
+\begin{description}
+  \item[\glqq no signed policy at \ldots: run \cmd{separ setup} first\grqq]
+    Legen Sie die Dateien \cmd{policy.yaml} und \cmd{admin.pub} in \cmd{/etc/separ} ab (Abschnitt~\ref{sec:policy}).
+  \item[\glqq refusing \ldots: writable by group or others\grqq{} / \glqq not root\grqq] Installieren
+    Sie die Dateien erneut mit \cmd{install -o root -g root -m 0644}; auch der Ordner
+    \cmd{/etc/separ} muss root gehören und darf für Gruppe und andere nicht schreibbar sein.
+  \item[Policy rejected (\cmd{unsigned}, \cmd{bad\_signature})] Die Datei wurde ohne Signatur
+    bearbeitet oder mit einem anderen Schlüssel signiert. Signieren Sie sie auf dem
+    Administrationsrechner und installieren Sie sie erneut.
+  \item[Degraded protection] Listet auf, was Separ auf diesem Rechner nicht sehen kann (zum
+    Beispiel kein Kernel-Sensor, simulierte Eindämmung). Im Pilotbetrieb normal; eine Information,
+    kein Fehler.
+\end{description}
+
+% ============================================================================
+\section{Häufige Fragen von Benutzern und Service-Desk}
+\label{sec:faq}
+\begin{description}
+  \item[Warum wurde mein Befehl angehalten?] Er kam von außen (zum Beispiel von einer Webseite
+    eingefügt) oder tat etwas, das sein Programm normalerweise nicht tut, und sah danach aus, als
+    könne er nachladen, sich verstecken, sich einnisten oder an Zugangsdaten gelangen. Im
+    Beobachtungsmodus wurde nichts gestoppt; im Blockiermodus lief ein angehaltener Befehl, der über
+    \cmd{separ guard} gestartet wurde, nicht.
+  \item[Warum wurde ein normaler Installationsbefehl blockiert?] Von einer Webseite eingefügte
+    Befehle, die Code herunterladen und ausführen, sehen genauso aus wie die Köder
+    \glqq reparieren Sie Ihren Browser\grqq. Von Hand eingetippt werden sie nur angehalten.
+    Während des Pilotbetriebs wird nichts blockiert.
+  \item[Wie melde ich einen Fehlalarm?] Nennen Sie dem Service-Desk die Uhrzeit, den Rechner und
+    was Sie gerade getan haben; die Bearbeitenden finden den Vorgang im Dashboard. Die
+    Richtlinienverantwortlichen können eine eng gefasste, befristete Ausnahme in die Richtlinie
+    aufnehmen und sie signieren.
+  \item[Liest Separ meine Befehle oder Dateien?] Es speichert keinen Befehlstext, keine Adressen und
+    keine Dateiinhalte, nur verschlüsselte Fingerabdrücke. Es zeichnet jedoch Ihren Anmeldenamen und
+    die Uhrzeit jedes Ereignisses auf.
+  \item[An wen wende ich mich?] An den Service-Desk des URZ; für das Projekt: \contact.
+\end{description}
+
+\end{document}
