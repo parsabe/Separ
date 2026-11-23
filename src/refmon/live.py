@@ -353,6 +353,7 @@ class LiveBarrier:
         self._events_tail: deque[str] = deque(maxlen=100)
         self._seen_files: dict[str, tuple[int, int]] = {}
         self._seen_links: set[str] = set()
+        self._seen_inodes: dict[str, int] = {}
         self._stop_event = threading.Event()
         self._watcher_thread: threading.Thread | None = None
         self.watcher_beat = time.monotonic()  # the watcher loop's last turn (health check)
@@ -1235,6 +1236,7 @@ class LiveBarrier:
         for root in (self.web_root_dir, self.workspace_dir):
             for path, st in _regular_files(root):
                 self._seen_files[str(path)] = (st.st_mtime_ns, st.st_size)
+                self._seen_inodes[str(path)] = st.st_ino
 
     def _report_web_root_symlink(self, path: Path) -> dict[str, Any] | None:
         """A symlink in the web root is a finding of its own (it can expose any file the server
@@ -1334,16 +1336,15 @@ class LiveBarrier:
                 )
 
             # 2. Check workspace for mass file modifications (ransomware / wiper burst).
-            changed_ws: list[Path] = []
-            for path, st in _regular_files(self.workspace_dir):
-                key = str(path)
-                sig = (st.st_mtime_ns, st.st_size)
-                if self._seen_files.get(key) == sig:
-                    continue
-                self._seen_files[key] = sig
-                changed_ws.append(path)
-
-            if changed_ws:
+            # Review 2026-11, item 14: `new_file` is reported truthfully, and only changes to
+            # files that already existed reach the mass-change detector: a rewrite in place, a
+            # rename (the same inode under a new name), or a replacement (a new file in a folder
+            # where an existing file vanished in the same scan: encrypt a copy, delete the
+            # original). Files that are simply new (unzip, git checkout) are reported, not fed.
+            rewritten, created = self._workspace_changes()
+            if created:
+                self._log_line(f"WORKSPACE {len(created)} new file(s), not a mass change")
+            if rewritten:
                 actor = self._make_actor(self._next_id("proc:ws"), "interactive_shell", user)
                 ws_events = [
                     RawEvent(
@@ -1356,20 +1357,20 @@ class LiveBarrier:
                             class_="file",
                             content=str(p.relative_to(self.workspace_dir)),
                         ),
-                        attrs={"executable": False, "new_file": True, "path_group": "user_docs"},
+                        attrs={"executable": False, "new_file": False, "path_group": "user_docs"},
                     )
-                    for p in changed_ws
+                    for p in rewritten
                 ]
                 story_id, j = self._feed_raw_events(ws_events)
                 ws_label = attack_type or (
-                    f"Watched File Burst ({len(changed_ws)} files)"
-                    if len(changed_ws) > 10
-                    else f"Watched Workspace Write ({len(changed_ws)} files)"
+                    f"Watched File Burst ({len(rewritten)} existing files changed)"
+                    if len(rewritten) > 10
+                    else f"Watched Workspace Write ({len(rewritten)} existing files changed)"
                 )
                 self._tag_story(
                     story_id,
                     attack_type=ws_label,
-                    category=category if len(changed_ws) > 10 else "live",
+                    category=category if len(rewritten) > 10 else "live",
                     expected=expected,
                     enforcement_note=_describe_enforcement(
                         self.policy.mode, j.decision, executed=False, quarantined=False
@@ -1378,13 +1379,55 @@ class LiveBarrier:
                 incidents.append(
                     {
                         "kind": "workspace_write_batch",
-                        "files": len(changed_ws),
+                        "files": len(rewritten),
+                        "new_files": len(created),
                         "story_id": story_id,
                         "decision": j.decision.value,
                         "log_odds": round(float(j.log_odds or 0.0), 2),
                     }
                 )
+            elif created:
+                incidents.append({"kind": "workspace_new_files", "files": 0,
+                                  "new_files": len(created), "story_id": None,
+                                  "decision": "not_judged"})  # fmt: skip
         return incidents
+
+    def _workspace_changes(self) -> tuple[list[Path], list[Path]]:
+        """(existing files changed, new files) since the last scan of the workspace."""
+        prefix = str(self.workspace_dir) + os.sep
+        current = {str(p): (p, st) for p, st in _regular_files(self.workspace_dir)}
+        vanished = [k for k in self._seen_files if k.startswith(prefix) and k not in current]
+        gone_by_inode = {self._seen_inodes.get(k): k for k in vanished}
+        gone_dirs: dict[str, int] = {}
+        rewritten: list[Path] = []
+        fresh: list[Path] = []
+        for key, (path, st) in sorted(current.items()):
+            sig = (st.st_mtime_ns, st.st_size)
+            if key in self._seen_files:
+                if self._seen_files[key] != sig:
+                    rewritten.append(path)  # rewritten in place
+            elif st.st_ino in gone_by_inode:
+                rewritten.append(path)  # renamed
+                vanished.remove(gone_by_inode.pop(st.st_ino))
+            else:
+                fresh.append(path)
+            self._seen_files[key] = sig
+            self._seen_inodes[key] = st.st_ino
+        for key in vanished:
+            gone_dirs[str(Path(key).parent)] = gone_dirs.get(str(Path(key).parent), 0) + 1
+        created: list[Path] = []
+        for path in fresh:
+            folder = str(path.parent)
+            if gone_dirs.get(folder, 0) > 0:
+                gone_dirs[folder] -= 1
+                rewritten.append(path)  # replaced: an existing file vanished beside it
+            else:
+                created.append(path)
+        for key in [*vanished, *(k for k in list(self._seen_files) if k.startswith(prefix)
+                                  and k not in current)]:  # fmt: skip
+            self._seen_files.pop(key, None)
+            self._seen_inodes.pop(key, None)
+        return rewritten, created
 
     def _quarantine_file(self, path: Path) -> str | None:
         """Move a regular file into quarantine, 0400. Never follows a symlink: the entry itself
@@ -1554,8 +1597,13 @@ class LiveBarrier:
             if name == "ransomware":
                 batch_dir = self.workspace_dir / f"enc_{int(time.time() * 1000)}_{self._seq}"
                 batch_dir.mkdir(parents=True, exist_ok=True)
-                for idx in range(55):
-                    (batch_dir / f"doc_{idx:03d}.locked").write_text("cipher\n", encoding="utf-8")
+                docs = [batch_dir / f"doc_{idx:03d}.txt" for idx in range(55)]
+                for doc in docs:  # the user's documents, already there (new files: not judged)
+                    doc.write_text("report\n", encoding="utf-8")
+                self.scan_sandbox_once(category="live")
+                for doc in docs:  # encrypted: a .locked copy replaces each original
+                    doc.with_suffix(".locked").write_text("cipher\n", encoding="utf-8")
+                    doc.unlink()
                 inc_list = self.scan_sandbox_once(attack_type=label, category=cat, expected=exp)
                 inc = next(
                     (i for i in reversed(inc_list) if i.get("kind") == "workspace_write_batch"),
@@ -1573,15 +1621,17 @@ class LiveBarrier:
                     )
                 # Prune test files so workspace doesn't accumulate hundreds of files across runs
                 shutil.rmtree(batch_dir, ignore_errors=True)
-                for idx in range(55):
-                    self._seen_files.pop(str(batch_dir / f"doc_{idx:03d}.locked"), None)
+                for doc in docs:
+                    for gone in (doc, doc.with_suffix(".locked")):
+                        self._seen_files.pop(str(gone), None)
+                        self._seen_inodes.pop(str(gone), None)
                 return {
                     "attack_type": label,
                     "story_id": inc["story_id"],
                     "decision": inc["decision"],
                     "expected": exp,
                     "log_odds": inc["log_odds"],
-                    "note": "55 rapid file writes flagged mass_change.",
+                    "note": "55 existing documents encrypted at once flagged mass_change.",
                 }
 
             if name == "canary":

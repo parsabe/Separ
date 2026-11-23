@@ -94,11 +94,15 @@ def test_webshell_drop_is_quarantined_and_ransomware_burst_blocked(tmp_path: Pat
     assert len(quarantined) == 1
     assert (quarantined[0].stat().st_mode & 0o777) == 0o400
 
-    # Simulate a 55-file ransomware encryption burst inside watched sandbox/workspace.
+    # Simulate a 55-file ransomware encryption burst inside watched sandbox/workspace: the user's
+    # existing files are rewritten (review 2026-11 item 14: only changes to existing files count).
     burst = barrier.workspace_dir / "locked_batch"
     burst.mkdir()
     for idx in range(55):
-        (burst / f"file_{idx:03d}.enc").write_text("encrypted\n", encoding="utf-8")
+        (burst / f"file_{idx:03d}.txt").write_text("plain report\n", encoding="utf-8")
+    assert all(i["kind"] == "workspace_new_files" for i in barrier.scan_sandbox_once())
+    for idx in range(55):
+        (burst / f"file_{idx:03d}.txt").write_text("encrypted, longer\n", encoding="utf-8")
 
     incidents_burst = barrier.scan_sandbox_once()
     ws_inc = next(i for i in incidents_burst if i["kind"] == "workspace_write_batch")

@@ -166,8 +166,9 @@ TEMPLATES: tuple[Template, ...] = (
     Template("web_shell", "Web shell dropped into the web root", G_FILE,
              "write <web_root>/uploads/cmd_<time>.php  (harmless PHP stand-in)",
              "inbound_request", "web_worker", kind="webshell_drop"),
-    Template("ransom_burst", "Ransomware burst: 60 '.locked' files", G_FILE,
-             "write 60 files <workspace>/docs/*.locked", "none", kind="ransomware_burst"),
+    Template("ransom_burst", "Ransomware burst: 60 documents encrypted", G_FILE,
+             "encrypt 60 existing <workspace>/docs/*.txt into *.locked (originals removed)",
+             "none", kind="ransomware_burst"),
     # -- known limits --------------------------------------------------------------------------
     Template("hidden_script", "Malicious script run by name", G_LIMIT,
              "sh ../fakehome/Downloads/update.sh", "web", expect="miss",
@@ -497,10 +498,18 @@ class AttackLab:
         )
 
     def _ransom_burst(self) -> None:
+        """Encrypt 60 existing documents: a .locked copy replaces each original (item 14: new files
+        alone are not a mass change, so the documents exist and are seen first)."""
         burst = self.barrier.workspace_dir / "docs" / "burst"
         burst.mkdir(parents=True, exist_ok=True)
-        for i in range(60):
-            (burst / f"file-{i:02d}.txt.locked").write_bytes(os.urandom(64))
+        docs = [burst / f"file-{i:02d}.txt" for i in range(60)]
+        for doc in docs:
+            if not doc.exists():
+                doc.write_text("lab document\n", encoding="utf-8")
+        self.barrier.scan_sandbox_once(category="live")
+        for doc in docs:
+            doc.with_name(doc.name + ".locked").write_bytes(os.urandom(64))
+            doc.unlink()
 
     def _file_attack(self, t: Template, act, show: bool = False) -> LabResult:
         t0 = time.perf_counter()
