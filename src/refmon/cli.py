@@ -322,8 +322,10 @@ def main(argv: list[str] | None = None) -> int:
     grd.add_argument("--workdir", default=None)
     grd.add_argument(
         "--origin",
-        default="web",
+        default="none",
         choices=("web", "mail", "agent_input", "inbound_request", "download", "none"),
+        help="where the command came from (default none: typed by you). Only `web` etc. when you "
+        "know it was pasted from there; a daemon accepts it in lab mode only (serve --lab)",
     )
     grd.add_argument("--role", default="interactive_shell")
     grd.add_argument("--no-exec", action="store_true")

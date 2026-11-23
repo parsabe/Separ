@@ -694,7 +694,7 @@ class LiveBarrier:
         self,
         command: str,
         *,
-        origin: str = "web",
+        origin: str = "none",
         role: str = "interactive_shell",
         execute: bool = False,
         allow_non_block_exec: bool = False,
@@ -704,7 +704,10 @@ class LiveBarrier:
         source_domain: str | None = None,
         input_method: str | None = None,
     ) -> GuardOutcome:
-        """Judge a command as written. `source_domain` names where external content came from
+        """Judge a command as written. `origin` is `none` (typed locally) unless the caller
+        knows better: the browser extension passes `web` with the page as provenance (review
+        2026-11, item 10: a default of `web` scored `sudo apt update` as a web paste and blocked
+        it). `source_domain` names where external content came from
         (the page of a browser observation, v2.1); without it the first host in the command
         stands in, as before. `input_method` records how the content arrived; it is context, not
         evidence (no signal reads it)."""
@@ -2218,7 +2221,7 @@ def send_guard_request(
     *,
     host: str = "localhost",
     port: int = 8765,
-    origin: str = "web",
+    origin: str = "none",
     role: str = "interactive_shell",
     execute: bool = True,
     workdir: str | Path | None = None,
