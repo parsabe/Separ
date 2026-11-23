@@ -32,6 +32,17 @@ _PIPE_EXEC_RE = re.compile(
     r"\|\s*(?:sudo\s+)?(?:/(?:usr/)?bin/)?(?:(?:ba|z|da|k)?sh|python3?|perl)\b"
 )
 _ENCODE_RE = re.compile(r"\b(?:base64\b|-enc\b|fromhex\b|eval\s*\(|xxd\s+-r)")
+# review 2026-11, item 13: code assembled at run time inside an interpreter hides what it does
+# (`re.compile(` and `cursor.exec(` are methods, not the builtins, and are not counted)
+_CODE_HIDING_RE = re.compile(
+    r"(?<![.\w])(?:exec|compile|__import__)\s*\(|\bmarshal\.loads\b|\bcodecs\.decode\b"
+    r"|(?:''|\"\")\.join\(\s*map\(\s*chr\b|\bchr\(\s*\w+\s*\)\s*\+\s*chr\("
+    r"|\bbytes\(\s*\[[^\]]*\]\s*\)\s*\.decode\b"
+)
+# fetched code run through command substitution: bash -c "$(curl ...)", eval "$(wget -O- ...)"
+_SUBST_EXEC_RE = re.compile(
+    r"(?:\b(?:ba|z|da|k)?sh\s+(?:-\w+\s+)*-c|\beval)\s+[\"']?\$\(\s*(?:curl|wget|fetch|nc|ncat)\b"
+)
 # fetched code run through process substitution: bash <(curl ...), source <(...), . <(...)
 _PROC_SUBST_EXEC_RE = re.compile(
     r"(?:\b(?:ba|z|da|k)?sh|\bsource|(?:^|[;&|]\s*)\.)\s+<\(\s*(?:curl|wget|nc|ncat|python3?)\b"
@@ -50,6 +61,11 @@ _SHELL_NET_RE = re.compile(
     r"|\bs_client\b[^;&|]*-connect\s+([^:\s'\"]+):\d+"
 )
 _SOCAT_RE = re.compile(r"\b(?:tcp|udp|ssl|openssl)[46]?(?:-connect)?:([^:\s,'\"]+):\d+", re.I)
+# a host handed over in a variable: the destination is not in the text, so it is `unknown`
+_SOCKET_VAR_RE = re.compile(
+    r"\.connect\(\(\s*[A-Za-z_]\w*\s*,|fsockopen\(\s*\$\w+|TCPSocket\.(?:new|open)\(\s*[A-Za-z_]\w*\s*,"
+    r"|PeerAddr\s*=>\s*\$\w+|\bsocket\.create_connection\(\(\s*[A-Za-z_]\w*\s*,"
+)
 _SOCKET_CALL_RE = re.compile(
     r"(?:\.connect\(\(?|TCPSocket\.(?:new|open)\(|inet_aton\(|fsockopen\(|PeerAddr\s*=>\s*)"
     r"\s*['\"]([^'\":]+)"
@@ -155,11 +171,13 @@ class CommandIntent:
     preload: bool = False
     bulk: bool = False
     exfil: bool = False  # v2.0: the home directory or the root sent to a host
+    # item 13: a connection to a host the text does not name (a variable): destination `unknown`
+    unknown_destination: bool = False
 
     @property
     def behaviours(self) -> list[str]:
         out = []
-        if self.hosts:
+        if self.hosts or self.unknown_destination:
             out.append("network")
         for name in ("encoded", "persist", "privilege", "preload", "bulk", "exfil"):
             if getattr(self, name):
@@ -265,7 +283,8 @@ def analyze(cmd: str) -> CommandIntent:
     for h in [*written.hosts, *seen.hosts]:
         _add(out.hosts, h)
     out.url_paths = list(dict.fromkeys([*written.url_paths, *seen.url_paths]))
-    for name in ("encoded", "persist", "privilege", "preload", "bulk", "exfil"):
+    for name in ("encoded", "persist", "privilege", "preload", "bulk", "exfil",
+                 "unknown_destination"):  # fmt: skip
         setattr(out, name, getattr(written, name) or getattr(seen, name))
     out.encoded = out.encoded or hidden
     out.secret = (
@@ -311,8 +330,13 @@ def _analyze_text(text: str) -> CommandIntent:
                     break
 
     intent.encoded = bool(
-        _ENCODE_RE.search(text) or _PIPE_EXEC_RE.search(text) or _PROC_SUBST_EXEC_RE.search(text)
+        _ENCODE_RE.search(text)
+        or _PIPE_EXEC_RE.search(text)
+        or _PROC_SUBST_EXEC_RE.search(text)
+        or _SUBST_EXEC_RE.search(text)
+        or _CODE_HIDING_RE.search(text)
     )
+    intent.unknown_destination = bool(_SOCKET_VAR_RE.search(text))
     intent.privilege = bool(_PRIV_RE.search(low) or _CONTAINER_PRIV_RE.search(text))
     intent.preload = bool(_PRELOAD_RE.search(text))
     intent.bulk = bool(_BULK_DELETE_RE.search(text) or _BULK_ENCRYPT_RE.search(text))

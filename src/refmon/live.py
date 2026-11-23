@@ -764,6 +764,12 @@ class LiveBarrier:
                 raw_events.append(
                     raw(EventType.NET_CONNECT, "net_endpoint", f"{proc_id}@{host}", host=host)
                 )
+            if intent.unknown_destination:
+                # item 13: a host given in a variable; no host or address, so Observe names the
+                # destination class `unknown` (seen, matched no class), as for an unlisted host
+                raw_events.append(
+                    raw(EventType.NET_CONNECT, "net_endpoint", f"{proc_id}@<variable-host>")
+                )
             if intent.exfil:
                 # v2.0: the command sends the home directory or the root to a host. Its size is not
                 # known before it runs, so the barrier states the volume at which the policy's
