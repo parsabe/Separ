@@ -32,8 +32,16 @@ SHORT_GROUP = {
     "File attacks (really performed in the sandbox, the watcher must catch them)": "file",
     "Known limits (Refmon is expected to MISS these: honest testing)": "known-limit",
     "Benign controls (must be ALLOWED and run)": "benign",
+    "Benign controls pasted from the web (recorded: real outcome, not scored)": "control-web",
+    "Benign network commands typed locally (recorded: real outcome, not scored)": "control-typed",
 }
-EXPECT_TEXT = {"stop": "block/hold", "allow": "allow", "miss": "miss (limit)", "own": "-"}
+EXPECT_TEXT = {
+    "stop": "block/hold",
+    "allow": "allow",
+    "miss": "miss (limit)",
+    "own": "-",
+    "control": "recorded",
+}
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
@@ -96,6 +104,8 @@ def short_result(r: Any) -> str:
 
 def check_text(r: Any, mode: str) -> str:
     ok = r.verdict_ok
+    if r.expect == "control":
+        return "recorded"
     if ok is None:
         return "-"
     if r.expect == "miss":
@@ -265,6 +275,14 @@ def summary(records: Sequence[Record]) -> dict[str, Any]:
         "known_limits": len(limits),
         "known_limits_missed": sum(r.decision == "allow" for r in limits),
         "own_commands": len(own),
+        "controls": {
+            cat: {
+                d: sum(r.decision == d for r in records if r.category == cat)
+                for d in ("allow", "hold", "block")
+            }
+            for cat in ("control-web", "control-typed")
+            if any(r.category == cat for r in records)
+        },
         "decisions": {d: sum(r.decision == d for r in records) for d in ("block", "hold", "allow")},
         "failures": [r.template_id for r in records if r.check.startswith("FAIL")],
         "mean_judge_ms": round(sum(r.judge_ms for r in records) / max(1, len(records)), 2),
@@ -287,6 +305,12 @@ def markdown_report(records: Sequence[Record], meta: dict[str, Any], templates_m
         f"- Attacks stopped by Refmon (never ran / quarantined): **{s['attacks_stopped']}/{s['attacks']}**",
         f"- Benign commands allowed: **{s['benign_allowed']}/{s['benign']}**",
         f"- Known limits missed (documented): {s['known_limits_missed']}/{s['known_limits']}",
+        *(
+            f"- Benign {name} controls (recorded, not scored): allowed {c['allow']} / "
+            f"held {c['hold']} / blocked {c['block']}"
+            for cat, name in (("control-web", "web-origin"), ("control-typed", "typed network"))
+            if (c := s["controls"].get(cat))
+        ),
         f"- Own commands: {s['own_commands']}",
         f"- Decisions: block {s['decisions']['block']}, hold {s['decisions']['hold']}, "
         f"allow {s['decisions']['allow']}",

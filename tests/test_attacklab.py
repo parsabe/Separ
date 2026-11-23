@@ -29,8 +29,12 @@ def test_every_template_reaches_its_expected_outcome_in_block_mode(tmp_path: Pat
         elif t.expect == "allow":
             assert res.decision == "allow", t.id
             assert res.ran, t.id
-        else:  # known limit: documented miss
+        elif t.expect == "miss":  # known limit: documented miss
             assert res.decision == "allow", t.id
+        else:  # a recorded control (item 12): any outcome is recorded, nothing ever runs
+            assert t.expect == "control" and t.never_run, t.id
+            assert res.decision in ("allow", "hold", "block") and not res.ran, t.id
+            assert res.verdict_ok is None, t.id
     command_attacks = {t.command for t in TEMPLATES if t.expect == "stop" and t.kind == "command"}
     assert not command_attacks & set(executed)
 
@@ -297,3 +301,31 @@ def test_cli_analyze_newest_and_given_run(
     assert f"Analysis of {newest.name}" in capsys.readouterr().out
     assert cli_main(["lab", "--analyze", str(first)]) == 0
     assert f"Analysis of {first.name}" in capsys.readouterr().out
+
+
+def test_controls_are_recorded_with_their_real_outcome_and_reported(tmp_path: Path) -> None:
+    """Review 2026-11, item 12: benign controls from the web and typed network commands are
+    reported as allowed / held / blocked, never scored, never run."""
+    import json
+
+    from refmon.attacklab import G_CTRL_TYPED, G_CTRL_WEB, select
+
+    controls = select(["controls"])
+    web = [t for _, t in controls if t.group == G_CTRL_WEB]
+    typed = [t for _, t in controls if t.group == G_CTRL_TYPED]
+    assert len(web) == 10 and {t.origin for t in web} == {"web"}
+    assert len(typed) == 8 and {t.origin for t in typed} == {"none"}
+    lab, executed = _lab(tmp_path)
+    for _, t in controls:
+        lab.run_template(t)
+    assert executed == []
+    out = lab.save_report(tmp_path / "runs")
+    summary = json.loads((out / "summary.json").read_text())
+    counts = summary["controls"]
+    assert sum(counts["control-web"].values()) == 10
+    assert sum(counts["control-typed"].values()) == 8
+    assert summary["failures"] == []  # recorded, not scored
+    assert (
+        "Benign web-origin controls (recorded, not scored): allowed"
+        in (out / "report.md").read_text()
+    )

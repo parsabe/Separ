@@ -51,7 +51,9 @@ class Template:
     command: str
     origin: str = "web"
     role: str = "interactive_shell"
-    expect: str = "stop"  # stop (attack), allow (benign), miss (known limit: Refmon can't see it)
+    # stop (attack), allow (benign), miss (known limit: Refmon can't see it),
+    # control (benign, recorded with its real outcome, not scored: item 12)
+    expect: str = "stop"
     never_run: bool = False  # judged, but never executed by the lab
     kind: str = "command"  # command | webshell_drop | ransomware_burst
     story: str = ""
@@ -69,6 +71,24 @@ G_SERVER = "Server attacks (web worker / inbound request)"
 G_FILE = "File attacks (really performed in the sandbox, the watcher must catch them)"
 G_LIMIT = "Known limits (Refmon is expected to MISS these: honest testing)"
 G_BENIGN = "Benign controls (must be ALLOWED and run)"
+# review 2026-11, item 12: everyday commands, recorded with whatever Refmon decides (not scored and
+# not tuned): an honest view of false alarms on real work pasted from the web or typed locally
+G_CTRL_WEB = "Benign controls pasted from the web (recorded: real outcome, not scored)"
+G_CTRL_TYPED = "Benign network commands typed locally (recorded: real outcome, not scored)"
+_PROSE = (
+    "Thanks for the quick reply. The workshop starts at nine, please bring your laptop and the "
+    "printed handout; we will set up the environment together before the first exercise."
+)
+_EVERYDAY = (
+    ("git_clone", "git clone a public repository", "git clone https://github.com/torvalds/linux"),
+    ("pip_install", "pip install a package", "pip install requests"),
+    ("rustup", "official rustup installer one-liner", "curl -fsSL https://sh.rustup.rs | sh"),
+    ("apt_update", "sudo apt update", "sudo apt update"),
+    ("venv", "create a Python venv", "python3 -m venv .venv"),
+    ("docker_hello", "docker run hello-world", "docker run hello-world"),
+    ("wget_tarball", "download a tarball", "wget https://example.org/file.tar.gz"),
+    ("ssh_login", "ssh to a login node", "ssh user@login.example.org"),
+)
 
 TEMPLATES: tuple[Template, ...] = (
     # -- endpoint & social engineering ------------------------------------------------------------
@@ -167,7 +187,22 @@ TEMPLATES: tuple[Template, ...] = (
              "none", expect="allow"),
 )  # fmt: skip
 
-GROUP_ORDER = (G_SE, G_RCE, G_DATA, G_DESTROY, G_SERVER, G_FILE, G_LIMIT, G_BENIGN)
+# never run by the lab: they would use the network or change the real system
+TEMPLATES = (
+    *TEMPLATES,
+    *(Template(f"web_{tid}", f"pasted from the web: {title}", G_CTRL_WEB, cmd, "web",
+               expect="control", never_run=True) for tid, title, cmd in _EVERYDAY),
+    Template("web_url", "pasted from the web: a plain URL", G_CTRL_WEB,
+             "https://github.com/torvalds/linux", "web", expect="control", never_run=True),
+    Template("web_prose", "pasted from the web: a paragraph of prose", G_CTRL_WEB,
+             _PROSE, "web", expect="control", never_run=True),
+    *(Template(f"typed_{tid}", f"typed: {title}", G_CTRL_TYPED, cmd, "none",
+               expect="control", never_run=True) for tid, title, cmd in _EVERYDAY),
+)  # fmt: skip
+
+GROUP_ORDER = (
+    G_SE, G_RCE, G_DATA, G_DESTROY, G_SERVER, G_FILE, G_LIMIT, G_BENIGN, G_CTRL_WEB, G_CTRL_TYPED,
+)  # fmt: skip
 
 
 # -- terminal styling ------------------------------------------------------------------------------
@@ -242,8 +277,9 @@ class LabResult:
 
     @property
     def verdict_ok(self) -> bool | None:
-        """Did Refmon do what the template expects? None for your own commands."""
-        if self.expect == "own":
+        """Did Refmon do what the template expects? None for your own commands and for the
+        recorded controls (their outcome is reported, not scored)."""
+        if self.expect in ("own", "control"):
             return None
         caught = self.decision in ("block", "hold")
         if self.expect == "allow":
@@ -372,7 +408,9 @@ class AttackLab:
             role=role,
             execute=False,  # the lab decides below, after the pipeline's verdict
             attack_type=label,
-            category="benign" if expect == "allow" else ("live" if expect == "own" else "attack"),
+            category="benign"
+            if expect in ("allow", "control")
+            else ("live" if expect == "own" else "attack"),
             expected={"stop": "block", "allow": "allow"}.get(expect),
         )
         res = LabResult(label, expect, g.decision, g.log_odds, g.failed, g.override,
@@ -681,6 +719,12 @@ class AttackLab:
         if limits:
             missed = sum(r.decision == "allow" for r in limits)
             self.p(f"  known limits       : {missed}/{len(limits)} missed (documented)")
+        for group, name in ((G_CTRL_WEB, "web-origin"), (G_CTRL_TYPED, "typed network")):
+            rows = [r for r in self.results if r.expect == "control" and r.group == group]
+            if rows:
+                by = {d: sum(r.decision == d for r in rows) for d in ("allow", "hold", "block")}
+                self.p(f"  benign {name} controls: allowed {by['allow']} / held {by['hold']} / "
+                       f"blocked {by['block']} (recorded, not scored)")  # fmt: skip
         if own:
             by = {d: sum(r.decision == d for r in own) for d in ("block", "hold", "allow")}
             self.p(f"  your own commands  : {by['block']} block, {by['hold']} hold, "
@@ -806,6 +850,8 @@ def select(spec: list[str]) -> list[tuple[int, Template]]:
             out += [(n, t) for n, t in numbered if t.expect == "allow"]
         elif w == "limits":
             out += [(n, t) for n, t in numbered if t.expect == "miss"]
+        elif w == "controls":
+            out += [(n, t) for n, t in numbered if t.expect == "control"]
         elif "-" in w and all(p.isdigit() for p in w.split("-", 1)):
             a, b = (int(p) for p in w.split("-", 1))
             out += [(n, t) for n, t in numbered if a <= n <= b]
@@ -826,7 +872,7 @@ def _ordered() -> list[Template]:
 HELP = """Commands
   <n> | <id>          run one template            e.g.  1   or  clickfix
   <n>-<m> ...         run several                 e.g.  1-5 12 web_shell
-  all | attacks | benign | limits                 run a whole set
+  all | attacks | benign | limits | controls      run a whole set
   e <n>               edit template n's command before running it
   $ <command>         YOUR OWN command: Refmon judges it first, runs it only if allowed
   o <origin>          origin of your own commands: none web mail agent_input inbound_request download

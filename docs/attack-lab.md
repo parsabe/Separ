@@ -14,7 +14,7 @@ Templates marked "no (judged only)" would touch the real system if run, so the l
 .venv/bin/python -m refmon.cli lab --compare attack-lab/runs/run-*   # saved runs side by side
 ```
 
-## All attacks (35 templates)
+## All attacks (35 templates, plus 18 recorded controls below)
 
 | # | id | category | origin -> role | expected | lab executes | command |
 |---|---|---|---|---|---|---|
@@ -165,6 +165,70 @@ stopped (the 7 judged-only templates are still never executed by the lab).
    - The evidence calculus overruled the 3/2/1 fail rule on: wipe_home, web_rce, ransom_burst, hidden_script, pasted_echo.
    - Pipeline decision time per command: median 3.9 ms, mean 11.6 ms, max 159.2 ms (decided before the command starts; the first call of a session is the slowest).
 ```
+
+## Benign controls from the web and typed network commands (review 2026-11, item 12)
+
+Every attack above is pasted (`origin=web`) and every benign control in the reference run is typed
+(`origin=none`) with no network use, which shows nothing about false alarms on real work. These
+controls are everyday commands, recorded with whatever Refmon decides: they are **not scored and
+were not tuned to pass**, and the lab never runs them (they would use the network or change the
+system). Run with `lab --run controls`; each group was run in a fresh lab, because typing the very
+text a page just pasted inherits that page's label (propagation rule 3), which is correct but would
+not measure "typed". Mode `block`, default policy, code of this branch (2026-11-23).
+
+**Benign web-origin controls: allowed 5 / held 0 / blocked 5.**
+
+| id | command (pasted from a web page) | Refmon | L nats | O C E | signals |
+|---|---|---|---:|---|---|
+| web_git_clone | `git clone https://github.com/torvalds/linux` | BLOCK | -2.61 | X X X | contract_external_exec, effect_fetch |
+| web_pip_install | `pip install requests` | ALLOW | -5.11 | X X . | contract_external_exec |
+| web_rustup | `curl -fsSL https://sh.rustup.rs \| sh` | BLOCK | -2.61 | X X X | contract_external_exec, effect_fetch, effect_hide |
+| web_apt_update | `sudo apt update` | BLOCK | -2.61 | X X X | contract_external_exec, effect_escalate |
+| web_venv | `python3 -m venv .venv` | ALLOW | -5.11 | X X . | contract_external_exec |
+| web_docker_hello | `docker run hello-world` | ALLOW | -5.11 | X X . | contract_external_exec |
+| web_wget_tarball | `wget https://example.org/file.tar.gz` | BLOCK | -2.61 | X X X | contract_external_exec, effect_fetch |
+| web_ssh_login | `ssh user@login.example.org` | ALLOW | -5.11 | X X . | contract_external_exec |
+| web_url | `https://github.com/torvalds/linux` (a pasted URL) | BLOCK | -2.61 | X X X | contract_external_exec, effect_fetch |
+| web_prose | a pasted paragraph of prose | ALLOW | -5.11 | X X . | contract_external_exec |
+
+**Benign typed network controls (`origin=none`): allowed 4 / held 4 / blocked 0.**
+
+| id | command (typed) | Refmon | L nats | O C E | signals |
+|---|---|---|---:|---|---|
+| typed_git_clone | `git clone https://github.com/torvalds/linux` | HOLD | -4.41 | . . X | effect_fetch |
+| typed_pip_install | `pip install requests` | ALLOW | -6.91 | . . . | |
+| typed_rustup | `curl -fsSL https://sh.rustup.rs \| sh` | HOLD | -4.41 | . . X | effect_fetch, effect_hide |
+| typed_apt_update | `sudo apt update` | HOLD | -4.41 | . . X | effect_escalate |
+| typed_venv | `python3 -m venv .venv` | ALLOW | -6.91 | . . . | |
+| typed_docker_hello | `docker run hello-world` | ALLOW | -6.91 | . . . | |
+| typed_wget_tarball | `wget https://example.org/file.tar.gz` | HOLD | -4.41 | . . X | effect_fetch |
+| typed_ssh_login | `ssh user@login.example.org` | ALLOW | -6.91 | . . . | |
+
+What this shows:
+- Pasting a command that names a host from a web page is blocked whenever the command text shows
+  one Effect (a fetch, an escalation, a pipe into a shell): origin, the universal
+  `external_content_exec` contract and the Effect make three questions. That is the ClickFix rule
+  working as specified, and it also stops legitimate installation instructions copied from a
+  project's documentation; the user then runs them by typing, or the admin trusts the source.
+- A pasted plain URL and a pasted paragraph are judged as commands here, as the live guard does;
+  `web_url` is blocked. In the browser this is what design decision A80 (policy flag
+  `browser.clipboard_commands_only`, waiting for approval) changes: there a URL would get the
+  address check only and prose would not be judged. The lab's guard path is unchanged by A80.
+- `pip install`, `docker run` and `ssh user@host` show no host in their text, so the command
+  analysis sees no network use (a known limit of judging text before it runs, see
+  docs/progress.md).
+- Typed, the network commands are held (one Effect: a fetch to an unknown destination or a
+  privilege change), never blocked.
+
+### How an admin lists trusted destinations and install sources (example, not a default)
+
+`packaging/etc/separ/policy.yaml.example` shows git hosts, package indexes, distribution mirrors and
+the university software portal as **trusted destinations**, and only the package indexes and the
+portal as **trusted sources** (downloads). Git hosts are deliberately not a trusted source: any lure
+can point at a repository there. With those example entries the outcomes above change in one place:
+`typed_git_clone` becomes ALLOW (-6.91); every pasted command keeps its outcome, because a
+connection by a process that runs pasted web content is still a fetch unless its role's contract
+lists the destination (v1.1).
 
 ## Where everything is
 

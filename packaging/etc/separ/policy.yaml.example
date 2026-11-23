@@ -18,6 +18,28 @@ destinations:
   - {name: vpn,    internal: true, match: {cidr: [<vpn-cidr>]}}      # --vpn-cidr (optional)
   - {name: wlan,   internal: true, match: {cidr: [<wlan-cidr>]}}     # --wlan-cidr (optional)
 
+# ---------------------------------------------------------------------------------------------
+# An EXAMPLE of trusted destinations and install sources (NOT a default: list only what your site
+# really uses; docs/attack-lab.md shows what it changes). Replace the placeholders.
+#
+# A trusted destination removes the `fetch` Effect for a process with no live external
+# provenance; a process running pasted web content still needs its role contract to list it.
+#   - {name: git_host,        trusted: true, match: {host: [github.com, gitlab.com, codeberg.org]}}
+#   - {name: package_mirror,  trusted: true, match: {host: [pypi.org, files.pythonhosted.org,
+#                                                       registry.npmjs.org, crates.io,
+#                                                       deb.debian.org, archive.ubuntu.com]}}
+#   - {name: software_portal, trusted: true, match: {host: [<software-portal.your-university>]}}
+# (add these under `destinations:` above, after your own networks)
+#
+# A trusted source is an allow override: content from it creates no label at all. List only
+# sources you would run anything from. Never a git host or a pastebin: any lure can point there.
+# trusted_sources:
+#   - {name: package-indexes, match: {source_class: download,
+#                                     domain: [pypi.org, files.pythonhosted.org, registry.npmjs.org]}}
+#   - {name: university-software-portal,
+#      match: {source_class: download, domain: [<software-portal.your-university>]}}
+# ---------------------------------------------------------------------------------------------
+
 rules:
   # Observe mode first for identity and mail to avoid false blocks during rollout:
   - {id: R-ID-01,   role: identity_provider, mode: observe}
