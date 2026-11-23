@@ -42,8 +42,10 @@ from refmon.evalstats import mcnemar_exact, wilson_interval  # noqa: E402
 
 # The versions each seed was recorded to evaluate (docs/variant-seeds.md). A new active seed must
 # be added here before `make reproduce` runs on it.
-SEED_VERSIONS: dict[int, tuple[str, ...]] = {837115701: ("v2.2", "v2.3")}
+SEED_VERSIONS: dict[int, tuple[str, ...]] = {335384967: ("v2.3.1-base", "v2.4")}
 NOTES = {
+    "v2.3.1-base": "v2.3 plus the review 2026-11 Part 1 fixes (no evaluated decision changed)",
+    "v2.4": "review 2026-11 Part 2; A80 to A82 behind policy flags, off until approved",
     "v2.1": "A68 to A72: browser protection, decoys, tarpit, source proposals",
     "v2.2": "A73 to A77: sensor ingest kit, hacked accounts (approved weights, login cap)",
     "v2.3": "A78, A79: containers, Kubernetes and IaC vocabulary and templates",
@@ -74,6 +76,34 @@ def sh(cmd: list[str], env_extra: dict | None = None, cwd: Path = ROOT, check=Tr
     if check and done.returncode != 0:
         raise SystemExit(f"command failed: {' '.join(cmd)}\n{done.stdout}\n{done.stderr}")
     return done.stdout + (done.stderr if not check else "")
+
+
+def missing_tags(tags: list[str]) -> list[str]:
+    """The tags of `tags` that this clone does not have."""
+    out = []
+    for tag in tags:
+        done = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if done.returncode != 0:
+            out.append(tag)
+    return out
+
+
+def require_tags(tags: list[str]) -> None:
+    """Stop with the names of the missing tags (a fresh clone needs `git fetch --tags`)."""
+    missing = missing_tags(tags)
+    if missing:
+        print(
+            f"reproduce: missing git tag(s) {', '.join(missing)}: seed {variants.SEED} is "
+            f"evaluated in {', '.join(tags)}. Fetch them (git fetch --tags; in CI: checkout "
+            "with fetch-depth: 0) and run again.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
 
 
 def extract(tag: str, dest: Path) -> None:
@@ -302,6 +332,7 @@ def main(argv=None) -> int:
         help="also rewrite docs/evaluation/ (a new seed); the default checks against it",
     )
     args = parser.parse_args(argv)
+    require_tags(TAGS)
     seed = variants.SEED
     with tempfile.TemporaryDirectory(prefix="refmon-reproduce-") as name:
         tmp = Path(name)

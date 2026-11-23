@@ -56,12 +56,39 @@ def gate_actions(events, policy) -> dict[str, int]:
     return dict(sorted(counts.items()))
 
 
+def with_settings(settings: list[str]):
+    """The default policy with dotted fields replaced (strings; a JSON value if it parses)."""
+    from refmon.policy import Policy, default_policy_dict
+
+    doc = default_policy_dict()
+    for item in settings:
+        key, _, raw = item.partition("=")
+        try:
+            value = json.loads(raw)
+        except ValueError:
+            value = raw
+        node = doc
+        *path, last = key.split(".")
+        for part in path:
+            node = node.setdefault(part, {})
+        node[last] = value
+    return Policy.parse(doc)
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--variants", required=True)
     parser.add_argument("--out", required=True)
+    parser.add_argument(
+        "--set",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="change one field of the default policy before the replay, e.g. "
+        "math.decision_rule=expected_cost (review 2026-11: the flags of A81 and A82)",
+    )
     args = parser.parse_args(argv)
-    policy = default_policy()
+    policy = with_settings(args.set) if args.set else default_policy()
     roles = tuple(policy.extra_roles)
     with (
         open(args.variants, encoding="utf-8") as src,

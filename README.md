@@ -1,11 +1,12 @@
 # 🛡️ Separ — The Fire Shield Against Network Attacks
 
+[![Version 2.4.0](https://img.shields.io/badge/Version-2.4.0-0f766e)](docs/v2.4-evaluation.md)
 [![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/Tests-2%2C354%20Passing-16a34a?logo=pytest&logoColor=white)](tests/)
 [![Privacy](https://img.shields.io/badge/Privacy-Zero--Raw%20HMAC%20Boundary-dc2626?logo=lock&logoColor=white)](src/refmon/calculus/privacy.py)
 [![Policy](https://img.shields.io/badge/Policy-Ed25519%20Signed-0550AE)](src/refmon/signing.py)
-[![Packages](https://img.shields.io/badge/Packages-.deb%20%7C%20.rpm-7c3aed?logo=linux&logoColor=white)](dist/)
+[![Packages](https://img.shields.io/badge/Packages-.deb%20%7C%20.rpm-7c3aed?logo=linux&logoColor=white)](packaging/build_packages.py)
 
 **Separ** (*The Fire Shield*) is a deterministic, privacy-preserving behavioral reference monitor and live attack barrier for Linux endpoints, campus servers, and HPC clusters. Instead of relying on static antivirus signatures or opaque machine learning, Separ evaluates post-compromise behavior through three questions—**Origin**, **Contract**, and **Effect**—while hashing sensitive command-line secrets in RAM before anything touches disk.
 
@@ -128,10 +129,10 @@ per-architecture (amd64/x86_64; arm64 with `--arch arm64`) and are built, not co
 python3.12 packaging/build_packages.py --all --arch amd64    # -> dist/ (~17 MB each)
 
 # Debian 13 / Ubuntu 24.04 (Python 3.13 / 3.12)
-sudo apt install ./dist/separ_2.0.0_amd64.deb
+sudo apt install ./dist/separ_2.4.0_amd64.deb
 
 # Rocky / Alma / RHEL 9 (needs python3.12 from AppStream) and Fedora
-sudo dnf install python3.12 ./dist/separ-2.0.0-1.x86_64.rpm
+sudo dnf install python3.12 ./dist/separ-2.4.0-1.x86_64.rpm
 ```
 
 ### Option B: POSIX Installer Script (`install.sh`)

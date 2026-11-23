@@ -42,14 +42,18 @@ gaps:
       Contract evidence ever arises to keep the label alive).
     match: {timing: beyond_window}
     scenarios: [S19]
-  - id: G4
-    finding: F3
-    reason: >
-      Slow leak (seeds 711829743 and 616687759): the oversized responses of S27 are more than the
-      story quiet window apart. Each lands in a story of its own, the request label has decayed
-      below the origin threshold by the first one, and at most two responses share the hour-scale
-      window, which is not significant under the repeat test. What is left is a single
-      `effect_response_anomaly` per story (L = -5.41, below the hold threshold). CUSUM covers volume
-      only, not this per-client repeat.
-    match: {timing: beyond_window}
-    scenarios: [S27]
+  # G4 is not observed on the active seed 335384967 (v2.4): its beyond-window draw for S27 is a
+  # gap of 1404 s, so three responses share the hour-scale window and the repeat test holds the
+  # story (effective hold). The limit stays (finding F3, docs/progress.md): a seed that draws a
+  # longer gap brings the allowed variant back, and the undocumented check then asks for this entry.
+  # - id: G4
+  #   finding: F3
+  #   reason: >
+  #     Slow leak (seeds 711829743 and 616687759): the oversized responses of S27 are more than the
+  #     story quiet window apart. Each lands in a story of its own, the request label has decayed
+  #     below the origin threshold by the first one, and at most two responses share the hour-scale
+  #     window, which is not significant under the repeat test. What is left is a single
+  #     `effect_response_anomaly` per story (L = -5.41, below the hold threshold). CUSUM covers volume
+  #     only, not this per-client repeat.
+  #   match: {timing: beyond_window}
+  #   scenarios: [S27]

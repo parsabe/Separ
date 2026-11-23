@@ -119,3 +119,24 @@ def test_identities_are_masked_in_the_output_that_goes_into_the_results_file():
 def test_the_results_file_holds_no_e_mail_address_at_all():
     text = (ROOT / "docs" / "results.md").read_text()
     assert not cp.EMAIL.search(text)
+
+
+def test_a_missing_tag_is_named_and_the_run_stops(capsys, monkeypatch):
+    """Review 2026-11, Part 3: from a fresh clone without tags, reproduce.py says which tag is
+    missing and exits non-zero, before it extracts anything."""
+    monkeypatch.setattr(rp, "TAGS", ["v0.0-never-tagged", *rp.TAGS])
+    with pytest.raises(SystemExit) as stop:
+        rp.main(["--skip-tests"])
+    assert stop.value.code == 2
+    err = capsys.readouterr().err
+    assert "v0.0-never-tagged" in err and "git fetch --tags" in err
+    assert "v0.0-never-tagged" in rp.missing_tags(rp.TAGS)
+
+
+def test_dump_matrix_can_replay_with_a_policy_flag(tmp_path):
+    import dump_matrix
+
+    policy = dump_matrix.with_settings(["math.decision_rule=expected_cost",
+                                        "math.origin_combination=noisy_or"])  # fmt: skip
+    assert policy.math.decision_rule == "expected_cost"
+    assert policy.math.origin_combination == "noisy_or"
