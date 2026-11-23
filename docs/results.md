@@ -294,7 +294,7 @@ Privacy audit
 ## 6. Tests
 
 <!-- BEGIN GENERATED: tests -->
-`1 failed, 2548 passed, 5 skipped, 1 xfailed`
+`1 failed, 2557 passed, 5 skipped, 1 xfailed`
 <!-- END GENERATED: tests -->
 
 The suite includes property tests (labels never lost along process chains, no raw content in any
@@ -404,29 +404,30 @@ regenerated; `make publishable` runs it alone). The content is clean. These are 
 
 <!-- BEGIN GENERATED: publishable -->
 ```
-tracked files scanned: 472, history: every ref
-findings in the working tree: 39
-  README.md:3: url img.shields.io/badge/Version-2.4.0-0f766e
-  README.md:4: url img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoC
-  README.md:5: url img.shields.io/badge/License-GPL--3.0-blue.svg
-  README.md:6: url img.shields.io/badge/Tests-2%2C548%20Passing-16a34a?logo=pyt
-  README.md:7: url img.shields.io/badge/Privacy-Zero--Raw%20HMAC%20Boundary-dc2
-  README.md:8: url img.shields.io/badge/Policy-Ed25519%20Signed-0550AE
-  README.md:9: url img.shields.io/badge/Packages-.deb%20%7C%20.rpm-7c3aed?logo=
-  README.md:188: url docs.pydantic.dev/
-  README.md:188: url pyyaml.org/
-  README.md:188: url cryptography.io/
-  README.md:189: url tetragon.io/
-  README.md:189: url falco.org/
-  README.md:189: url systemd.io/
-  README.md:189: url www.shibboleth.net/
-  README.md:189: url kubernetes.io/
-  README.md:189: url www.postfix.org/
-  README.md:189: url www.keycloak.org/
-  README.md:190: url matplotlib.org/
-  README.md:190: url www.latex-project.org/
+tracked files scanned: 482, history: every ref
+findings in the working tree: 31
+  README.md:200: url docs.pydantic.dev/
+  README.md:200: url pyyaml.org/
+  README.md:200: url cryptography.io/
+  README.md:201: url tetragon.io/
+  README.md:201: url falco.org/
+  README.md:201: url systemd.io/
+  README.md:201: url www.shibboleth.net/
+  README.md:201: url kubernetes.io/
+  README.md:201: url www.postfix.org/
+  README.md:201: url www.keycloak.org/
+  README.md:202: url matplotlib.org/
+  README.md:202: url www.latex-project.org/
   documentation/main.tex:369: url doi.org/10.1214/aoms/1177731118
-findings in the history (added lines of every commit of every ref): 41
+  documentation/main.tex:372: url doi.org/10.1093/biomet/41.1-2.100
+  documentation/main.tex:375: url doi.org/10.1016/C2009-0-27609-4
+  documentation/main.tex:378: url doi.org/10.1007/3-540-68697-5_1
+  documentation/main.tex:381: url doi.org/10.1007/11681878_14
+  documentation/main.tex:384: url www.usenix.org/conference/usenixsecurity17/technical-session
+  documentation/main.tex:387: url doi.org/10.1109/SP.2019.00026
+  documentation/main.tex:390: url doi.org/10.14722/ndss.2020.24046
+findings in the history (added lines of every commit of every ref): 34
+  5210f89: public IP 139.18.x.x
   558ef68: e-mail address p***@s***.de
   558ef68: e-mail address s***@t***.de
   558ef68: home path
@@ -446,7 +447,6 @@ findings in the history (added lines of every commit of every ref): 41
   558ef68: url falco.org/
   558ef68: url falco.org/docs/
   558ef68: url gitlab.com/apparmor/apparmor
-  558ef68: url img.shields.io/badge/License-GPL--3.0-blue.svg
 replay events checked as post-Observe events: 528, rejected: 0
 identities recorded by git as author or committer: 5 (masked here so that this output can be published)
   G***b <n***y@g***b.com>

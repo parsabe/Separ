@@ -570,3 +570,29 @@ commit (R1); per-user policy ownership (R2); A80 to A82 are implemented but off 
 (R3); the containers of the CI install test and the `pytest -m root` test were not run here (R4);
 `ruff check .` and the publishability content test fail on files this task may not or should not
 change (R5).
+
+## Round 2, Part A: finishing v2.4 (2026-11-23, no decision changes)
+
+Owner decisions in SEPAR_ROUND2.md (not committed). Part B (v2.5) waits for the owner's review.
+
+1. **ruff** excludes `documentation/`; `ruff check .` and `ruff format --check .` pass.
+2. **check_publishable** allows `img.shields.io/badge/` and `github.com/parsabe/`, anchored at the
+   start of the URL; the older unanchored `github.com` entry is anchored too (a tightening). A test of
+   a malformed CIDR no longer uses a public address. Still reported, and left for the owner: 12
+   reference URLs in README.md (pydantic, PyYAML, cryptography, Tetragon, Falco, systemd,
+   Shibboleth, Kubernetes, Postfix, Keycloak, matplotlib, LaTeX), 16 in documentation/main.tex, and 3
+   e-mail addresses in it-service-desk/guide.tex (lines 67 and 335). So `check_publishable.py`
+   still exits 1, the CI `test` job still fails on it, and the new release job (which needs `test`)
+   cannot publish until they are allowed or removed.
+3. **R2 decided**: a per-user daemon reads /etc/separ whenever it holds a policy or public key and
+   requires them root-owned and not group/other-writable; otherwise it falls back to
+   $XDG_CONFIG_HOME/separ, still degraded. `separ setup` as a user never writes /etc/separ.
+   `tests/conftest.py` keeps the suite away from the host's /etc/separ.
+4. **Release job**: a tag `v*` (not `*-base`) builds the .deb and .rpm, install-tests them in the
+   three containers, checks that the tag names the packaged version, and attaches both with
+   `SHA256SUMS` to a GitHub Release. README and the guide install from Releases. The tag `v2.4`
+   points at a commit from before this job, so pushing it as it is publishes nothing; moving it to
+   the end of Part A (no decision changed: `make reproduce` gives identical rows) is the owner's
+   call.
+5. **Checks**: ruff clean; 2557 passed, 5 skipped, 1 xfailed, 1 failed (the content-findings test,
+   item 2); privacy audit PASS; `make reproduce` identical to the committed rows on seed 335384967.
