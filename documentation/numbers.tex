@@ -60,6 +60,8 @@
 \newcommand{\BenAddedAllowRatePct}{16.8}
 \newcommand{\BenAddedAllowRateLo}{11.3}
 \newcommand{\BenAddedAllowRateHi}{24.3}
+\newcommand{\BenNeutralHoldByDesign}{22}
+\newcommand{\BenNeutralHoldWorse}{9}
 \newcommand{\BenAddedContractTotal}{72}
 \newcommand{\BenAddedContractAllow}{21}
 \newcommand{\BenAddedContractHold}{8}
@@ -101,24 +103,24 @@
 \newcommand{\LabAblHeld}{12}
 \newcommand{\LabAblStill}{1}
 \newcommand{\LabOverrides}{6}
-\newcommand{\CtlRowsWeb}{\texttt{git clone https://github.com/torvalds/linux} & BLOCK & $-2.61$ & \texttt{XXX} \\
-\texttt{pip install requests} & ALLOW & $-5.11$ & \texttt{XX.} \\
-\texttt{curl -fsSL https://sh.rustup.rs \textbar{} sh} & BLOCK & $-2.61$ & \texttt{XXX} \\
-\texttt{sudo apt update} & BLOCK & $-2.61$ & \texttt{XXX} \\
-\texttt{python3 -m venv .venv} & ALLOW & $-5.11$ & \texttt{XX.} \\
-\texttt{docker run hello-world} & ALLOW & $-5.11$ & \texttt{XX.} \\
-\texttt{wget https://example.org/file.tar.gz} & BLOCK & $-2.61$ & \texttt{XXX} \\
-\texttt{ssh user@login.example.org} & ALLOW & $-5.11$ & \texttt{XX.} \\
-\texttt{https://github.com/torvalds/linux} & BLOCK & $-2.61$ & \texttt{XXX} \\
-\texttt{a paragraph of prose} & ALLOW & $-5.11$ & \texttt{XX.} \\}
-\newcommand{\CtlRowsTyped}{\texttt{git clone https://github.com/torvalds/linux} & HOLD & $-4.41$ & \texttt{..X} \\
-\texttt{pip install requests} & ALLOW & $-6.91$ & \texttt{...} \\
-\texttt{curl -fsSL https://sh.rustup.rs \textbar{} sh} & HOLD & $-4.41$ & \texttt{..X} \\
-\texttt{sudo apt update} & HOLD & $-4.41$ & \texttt{..X} \\
-\texttt{python3 -m venv .venv} & ALLOW & $-6.91$ & \texttt{...} \\
-\texttt{docker run hello-world} & ALLOW & $-6.91$ & \texttt{...} \\
-\texttt{wget https://example.org/file.tar.gz} & HOLD & $-4.41$ & \texttt{..X} \\
-\texttt{ssh user@login.example.org} & ALLOW & $-6.91$ & \texttt{...} \\}
+\newcommand{\CtlRowsWeb}{\path{git clone https://github.com/torvalds/linux} & BLOCK & $-2.61$ & \texttt{XXX} \\
+\path{pip install requests} & ALLOW & $-5.11$ & \texttt{XX.} \\
+\path{curl -fsSL https://sh.rustup.rs | sh} & BLOCK & $-2.61$ & \texttt{XXX} \\
+\path{sudo apt update} & BLOCK & $-2.61$ & \texttt{XXX} \\
+\path{python3 -m venv .venv} & ALLOW & $-5.11$ & \texttt{XX.} \\
+\path{docker run hello-world} & ALLOW & $-5.11$ & \texttt{XX.} \\
+\path{wget https://example.org/file.tar.gz} & BLOCK & $-2.61$ & \texttt{XXX} \\
+\path{ssh user@login.example.org} & ALLOW & $-5.11$ & \texttt{XX.} \\
+\path{https://github.com/torvalds/linux} & BLOCK & $-2.61$ & \texttt{XXX} \\
+\emph{a paragraph of prose} & ALLOW & $-5.11$ & \texttt{XX.} \\}
+\newcommand{\CtlRowsTyped}{\path{git clone https://github.com/torvalds/linux} & HOLD & $-4.41$ & \texttt{..X} \\
+\path{pip install requests} & ALLOW & $-6.91$ & \texttt{...} \\
+\path{curl -fsSL https://sh.rustup.rs | sh} & HOLD & $-4.41$ & \texttt{..X} \\
+\path{sudo apt update} & HOLD & $-4.41$ & \texttt{..X} \\
+\path{python3 -m venv .venv} & ALLOW & $-6.91$ & \texttt{...} \\
+\path{docker run hello-world} & ALLOW & $-6.91$ & \texttt{...} \\
+\path{wget https://example.org/file.tar.gz} & HOLD & $-4.41$ & \texttt{..X} \\
+\path{ssh user@login.example.org} & ALLOW & $-6.91$ & \texttt{...} \\}
 \newcommand{\AudStrings}{304}
 \newcommand{\AudRawFindings}{0}
 \newcommand{\AudFingerprints}{497}

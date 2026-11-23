@@ -1,28 +1,31 @@
-# Build the two-column Refmon LaTeX paper, its charts, the level-by-level diagram book, or an Overleaf zip archive.
-# The charts (figures/fig_*.pdf) are committed; `make figures` rebuilds them from docs/evaluation/
-# (needs the paper extra: pip install -e ".[paper]" in the repository root).
+# Build the Separ paper (two-column LaTeX), its numbers and charts, the diagram book, or an Overleaf zip.
+# Every number in main.tex comes from numbers.tex (scripts/paper_numbers.py) and every chart from
+# figures/ (make_figures.py); both are generated from the committed data in docs/evaluation/.
+# The charts need the paper extra: pip install -e ".[paper]" in the repository root.
 
-LATEX ?= pdflatex
 PY    ?= ../.venv/bin/python
 MAIN  ?= main
 
-.PHONY: pdf figures diagrams overleaf-zip clean
+.PHONY: pdf numbers figures all diagrams overleaf-zip clean
 
 pdf:
-	$(LATEX) -interaction=nonstopmode -halt-on-error $(MAIN).tex
-	$(LATEX) -interaction=nonstopmode -halt-on-error $(MAIN).tex
+	latexmk -pdf -interaction=nonstopmode -halt-on-error $(MAIN).tex
+
+numbers:
+	$(PY) ../scripts/paper_numbers.py
 
 figures:
 	$(PY) make_figures.py
 
+all: numbers figures pdf overleaf-zip
+
 diagrams:
-	$(LATEX) -interaction=nonstopmode -halt-on-error diagrams.tex
-	$(LATEX) -interaction=nonstopmode -halt-on-error diagrams.tex
+	latexmk -pdf -interaction=nonstopmode -halt-on-error diagrams.tex
 
 overleaf-zip:
-	zip -r refmon-paper-overleaf.zip $(MAIN).tex diagrams.tex references.bib Makefile make_figures.py figures/ diagrams/
+	rm -f separ-paper-overleaf.zip refmon-paper-overleaf.zip
+	zip -q -r separ-paper-overleaf.zip $(MAIN).tex numbers.tex references.bib figures/fig_*.pdf
 
 clean:
-	rm -f $(MAIN).aux $(MAIN).log $(MAIN).out $(MAIN).toc $(MAIN).bbl $(MAIN).blg $(MAIN).pdf refmon-paper-overleaf.zip \
-	      diagrams.aux diagrams.log diagrams.out diagrams.toc diagrams.lof diagrams.pdf
-
+	latexmk -C $(MAIN).tex diagrams.tex
+	rm -f separ-paper-overleaf.zip

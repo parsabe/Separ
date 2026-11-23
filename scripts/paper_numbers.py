@@ -113,6 +113,9 @@ def variants(m: Macros) -> dict:
         m.add(f"Ben{name}Block", by["block"])
         m.rate(f"Ben{name}BlockRate", by["block"], len(group))
         m.rate(f"Ben{name}AllowRate", by["allow"], len(group))
+    m.add("BenNeutralHoldByDesign", sum(r["decision"] == "hold" == r["expected"] for r in neutral))
+    m.add("BenNeutralHoldWorse",
+          sum(r["decision"] == "hold" and r["expected"] == "allow" for r in neutral))  # fmt: skip
     contract = [r for r in added if "contract" in (r.get("adds") or [])]
     effect = [r for r in added if "contract" not in (r.get("adds") or [])]
     for name, group in (("AddedContract", contract), ("AddedEffect", effect)):
@@ -202,12 +205,17 @@ def lab(m: Macros) -> None:
         lines = []
         for r in rows:
             cmd = text[r["template_id"]]
-            cmd = cmd if len(cmd) <= 48 else "a paragraph of prose"
+            if any(ch in cmd for ch in "%#{}\\") or len(cmd) > 48:
+                cell = (
+                    "\\emph{a paragraph of prose}" if len(cmd) > 48 else f"\\texttt{{{tex(cmd)}}}"
+                )
+            else:
+                cell = f"\\path{{{cmd}}}"  # url package: breaks at / . and spaces
             fails = "".join(
                 "X" if r[f"{q}_failed"] else "." for q in ("origin", "contract", "effect")
             )
             lines.append(
-                f"\\texttt{{{tex(cmd)}}} & {r['decision'].upper()} & ${r['log_odds']:.2f}$ & "
+                f"{cell} & {r['decision'].upper()} & ${r['log_odds']:.2f}$ & "
                 f"\\texttt{{{fails}}} \\\\"
             )
         m.add(f"CtlRows{name}", "\n".join(lines))

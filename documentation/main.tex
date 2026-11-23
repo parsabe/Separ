@@ -4,46 +4,44 @@
 \usepackage[T1]{fontenc}
 \usepackage{lmodern}
 \usepackage{microtype}
-\usepackage[margin=0.68in,columnsep=0.24in]{geometry}
-
-\usepackage{amsmath,amssymb,amsfonts,mathtools}
+\usepackage[margin=0.7in,columnsep=0.25in]{geometry}
+\usepackage{amsmath,amssymb,mathtools}
 \usepackage{booktabs}
 \usepackage{tabularx}
 \usepackage{array}
 \usepackage{graphicx}
 \usepackage{xcolor}
 \usepackage{enumitem}
-\usepackage{tikz}
-\usetikzlibrary{arrows.meta,positioning,shapes.geometric,calc,fit,backgrounds}
 \usepackage{placeins}
 \usepackage{fontawesome5}
+\usepackage[numbers,sort&compress]{natbib}
+\PassOptionsToPackage{obeyspaces,spaces}{url}  % command text in tables keeps its spaces
 \usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
 
 \setlength{\parskip}{2pt}
 \setlength{\emergencystretch}{2.5em}
-\makeatletter
-\DeclareRobustCommand{\_}{\ifmmode\nfss@text{\textunderscore}\else\textunderscore\penalty\@highpenalty\hskip\z@skip\fi}
-\makeatother
+\setlist{leftmargin=1.2em,itemsep=1pt,topsep=2pt}
 
-% ============================================================================
-% Title & Author Metadata
-% ============================================================================
-\title{\Large\bfseries Separ: The Fire Shield against network attacks}
+% A fact this paper needs but the repository does not hold. Listed in the build report.
+\newcommand{\todo}[1]{\textcolor{red}{\textbf{[TODO:} #1\textbf{]}}}
 
+% Every number below comes from numbers.tex, written by scripts/paper_numbers.py from the
+% committed evaluation data. Do not type a number into this file.
+\input{numbers.tex}
+\newcommand{\nats}{\,\text{nats}}
+\newcommand{\ci}[2]{[#1, #2]}
+
+\title{\Large\bfseries Separ: Pre-Execution Command Mediation and Behavioural Monitoring\\
+for Linux Hosts with Provenance Labels and Role Contracts}
 \author{
   \textbf{Parsa Besharat}\\
   \href{mailto:parsa@parsabe.com}{\faEnvelope\ \texttt{parsa@parsabe.com}} \quad|\quad
-  \href{https://github.com/parsabe/Separ}{\faGithub\ \texttt{github.com/parsabe/Separ}}
+  \href{https://github.com/parsabe/Separ}{\faGithub\ \texttt{github.com/parsabe/Separ}}\\
+  \small Student research project; version \Version{} (tag \texttt{\EvalTag}), November 2026
 }
-\date{November 2026}
+\date{}
 
-\renewenvironment{abstract}{%
-  \par\vspace{0.35em}%
-  \noindent\textbf{\abstractname}---%
-  \ignorespaces
-}{%
-  \par\vspace{0.6em}%
-}
+\renewenvironment{abstract}{\par\vspace{0.3em}\noindent\textbf{\abstractname}---\ignorespaces}{\par\vspace{0.5em}}
 
 \begin{document}
 
@@ -51,423 +49,579 @@
   \begin{@twocolumnfalse}
     \maketitle
     \begin{abstract}
-      Zero-day exploits, ClickFix copy-paste lures, prompt-injected coding agents, and stealth rootkits bypass static signature scanners while cleartext telemetry logs expose sensitive arguments. We present \textbf{Separ} (\emph{The Fire Shield}), a deterministic reference monitor that evaluates post-compromise behavior through three simple questions: untrusted \textbf{Origin}, signed role \textbf{Contract} violation, and dangerous \textbf{Effect}. Evidence is fused via a monotone Noisy-OR Bayesian calculus with an invariant Contract Gate behind an in-memory HMAC privacy boundary. Configured upfront with \texttt{separ setup}, monitored in a standalone Linux desktop app (\texttt{separ gui}), and packaged as native \texttt{.deb}/\texttt{.rpm} bundles, Separ achieves $100\%$ golden accuracy ($46/46$), $98.4\%$ mutation containment ($886$ variants) with $0.0\%$ neutral false blocks, $28/28$ Attack Lab detection ($4.5\,\text{ms}$ median latency), and $0$ cleartext leaks.
+      Users are routinely persuaded to paste commands from web pages into a terminal
+      (``ClickFix'' lures), coding agents run commands taken from untrusted text, and an exploited
+      server process does things its role never does. Separ is a host-based layer for Linux that
+      judges such actions \emph{before} they run where it is placed in the path (commands sent
+      through its guard, browser clipboard and download observations, a watched sandbox) and judges
+      ingested sensor streams after the fact. Each story of related events is scored on three
+      questions: did the input come from outside the trust boundary (provenance labels with
+      half-life decay), does the acting process break its role contract, and does the story attempt
+      a dangerous effect. Expert-elicited log-likelihood weights are combined into posterior
+      log-odds and compared with cost-derived thresholds; a contract gate forbids blocking on
+      suspicion alone. Command text is replaced by keyed HMAC fingerprints before anything is
+      stored. On \VarTotal{} generated variants of a seed recorded before the code changes,
+      \MalContainedPct\,\% of \MalTotal{} malicious variants were contained
+      (95\,\% CI \ci{\MalContainedLo}{\MalContainedHi}) and \BenNeutralBlock{} of \BenNeutralTotal{}
+      neutral benign variants were blocked. The evaluation is synthetic: every scenario is a
+      harmless stand-in, the weights are not fitted, and the golden catalog shaped the rules.
+      In block mode Separ also blocks legitimate install instructions pasted from the web
+      (\CtlWebBlock{} of \CtlWebTotal{} everyday controls). It is not a complete reference monitor.
     \end{abstract}
-    \vspace{0.25em}
-    \noindent\textbf{Keywords:} Reference Monitor, Provenance Tracking, Role Contracts, Bayesian Log-Odds, Privacy Boundary, Rootkit Detection.\par
-    \vspace{0.85em}
+    \noindent\textbf{Keywords:} command mediation, provenance, role contracts, evidence
+    combination, ClickFix, keyed hashing.\par\vspace{0.8em}
   \end{@twocolumnfalse}
 }]
 
 % ============================================================================
-% 1. INTRODUCTION (Strictly 2 Paragraphs)
-% ============================================================================
 \section{Introduction}
 \label{sec:intro}
 
-Modern endpoints, university servers, and shared clusters face network-borne attacks that routinely slip past firewalls and antivirus signatures. In ClickFix copy-paste lures~\cite{mitre2024attack}, indirect prompt injections~\cite{greshake2023not}, and stealth memory implants, attackers do not rely on known malware binaries; instead, they trick legitimate shells, web workers, or AI agents into running dangerous commands while hiding payloads in whitespace, base64 encoding, or memory. Meanwhile, logging raw command lines and URLs for security auditing turns telemetry databases into high-value targets containing passwords and API keys.
+Many intrusions on endpoints and servers start with an action that a legitimate program performs
+on behalf of an attacker: a shell runs a command the user pasted from a web page that claimed to
+fix a browser problem~\cite{mitre2024attack}, a coding agent runs a command planted in a document
+it read~\cite{greshake2023not}, or a web server worker, after an exploit, starts a shell or writes a
+script into its web root. Static access control does not see where the input came from, and
+signature-based detection does not know the next lure or exploit.
 
-We address both problems with \textbf{Separ} (\emph{The Fire Shield}), a deterministic reference monitor that judges what a process \emph{does} rather than guessing what an exploit looks like. Separ tracks half-life-decayed provenance across a six-stage pipeline (\texttt{Observe} $\to$ \texttt{Tag} $\to$ \texttt{Link} $\to$ \texttt{Judge} $\to$ \texttt{Gate} $\to$ \texttt{Contain}), enforces Ed25519-signed role contracts configured upfront via \texttt{separ setup}, and hashes cleartext strings in RAM before anything touches disk. Combined with a standalone Linux desktop GUI (\texttt{separ gui}), a two-pass six-engine rootkit scanner, and native \texttt{.deb}/\texttt{.rpm} packaging, Separ outperforms static access control, additive rule engines, and black-box graph detectors in both containment accuracy and telemetry privacy.
+Separ asks three questions about every story of related events instead of recognising an exploit:
+\emph{Origin} (did the triggering input come from outside the trust boundary?), \emph{Contract}
+(is the acting process doing something outside its role?) and \emph{Effect} (does the story try a
+dangerous action such as fetching code, hiding, persisting or reading credentials?). An unknown
+vulnerability can be exploited in unknown ways, but what the attacker does next must still be done
+by some process, and that tends to break the process's role contract.
+
+This paper describes version \Version{} as implemented, and evaluates it honestly. Its
+contributions are: (i)~a pipeline that combines decaying provenance labels, signed role contracts
+and predicted effects into an explainable verdict before a mediated command runs
+(\S\ref{sec:design}); (ii)~an evidence calculus with stated assumptions and a contract gate
+(\S\ref{sec:judge}); (iii)~a privacy boundary that keeps command text out of every log
+(\S\ref{sec:privacy}); and (iv)~an evaluation discipline in which the variant seed is recorded
+before the code it measures and retired after one use (\S\ref{sec:method}). The limits are as
+important as the results: Separ judges only what is routed to it (\S\ref{sec:threat}), its
+weights are expert estimates, and it stops legitimate pasted install commands
+(\S\ref{sec:lab}).
 
 % ============================================================================
-% 2. RELATED WORK
+\section{Threat Model and Scope}
+\label{sec:threat}
+
+\paragraph{Attacker.} A remote attacker who controls content that reaches a user or a service: a
+web page (including one that writes to the clipboard), a mail attachment, a downloaded file or
+package, a document an AI agent reads, or a request to a web service, which may carry an exploit
+for an unknown vulnerability. After a foothold the attacker acts with the privileges of the
+compromised process.
+
+\paragraph{What Separ mediates or observes.} Separ decides \emph{before execution} only on paths
+that route an action to it: (1)~commands submitted through \texttt{separ guard} (and the lab);
+(2)~observations of the browser extension (a page writing to the clipboard, a download, optionally
+a navigation); (3)~files appearing in its watched sandbox and web root. It judges \emph{after the
+fact} the event streams of sensors an administrator connects through mapping files (Tetragon,
+Falco, sshd, identity providers, the Kubernetes audit log). It runs a read-only rootkit scan.
+
+\paragraph{What it does not see.} Anything not routed to it: a command pasted into a terminal
+without the guard or the extension, a script run by name (its text shows nothing), a binary.
+An attacker with root can stop or modify it. A same-user attacker can stop a per-user daemon; the
+daemon's stop notification and the outside health check report this but do not prevent it.
+Separ is therefore \emph{not} a complete reference monitor in the sense of
+Anderson~\cite{anderson1972computer}: it is not always invoked. Complete mediation through eBPF LSM
+or fanotify is future work (\S\ref{sec:future}). Containment acts on real processes only with
+\texttt{separ serve --enforce} as root and only on processes a sensor identified; otherwise it is
+simulated and the health report says so.
+
+% ============================================================================
+\section{Design}
+\label{sec:design}
+
+Sensors produce raw events of 13 types (\texttt{content\_in}, \texttt{request\_in},
+\texttt{exec}, \texttt{net\_connect}, \texttt{file\_write}, \texttt{persist}, \ldots). Each event
+names an actor with a role (\texttt{interactive\_shell}, \texttt{web\_worker}, \texttt{agent},
+\texttt{package\_installer}, \ldots). Six stages follow: Observe, Tag, Link, Judge, Gate and
+Contain. The policy that configures them is an Ed25519-signed~\cite{bernstein2012high} YAML file;
+the daemon holds only the public key and refuses to start without a valid signed policy.
+
+\subsection{Observe: keyed fingerprints and text features}
+\label{sec:privacy}
+Observe replaces every content value $c$ (command, URL, path, request body) by
+$f(c) = \text{HMAC-SHA256}(K_{\text{dev}}, \tilde c)$~\cite{bellare1996keying}, where $\tilde c$
+is $c$ with whitespace normalised and $K_{\text{dev}}$ is a random 256-bit per-device key
+(\texttt{device.key}, mode 0600). Destination classes, trusted sources, threat-list hits (Bloom
+filter~\cite{bloom1970space} confirmed against the exact list) and canary hits are decided here on
+the raw value, and only the outcome is kept. Equal content yields equal fingerprints, so a command
+that was pasted can be matched with the command that runs.
+
+Before the text is dropped Observe measures the Shannon entropy $H(c) = -\sum_x p_x\log_2 p_x$
+over characters, the share of characters in escape sequences or encoded runs of at least 24
+characters, and the longest whitespace run. These are weak features: $H(c) \le \log_2 \min(N, A)$
+for a text of $N$ characters over an alphabet of $A$ symbols, so with the policy limit
+$H_{\max} = \EntropyMax$ bits a command needs at least 37 distinct characters before entropy can fire;
+the encoded-character share is high for ordinary paths and URLs and is stored but read by no signal.
+The \texttt{hide} effect is raised by the entropy or the whitespace run, or when the command
+analysis finds an encoding step (\texttt{base64 -d}, \texttt{\$(curl \ldots)}, \texttt{| sh}).
+
+\subsection{Tag: provenance labels}
+Content from an untrusted source (\texttt{web}, \texttt{mail}, \texttt{download},
+\texttt{removable}, \texttt{agent\_input}, \texttt{inbound\_request}, \ldots) creates a label of
+strength $s_0 = 1$. Labels propagate to the process that handles the content, to processes whose
+command fingerprint matches labelled content, to children, and to the files and persistence items a
+labelled process writes. A label decays with half-life $T_{1/2} = \HalfLifeMin$ minutes:
+\begin{equation}
+  s_\ell(t) = s_\ell(t_f)\,2^{-(t - t_f)/T_{1/2}} \quad\text{until frozen.}
+\end{equation}
+When the story shows a Contract signal, or the label reaches a persistence item, the label is
+\emph{frozen at its current strength} $s_\ell(t_f)$ and stops decaying; it is not reset to $s_0$, so
+attaching evidence never strengthens a faded label. Several labels on one actor or object combine
+with Noisy-OR~\cite{pearl1988probabilistic},
+\begin{equation}
+  s = 1 - \textstyle\prod_i (1 - s_i),
+  \label{eq:noisyor}
+\end{equation}
+and the actor counts as labelled when $s \ge \OriginThreshold$. Noisy-OR treats the sources as
+independent causes; a single fresh label ($s_i = 1$) saturates it, so it adds nothing after the
+first fresh label. Content from a trusted root source (e.g.\ the configured package index) gives
+its process a trust mark instead, which fades like a label and is cancelled by any live external
+label.
+
+\subsection{Link: stories and rates}
+Link groups events into stories along process lineage, shared fingerprints and labels, with a
+quiet window that ends a story. Rate effects use counted baselines: a Poisson upper-tail test for
+bursts (many files changed, many internal hosts contacted) and a one-sided CUSUM~\cite{page1954continuous}
+for slow outbound volume. A learned contract adds a surprisal signal $-\log_2 p(e\mid r)$ with
+Laplace smoothing, enforced only when a Good-Turing estimate of the unseen mass~\cite{good1953population}
+shows a mature baseline.
+
+\subsection{Judge: evidence combination}
+\label{sec:judge}
+Each signal $j$ carries a weight $w_j$, meant as $\ln\bigl(P(j\mid\text{attack})/P(j\mid\text{benign})\bigr)$.
+For a story $S$ with prior attack rate $\pi = \Prior$,
+\begin{equation}
+  L(S) = \ln\tfrac{\pi}{1-\pi} + \sum_{q \in \{\text{ori},\text{con},\text{eff}\}} \max_{j \in q(S)} w_j s_j ,
+  \label{eq:logodds}
+\end{equation}
+where $s_j$ is the Origin strength for the Origin signal and $1$ for every Contract and Effect
+signal, so a weaker label never yields stronger evidence. In \Version{} the Origin strength is the
+strongest label of the story; Noisy-OR of all its labels is implemented behind a policy flag and
+off (A81). Taking the maximum within a question treats the signals of one question as fully
+correlated; summing across questions assumes that the three questions are conditionally
+independent given attack or benign. Neither assumption is tested, so $L$ is a scoring heuristic in
+log-odds units, not exact Bayesian inference.
+
+The \Weights{} weights are expert-elicited (docs/weights-proposal.md): for each signal an
+expected rate in attack stories and in benign stories was written down and $\ln(a/b)$ rounded to
+0.5. Seven weights (external origin \WOrigin, external command execution \WExtExec, web worker
+execution \WWebWorkerExec, fetch \WFetch, hide \WHide, persist, exfiltration) were given in the
+specification without rates. No weight was fitted to data. Structural rules were added after
+catalog checks, among them the universal contract (D19) and the launcher contract (D20), so the
+golden catalog is not an independent test set (\S\ref{sec:golden}).
+
+\subsection{Gate: thresholds, overrides and the contract gate}
+With costs $C_{\text{miss}} = \CostMiss$, $C_{\text{fb}} = \CostFalseBlock$,
+$C_{\text{hold}} = \CostHold$ and a probability $h = \HoldCatch$ that a hold stops an attack, the
+implemented thresholds compare each action with ALLOW only:
+$\tau_b = \ln(C_{\text{fb}}/C_{\text{miss}}) = \TauBlock$ and
+$\tau_h = \ln\bigl(C_{\text{hold}}/(h\,C_{\text{miss}})\bigr) = \TauHold$. The block threshold is a
+log-odds; the hold threshold takes the logarithm of a probability, whose log-odds
+(logit) would be \TauHoldLogit. The thresholds are cost-derived but not Bayes-optimal among three
+actions. An expected-cost rule over \{ALLOW, HOLD, BLOCK\} is implemented and off pending
+evaluation (A82; boundaries \ECHold{} and \ECBlock). The decision, as in
+\texttt{evidence.decide}:
+\begin{equation}
+  d(S) =
+  \begin{cases}
+    o(S), & \text{if an override } o(S) \text{ fires},\\
+    \text{BLOCK}, & \text{else if } L \ge \tau_b \land C(S),\\
+    \text{HOLD}, & \text{else if } L \ge \tau_b \land \lnot C(S) \text{ (gate)},\\
+    \text{HOLD}, & \text{else if } L \ge \tau_h,\\
+    \text{ALLOW}, & \text{otherwise,}
+  \end{cases}
+\end{equation}
+where $C(S)$ means the story has a Contract signal. Overrides bypass the thresholds: a canary read,
+a labelled process touching a protected asset and tampering with Separ itself force BLOCK; content
+from a trusted root forces ALLOW. The \emph{contract gate} caps a suspicion-only block at HOLD.
+
+\subsection{Contain}
+On BLOCK or HOLD the gate emits actions with undo records: kill the process tree, cut its network,
+quarantine files (moved, mode 0400, never deleted), revert persistence. On Linux with
+\texttt{serve --enforce} as root they are real: SIGSTOP/SIGKILL (with the cgroup-v2 freezer when
+the process has its own cgroup), an nftables rule matching the process's cgroup, and a root-owned
+quarantine; never PID~1, the daemon or another user's process unless root. A process is touched
+only if a sensor reported its real PID; otherwise the action is logged as \emph{unavailable}.
+Without \texttt{--enforce} every action is simulated. All results in \S\ref{sec:eval} use the
+simulated enforcer.
+
+\subsection{Rootkit scanner}
+A separate read-only scanner runs six families of checks: (1)~linker preload; (2)~fileless
+execution and anonymous writable-executable memory, both for the scanning user's own processes
+only; (3)~kernel modules compared in both directions between \texttt{/sys/module} and
+\texttt{/proc/modules} and against the module names in \texttt{/proc/kallsyms}, plus forced-load
+taint; (4)~PIDs that answer a direct \texttt{stat} of \texttt{/proc/<pid>} (a sweep up to
+\texttt{pid\_max}) but are missing from the directory listing; (5)~TCP sockets counted in
+\texttt{sockstat} but missing from \texttt{/proc/net/tcp}, and promiscuous interfaces; (6)~optional
+installed tools (\texttt{unhide}, \texttt{chkrootkit}, \texttt{rkhunter}). A discrepancy counts only if it appears in two passes, the classic cross-view idea of
+GhostBuster~\cite{wang2005strider}; the transient rate $p_{\text{race}}$ can be measured on a clean
+host (\texttt{--calibrate}) and enters the weight $\ln 0.99 - k\ln p_{\text{race}}$ for $k$
+passes, capped at 8\nats{} and never below the family's base weight. Its limits: it sees what user space sees, so a kernel rootkit that hides consistently from
+all views is missed; process-level checks cover only the scanning user; JIT runtimes produce
+writable-executable memory and are only noted.
+
+% ============================================================================
+\section{Implementation}
+\label{sec:impl}
+Separ is written in Python 3.12 (pydantic~2, cryptography) with no machine-learning dependency.
+A daemon (\texttt{separ serve}) listens on localhost with a per-daemon token; \texttt{separ setup}
+writes and signs a policy with the administrator's key, which stays on the administrator's machine;
+\texttt{separ policy set-mode} and \texttt{separ reload} change the mode. Eight sensor mapping
+templates, a browser extension and per-architecture packages that install pinned wheels into a
+private virtual environment without internet access are included. The code, the evaluation data and
+the scripts that produce every number and figure of this paper are in the repository.
+
+% ============================================================================
+\section{Evaluation}
+\label{sec:eval}
+
+\subsection{Method: catalog, variants and seed discipline}
+\label{sec:method}
+A \emph{golden catalog} of \GoldenTotal{} scenarios (\GoldenMalicious{} malicious,
+\GoldenBenign{} benign) describes each attack family and a benign counterpart as replayable event
+files made from harmless stand-ins. A generator mutates every scenario along six dimensions
+(delivery, entry point, obfuscation, destination, lineage depth, timing) and in seeded combinations
+of two to four; a mutation that itself adds forbidden behaviour to a benign scenario is labelled
+before any replay and reported apart. The seed is drawn with a cryptographic generator,
+\emph{recorded before} the code it will measure is written, and \emph{retired} after one
+evaluation; \SeedsRecorded{} seeds have been recorded so far, \SeedsRetired{} of them retired.
+Variants are generated once into a file that every compared version replays. Outcome classes:
+\emph{block}; \emph{effective hold} (a hold during which the gate paused or quarantined something);
+\emph{hold that pauses nothing}; \emph{allow}. Containment is block plus effective hold. Intervals
+are Wilson 95\,\%~\cite{wilson1927probable}; versions are compared with McNemar's
+test~\cite{mcnemar1947note} on the same variants.
+
+\subsection{Variants of the current version}
+\label{sec:variants}
+Seed \Seed{} produced \VarTotal{} variants (\MalTotal{} malicious, \BenTotal{} benign), replayed in
+\texttt{v2.3.1-base} and \texttt{\EvalTag}, which gave identical outcomes. Table~\ref{tab:variants}
+shows \texttt{\EvalTag}.
+
+\begin{table}[t]
+\centering\small
+\caption{Outcomes on seed \Seed{} (\texttt{\EvalTag}, default policy). Intervals: Wilson 95\,\%.}
+\label{tab:variants}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+\textbf{Malicious} (\MalTotal) & \multicolumn{3}{r}{} \\
+\midrule
+Blocked & \multicolumn{3}{r}{\MalBlock{} (\MalBlockedPct\,\%, \ci{\MalBlockedLo}{\MalBlockedHi})} \\
+Effective hold & \multicolumn{3}{r}{\MalEffHold} \\
+Hold that pauses nothing & \multicolumn{3}{r}{\MalHoldNothing} \\
+Allowed (missed) & \multicolumn{3}{r}{\MalAllow} \\
+\textbf{Contained} & \multicolumn{3}{r}{\textbf{\MalContained{} (\MalContainedPct\,\%, \ci{\MalContainedLo}{\MalContainedHi})}} \\
+\midrule
+\textbf{Benign} & allow & hold & block \\
+\midrule
+Neutral (\BenNeutralTotal) & \BenNeutralAllow & \BenNeutralHold & \BenNeutralBlock \\
+\quad block rate & \multicolumn{3}{r}{\BenNeutralBlockRatePct\,\% \ci{\BenNeutralBlockRateLo}{\BenNeutralBlockRateHi}} \\
+Adds a violation (\BenAddedTotal) & \BenAddedAllow & \BenAddedHold & \BenAddedBlock \\
+\quad of which Contract (\BenAddedContractTotal) & \BenAddedContractAllow & \BenAddedContractHold & \BenAddedContractBlock \\
+\quad of which Effect (\BenAddedEffectTotal) & \BenAddedEffectAllow & \BenAddedEffectHold & \BenAddedEffectBlock \\
+\quad block rate & \multicolumn{3}{r}{\BenAddedBlockRatePct\,\% \ci{\BenAddedBlockRateLo}{\BenAddedBlockRateHi}} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Of the \MalUncontained{} uncontained malicious variants, the \MalAllow{} allowed ones are documented
+gaps: a typed command whose fetch goes to a trusted destination, and slow ransomware whose file
+changes are spread over minutes or hours. The holds that pause nothing are login stories, whose
+identity rules stay in observe mode until a pilot, and one story whose only producer is a channel
+role (a file manager), which is never paused. On the variants whose content the seed decides (the
+independent part), \MalSeededContained{} of \MalSeededContainedN{} were contained
+(\MalSeededContainedPct\,\%, \ci{\MalSeededContainedLo}{\MalSeededContainedHi}).
+Of the \BenNeutralHold{} neutral holds, \BenNeutralHoldByDesign{} come from two benign scenarios
+whose expected decision is hold by design (a signed installer of an unknown role that persists; a
+backup job in a story with an external label); the other \BenNeutralHoldWorse{} are variants of a
+Kubernetes-admin scenario whose entry mutation replaces the admin by a role that may not read
+secrets, a mutation the generator labels neutral although it changes what is allowed. Benign variants with an added violation are blocked in
+\BenAddedBlockRatePct\,\% of cases: there the mutation itself made the story forbidden.
+Figure~\ref{fig:outcomes} shows the split; Appendix~\ref{app:figs} breaks it down by scenario and
+mutation dimension and shows every earlier seed.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{figures/fig_outcomes.pdf}
+  \caption{\texttt{\EvalTag} on seed \Seed: (a)~golden catalog, expected versus actual decision;
+  (b)~malicious variants; (c)~neutral benign variants. Generated from the committed data by
+  \texttt{documentation/make\_figures.py}.}
+  \label{fig:outcomes}
+\end{figure*}
+
+\subsection{Golden catalog}
+\label{sec:golden}
+All \GoldenOk{} of \GoldenTotal{} scenarios reach their expected decision. This is a consistency
+check, not evidence of generalisation: several structural rules (the contract gate, the universal
+contract D19, the launcher contract D20) were added after earlier catalog checks showed scenarios
+that missed their expected decision, and the weights and rules were frozen afterwards. The variants
+of recorded seeds are the held-out part, but they are generated from the same scenarios.
+
+\subsection{Attack Lab}
+\label{sec:lab}
+The Attack Lab sends harmless stand-ins of attack commands through the live pipeline before they
+may run (hosts under \texttt{.invalid}, fake keys, a sandbox). In block mode Separ detected
+\LabDetected{} of \LabAttacksAll{} attack templates, counting the known-limit template (a
+malicious script run by name, whose command text shows nothing); \LabStopped{} of the
+\LabAttacks{} others were stopped before running (the ransomware burst is caught after its writes,
+as intended). All \LabBenign{} typed benign templates without network use were allowed.
+
+\begin{table}[t]
+\centering\footnotesize
+\caption{Everyday commands, recorded with their real outcome (block mode, default policy; O C E:
+which questions failed). Pasted: \CtlWebAllow{} allow, \CtlWebHold{} hold, \CtlWebBlock{} block.
+Typed: \CtlTypedAllow{} allow, \CtlTypedHold{} hold, \CtlTypedBlock{} block.}
+\label{tab:controls}
+\begin{tabularx}{\columnwidth}{@{}Xlrl@{}}
+\toprule
+\textbf{Pasted from a web page} & & $L$ & O C E \\
+\midrule
+\CtlRowsWeb
+\midrule
+\textbf{Typed (origin none)} & & & \\
+\midrule
+\CtlRowsTyped
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Table~\ref{tab:controls} shows \LabControls{} everyday commands that were not tuned to pass. Each
+group ran in a fresh lab, because typing the very text a page has just pasted inherits that page's
+label. \textbf{Pasted commands that visibly fetch, escalate or pipe into a shell are blocked,
+including legitimate install instructions.} The paste fails Origin, the universal rule against
+running external content fails Contract, and the visible effect fails Effect. Configuring trusted
+destinations does not change this: a process that runs pasted web content still counts a
+connection as a fetch unless its role contract lists the destination (a deliberate rule since
+v1.1, because popular hosts also serve payloads). Only a trusted \emph{source} would, and that is an
+allow override that must not cover hosts where anyone can publish. Typed, the same commands are held,
+never blocked. \texttt{pip install}, \texttt{docker run} and \texttt{ssh user@host} were allowed
+because their text names no host, so the analysis sees no network use; this is a gap, not
+leniency. A Falco baseline on the same commands was not measured
+\todo{run Falco's default rules on the Attack Lab commands as a measured baseline; neither Falco
+nor a container runtime was available on the evaluation machine}.
+
+\paragraph{Ablation.} Of the \LabScored{} attack blocks that rest on the score rather than an
+override, removing any single Contract or Effect signal leaves \LabAblSilent{} allowed silently,
+\LabAblHeld{} held and \LabAblStill{} still blocked (mean margin above $\tau_b$:
+\LabMeanMargin\nats). This shows fragility: most pasted-command blocks rest on one predicted Effect,
+because a harmless pasted command alone is designed to stay below $\tau_h$.
+
+\paragraph{Latency.} The in-process decision took a median of \LabMedianMs{}\,ms per template
+(maximum \LabMaxMs{}\,ms, the first call of a session; \LabUnderTenMs{} of \LabTemplates{} under
+10\,ms) on the development laptop, before the command starts. End-to-end overhead on a target
+machine was not measured.
+
+\subsection{Privacy audit}
+The audit replays the corpus and scans \AudStrings{} output strings for raw content
+(\AudRawFindings{} found), then attacks \AudFingerprints{} fingerprints with a dictionary of
+common commands and URL paths under guessable keys (none, defaults, the repository's lab key) and as
+plain hashes: \AudReversals{} reversals in \AudAttempts{} attempts. A control run with the real
+device key reverses \AudControl{} fingerprints, so a zero is not a broken attack. The real threat
+is an attacker who has $K_{\text{dev}}$ (root, or the daemon's user): HMAC then offers no
+protection for low-entropy commands such as \texttt{sudo apt update}, which a dictionary reverses.
+Identifiers are another matter: the local logs keep login names, sensor host names and quarantined
+file names raw (Appendix~\ref{app:ids}); pseudonyms are applied only when a verdict is exported,
+which the daemon does not do.
+
 % ============================================================================
 \section{Related Work}
 \label{sec:related}
 
-\paragraph{Static Mandatory Access Control.} SELinux~\cite{smalley2001implementing}, AppArmor~\cite{bauer2006paranoid}, and Seccomp-BPF~\cite{corbet2012seccomp} enforce fixed per-binary syscall rules. Because they lack input provenance, they allow an interactive shell to run \texttt{curl | sh} even when pasted from a malicious webpage. Separ pairs role contracts with dynamic origin tags to stop such actions before execution.
+\paragraph{Information flow and taint.} Separ's origin labels are a coarse, decaying form of
+information-flow control~\cite{denning1976lattice} and dynamic taint
+tracking~\cite{newsome2005dynamic}, tracked per process and file rather than per byte. Windows'
+Mark of the Web~\cite{microsoft2024motw} labels downloaded files with their zone, a static
+cousin of a persistent label. CaMeL~\cite{debenedetti2025camel} and FIDES~\cite{costa2025fides}
+apply information-flow control to LLM agents, deciding a tool call by the provenance of its
+arguments, which is Separ's Origin question for the \texttt{agent} role.
 
-\paragraph{Syscall Rules \& Provenance Graph IDS.} Runtime engines like Falco~\cite{falco2024cncf} and Tetragon~\cite{tetragon2024cilium} match individual syscall rules, which can inflate scores across overlapping rules and log cleartext arguments. Provenance graph systems like SLEUTH~\cite{hossain2017sleuth}, HOLMES~\cite{milajerdi2019holmes}, and UNICORN~\cite{han2020unicorn} reconstruct attack graphs post-compromise, but lack Bayes-optimal cost thresholds, signed role contracts, or human-auditable three-question explanations. Separ adapts Pearl's Noisy-OR~\cite{pearl1988probabilistic} and sequential log-odds testing~\cite{wald1945sequential,page1954continuous} into a monotone, explainable calculus.
+\paragraph{Provenance capture and detection.} CamFlow~\cite{pasquier2017practical} captures
+whole-system provenance in the kernel. SLEUTH~\cite{hossain2017sleuth} and
+HOLMES~\cite{milajerdi2019holmes} tag and correlate audit events into attack scenarios;
+UNICORN~\cite{han2020unicorn}, ProvDetector~\cite{wang2020provdetector},
+Kairos~\cite{cheng2024kairos}, Flash~\cite{rehman2024flash} and NODLINK~\cite{li2024nodlink}
+detect intrusions in provenance graphs, several with learned models, at much larger scale and
+completeness than Separ. They observe after the fact; Separ adds a pre-execution decision on the
+paths routed to it and a small explainable score.
 
-\paragraph{Rootkit Scanners \& Privacy Telemetry.} Signature tools (\texttt{chkrootkit}, \texttt{rkhunter}~\cite{rkhunter2018}) miss novel in-memory implants, while single-pass cross-view diffing (Strider GhostBuster~\cite{wang2005strider}) suffers false alarms from short-lived process churn. Separ requires discrepancies to persist across two passes over six read-only engines, and enforces an in-memory HMAC-SHA256~\cite{bellare1996keying} boundary with differential privacy~\cite{dwork2006calibrating} for fleet counts.
-
-% ============================================================================
-% 3. THE SEPAR PIPELINE & STEP-BY-STEP MATH
-% ============================================================================
-\section{The Separ Pipeline and Step-by-Step Math}
-\label{sec:pipeline}
-
-\begin{figure*}[!t]
-  \centering
-  \resizebox{\textwidth}{!}{%
-    \begin{tikzpicture}[
-      font=\scriptsize\sffamily,
-      >=Latex,
-      sensor/.style={rectangle, rounded corners=3pt, draw=slate!70!black, fill=blue!5, thick, minimum width=2.25cm, minimum height=0.85cm, align=center},
-      stage/.style={rectangle, rounded corners=4pt, draw=blue!65!black, fill=blue!7, thick, minimum width=2.35cm, minimum height=1.55cm, align=center},
-      priv/.style={rectangle, rounded corners=4pt, draw=red!70!black, fill=red!6, thick, minimum width=2.45cm, minimum height=1.55cm, align=center},
-      gate/.style={diamond, aspect=1.55, draw=orange!80!black, fill=orange!10, thick, minimum width=2.1cm, align=center, inner sep=1pt},
-      outbox/.style={rectangle, rounded corners=3pt, draw=teal!70!black, fill=teal!7, thick, minimum width=2.2cm, minimum height=0.72cm, align=center},
-      store/.style={cylinder, shape border rotate=90, aspect=0.22, draw=black!65, fill=gray!10, thick, minimum width=2.1cm, minimum height=0.75cm, align=center},
-      arrow/.style={->, thick, draw=black!75},
-      dashedarrow/.style={->, thick, dashed, draw=blue!60!black}
-    ]
-      \definecolor{slate}{HTML}{334155}
-
-      % Sensors Column
-      \node[sensor] (s_cli) {\textbf{CLI Barrier}\\{\tiny \texttt{separ guard} / \texttt{lab}}};
-      \node[sensor, below=0.22cm of s_cli] (s_ebpf) {\textbf{System Sensors}\\{\tiny Tetragon, Falco, \texttt{sshd}, IdP}};
-      \node[sensor, below=0.22cm of s_ebpf] (s_rk) {\textbf{Host Integrity}\\{\tiny 6-Engine 2-Pass Rootkit}};
-
-      % Stage 1: Observe (Privacy Wall)
-      \node[priv, right=0.55cm of s_ebpf] (obs) {\textbf{1. Observe}\\{\tiny HMAC-SHA256 ($K_{\text{dev}}$)}\\{\tiny Entropy $H$, $\rho_{\text{enc}}$, $r_{\text{ws}}$}\\{\tiny Bloom $\mathcal{B}$ + Exact $\mathcal{D}$}\\{\tiny \textcolor{red!70!black}{\textit{Cleartext dropped}}}};
-
-      % Stage 2: Tag
-      \node[stage, right=0.55cm of obs] (tag) {\textbf{2. Tag}\\{\tiny Provenance $\ell$}\\{\tiny Half-life $2^{-\Delta t/T_{1/2}}$}\\{\tiny Freeze on Violation}\\{\tiny Noisy-OR Fusion}};
-
-      % Stage 3: Link
-      \node[stage, right=0.55cm of tag] (link) {\textbf{3. Link}\\{\tiny Causal Story $S$}\\{\tiny Process Lineage}\\{\tiny Burst \& CUSUM}\\{\tiny Drift Tracking}};
-
-      % Stage 4: Judge
-      \node[stage, right=0.55cm of link] (judge) {\textbf{4. Judge}\\{\tiny \textbf{Q1} Origin ($s_{\text{ori}} w_i$)}\\{\tiny \textbf{Q2} Contract ($w_j$)}\\{\tiny \textbf{Q3} Effect ($w_k$)}\\{\tiny Log-Odds $L(S)$}};
-
-      % Stage 5: Gate
-      \node[gate, right=0.55cm of judge] (gate) {\textbf{5. Gate}\\{\tiny $L \ge \tau_b, \tau_h$}\\{\tiny Contract Gate}};
-
-      % Stage 6 & Outputs
-      \node[outbox, above right=0.15cm and 0.55cm of gate] (contain) {\textbf{6. Contain}\\{\tiny Kill Tree, Cut Net,}\\{\tiny Quarantine \texttt{0400}}};
-      \node[outbox, below right=0.15cm and 0.55cm of gate] (gui) {\textbf{Desktop GUI}\\{\tiny \texttt{separ gui} (SSE)}\\{\tiny Live Event Ledger}};
-
-      % Policy Store
-      \node[store, above=0.45cm of judge] (pol) {\textbf{Signed Policy}\\{\tiny \texttt{separ setup} (Ed25519)}};
-      \node[store, below=0.45cm of tag] (logs) {\textbf{HMAC Ledger}\\{\tiny 21-Key Allowlist}};
-
-      % Arrows
-      \draw[arrow] (s_cli.east) -- (obs.west);
-      \draw[arrow] (s_ebpf.east) -- (obs.west);
-      \draw[arrow] (s_rk.east) -- (obs.west);
-      \draw[arrow] (obs.east) -- (tag.west);
-      \draw[arrow] (tag.east) -- (link.west);
-      \draw[arrow] (link.east) -- (judge.west);
-      \draw[arrow] (judge.east) -- (gate.west);
-      \draw[arrow] (gate.east) -- (contain.west);
-      \draw[arrow] (gate.east) -- (gui.west);
-      \draw[dashedarrow] (pol.south) -- (judge.north);
-      \draw[dashedarrow] (pol.west) -| (tag.north);
-      \draw[dashedarrow] (obs.south) |- (logs.west);
-      \draw[dashedarrow] (gate.south) |- (logs.east);
-
-      % Cryptographic Privacy Boundary Box
-      \begin{scope}[on background layer]
-        \node[draw=red!65!black, dashed, very thick, rounded corners=5pt, fill=red!2,
-              fit=(obs), label={[red!70!black, font=\tiny\bfseries]above:Zero-Raw Privacy Wall}] {};
-      \end{scope}
-    \end{tikzpicture}%
-  }
-  \caption{The Separ Fire Shield pipeline: raw telemetry enters Stage~1 (\texttt{Observe}), where cleartext is hashed with $K_{\text{dev}}$ and discarded before crossing the zero-raw privacy wall into provenance tagging, causal linking, three-question Bayesian judging, and gated containment.}
-  \label{fig:pipeline}
-\end{figure*}
-
-Figure~\ref{fig:pipeline} shows Separ's six-stage pipeline. Sensors standardize system activity into 13 canonical event types (\texttt{content\_in}, \texttt{request\_in}, \texttt{request\_end}, \texttt{exec}, \texttt{net\_connect}, \texttt{file\_write}, \texttt{persist}, \texttt{asset\_access}, \texttt{priv\_change}, \texttt{security\_tamper}, \texttt{user\_input}, \texttt{admin\_input}, \texttt{response\_out}). Each acting process carries a workload role $r \in \mathcal{R}$ (16 built-in roles such as \texttt{interactive\_shell}, \texttt{web\_worker}, \texttt{agent}, \texttt{package\_installer}, plus custom admin roles) governed by an Ed25519-signed policy $\Pi$. Two core invariants apply everywhere:
-\begin{enumerate}[leftmargin=1.2em,itemsep=1pt,topsep=1pt]
-  \item \textbf{Zero Raw Persistence:} Cleartext commands, URLs, and file paths never leave Stage~1; downstream records obey a strict 21-key allowlist of hashes and numbers.
-  \item \textbf{Missing Information Neutrality:} When a sensor cannot observe an attribute (e.g., unknown code signature), Separ scores $0$ rather than assuming malice, and reports visibility gaps via \texttt{separ health}.
-\end{enumerate}
-
-\subsection{Stage 1 (\texttt{Observe}): Privacy Wall \& Obfuscation}
-When a raw command or URL $c$ arrives, \texttt{Observe} normalizes spaces ($\tilde{c}$) and hashes it with a secret 256-bit local device key $K_{\text{dev}}$:
-\begin{equation}
-  f(c) = \texttt{"hmac:"} \,\|\, \operatorname{Hex}\!\Big(\operatorname{HMAC-SHA256}\big(K_{\text{dev}},\, \tilde{c}\big)\Big).
-  \label{eq:hmac}
-\end{equation}
-Here $f(c)$ is an irreversible fingerprint: Separ can still recognize repeated commands without ever saving passwords or tokens to disk.
-
-Before discarding $c$ from RAM, \texttt{Observe} measures three simple text-shape numbers from the character length $N_c = |c|$ and character frequency $p_x = n_x / N_c$:
-\begin{align}
-  H(c) &= -\sum_{x : p_x > 0} p_x \log_2 p_x \quad\text{(Shannon entropy)}, \label{eq:entropy}\\
-  \rho_{\text{enc}}(c) &= \frac{1}{N_c}\sum_{i=1}^{N_c} \mathbf{1}\!\left[c_i \in \Sigma_{\text{b64/hex}}\right] \quad\text{(encoding ratio)}, \label{eq:encratio}\\
-  r_{\text{ws}}(c) &= \max\big\{\ell \in \mathbb{N} : \exists\, i,\; c_{i..i+\ell-1} \in \{\text{' '}, \text{'\textbackslash t'}\}^\ell\big\}. \label{eq:wsrun}
-\end{align}
-Intuitively: high entropy $H(c) > 5.2$ catches encrypted shellcode, high $\rho_{\text{enc}}(c)$ catches base64/hex payloads, and a long whitespace run $r_{\text{ws}}(c)$ catches ClickFix padding (hundreds of spaces hiding a malicious payload off-screen). Known bad indicators are checked in RAM using a Bloom filter $\mathcal{B}$ ($p_{\text{fp}} \le 10^{-3}$) verified against an exact hash set $\mathcal{D}_{\text{exact}}$, guaranteeing zero threat-list false positives.
-
-\subsection{Stage 2 (\texttt{Tag}): Provenance Decay \& Fusion}
-Whenever data enters from an untrusted source (\texttt{web}, \texttt{mail}, \texttt{agent\_input}, \texttt{inbound\_request}, \texttt{download}), Separ attaches a provenance label $\ell$ starting at strength $s_0 = 1$ at time $t_0$. Over time $\Delta t = t - t_0$, suspicion naturally fades with half-life $T_{1/2} = 30\,\text{min}$—unless the process breaks its role contract ($\mathcal{E}_{\text{contract}}(\ell) \neq \varnothing$) or writes persistent startup files ($\ell.\text{pers.}$), in which case decay freezes forever:
-\begin{equation}
-  s_\ell(t) =
-  \begin{cases}
-    s_0, & \text{if } \ell.\text{pers.} \lor \mathcal{E}_{\text{contract}}(\ell) \neq \varnothing,\\[2pt]
-    s_0 \, 2^{-\Delta t / T_{1/2}}, & \text{otherwise.}
-  \end{cases}
-  \label{eq:decay}
-\end{equation}
-If a process receives $m$ untrusted inputs $\{\ell_1,\dots,\ell_m\}$, Separ combines their strengths using Pearl's Noisy-OR formula:
-\begin{equation}
-  s_{\text{comb}}(t) = 1 - \prod_{i=1}^{m} \big(1 - s_{\ell_i}(t)\big).
-  \label{eq:noisyor}
-\end{equation}
-Each factor $(1 - s_{\ell_i})$ is the probability that source $i$ is harmless, so $s_{\text{comb}} \in [0, 1]$ smoothly increases when multiple untrusted inputs stack without exceeding $1$. Conversely, verified software portals grant a temporary \emph{trust mark} that lasts $\approx 2.8\,\text{h}$ ($s_{\text{floor}} = 0.02$) and cancels immediately if untrusted input is touched.
-
-\subsection{Stage 3 (\texttt{Link}): Causal Stories, Surprisal, \& Drift}
-\texttt{Link} groups related events into a causal story $S$ across process parent-child edges. To catch both sudden bursts and slow attacks:
-\begin{itemize}[leftmargin=1.2em,itemsep=1pt,topsep=1pt]
-  \item \textbf{Role Surprisal:} If a process in role $r$ executes an unseen binary/action, Laplace-smoothed Good-Turing surprisal scores how unexpected that action is for $r$.
-  \item \textbf{Burst \& Slow Drift:} Short-window bursts trigger on upper-tail Poisson probabilities, while slow multi-hour leaks (e.g., gradual encryption) accumulate via a one-sided CUSUM detector:
-  \begin{equation}
-    C_t = \max\big(0,\, C_{t-1} + x_t - \mu_0 - \kappa\big),
-    \label{eq:cusum}
-  \end{equation}
-  where $x_t$ is the current event rate, $\mu_0$ is the baseline rate, and $\kappa$ is a slack allowance so normal traffic drifts toward $0$.
-\end{itemize}
-
-\subsection{Stage 4 (\texttt{Judge}): Three-Question Calculus}
-Separ evaluates every story $S$ by answering three questions: \textbf{Q1 Origin} ($Q_{\text{ori}}$), \textbf{Q2 Contract} ($Q_{\text{con}}$), and \textbf{Q3 Effect} ($Q_{\text{eff}}$). Instead of summing overlapping alerts (which inflates scores), Separ takes only the \emph{strongest} signal weight $w$ within each question and adds across the three independent questions onto the prior log-odds $L_0 = \ln(\pi / (1-\pi)) = -6.9068$ (baseline attack prior $\pi = 0.001$):
-\begin{equation}
-  \begin{aligned}
-    L(S) = L_0 &+ \max_{i \in Q_{\text{ori}}(S)} s_{\text{ori}}(S)\, w_i \\
-               &+ \max_{j \in Q_{\text{con}}(S)} w_j + \max_{k \in Q_{\text{eff}}(S)} w_k.
-  \end{aligned}
-  \label{eq:logodds}
-\end{equation}
-Only $Q_{\text{ori}}$ scales by label strength $s_{\text{ori}}(S) \in [0, 1]$, guaranteeing that stronger untrusted provenance never lowers $L(S)$. The posterior attack probability is $\sigma(L(S)) = (1 + e^{-L(S)})^{-1}$.
-
-Using operational costs—missed attack $C_{\text{miss}}=1000$, false block $C_{\text{fb}}=20$, human hold $C_{\text{hold}}=5$, and hold stop rate $h=0.7$—Bayes minimal-risk decision theory gives two exact thresholds:
-\begin{align}
-  \tau_{\text{hold}} &= \ln\!\left(\frac{C_{\text{hold}}}{h\,C_{\text{miss}}}\right) = -4.9416, \label{eq:tau_hold}\\
-  \tau_{\text{block}} &= \ln\!\left(\frac{C_{\text{fb}}}{C_{\text{miss}}}\right) = -3.9120. \label{eq:tau_block}
-\end{align}
-
-\subsection{Stages 5--6 (\texttt{Gate}, \texttt{Contain}) \& Rootkit Scanner}
-When no absolute override $\mathcal{O}(S)$ fires (canary file read, protected key access, or attempt to kill Separ), \texttt{Gate} enforces the \textbf{Contract Gate} invariant ($\tau_b = \tau_{\text{block}}$, $\tau_h = \tau_{\text{hold}}$):
-\begin{equation}
-  d(S) =
-  \begin{cases}
-    \text{HOLD}, & \text{if } L(S) \ge \tau_b \land \neg C(S) \land \mathcal{O}(S)=\varnothing,\\
-    \text{BLOCK}, & \text{if } L(S) \ge \tau_b \land (C(S) \lor \mathcal{O}(S)\neq\varnothing),\\
-    \text{HOLD}, & \text{if } \tau_h \le L(S) < \tau_b,\\
-    \text{ALLOW}, & \text{otherwise.}
-  \end{cases}
-  \label{eq:decide}
-\end{equation}
-In plain words: Separ \emph{never} hard-blocks a process purely on suspicion unless it also broke a role contract ($C(S)$) or tripped an override ($\mathcal{O}(S)$); otherwise it holds for review. On \texttt{BLOCK}, \texttt{Contain} kills the process tree, cuts network access, quarantines files (\texttt{mode 0400}), and reverts persistence. On unattended servers, timed-out holds move files to \texttt{KEPT\_QUARANTINED} without crashing the main service.
-
-For host integrity, Separ runs a \textbf{six-engine, two-pass cross-view rootkit scanner} (\texttt{/proc} vs.\ \texttt{ps}, kernel modules vs.\ \texttt{/sys/module}, \texttt{LD\_PRELOAD}, hidden network listeners, and \texttt{anonymous\_rwx\_memory}). Requiring discrepancies to appear on both passes ($\Delta_{\text{pers}} = \Delta^{(1)} \cap \Delta^{(2)}$) eliminates false positives from short-lived processes exiting mid-scan.
-
-% ============================================================================
-% 4. IMPLEMENTATION & EXPERIMENTS
-% ============================================================================
-\section{Implementation and Experiments}
-\label{sec:eval}
-
-\subsection{Setup, Standalone GUI, and Packaging}
-\label{sec:impl}
-Separ is implemented in strict Python~3.12 (\texttt{pydantic} v2, \texttt{cryptography} Ed25519, zero runtime ML dependencies):
-\begin{itemize}[leftmargin=1.2em,itemsep=1pt,topsep=2pt]
-  \item \textbf{Upfront Policy Setup (\texttt{separ setup}):} Generates \texttt{admin.key} and signs \texttt{policy.yaml} for campus servers (\texttt{-{}-server}: TUBAF \texttt{tu-freiberg.de} SSO apps, Class-B campus CIDR, VPN, eduroam) or workstations (\texttt{-{}-laptop}) before startup.
-  \item \textbf{Standalone Desktop GUI (\texttt{separ gui}):} Opens a chromeless native app window (\texttt{-{}-app=} / \texttt{-{}-new-window}), safely dropping privileges to \texttt{\$SUDO\_USER} with X11/Wayland session variables under \texttt{sudo}. Displays a clean real-time SSE Event Ledger with zero fake alerts on load and diagnostic lab presets inside a collapsible drawer, plus offline Web Audio alert chimes.
-  \item \textbf{Sensor Kit \& Packaging:} Ships 8 YAML sensor mappings (Tetragon eBPF, Falco, Shibboleth IdP, SSHD journald, K8s audit, Postfix/Dovecot, Keycloak, M365), a POSIX \texttt{install.sh} installer, and compact native \texttt{.deb} ($568\,\text{KB}$) / \texttt{.rpm} ($293\,\text{KB}$) packages.
-\end{itemize}
-
-\subsection{Benchmarks, Live Barrier, Attack Lab, \& Audit}
-\label{sec:benchmarks}
-
-\begin{figure*}[!t]
-  \centering
-  \includegraphics[width=\textwidth]{figures/fig_outcomes.pdf}
-  \caption{Evaluation of \texttt{v2.0} (seed \texttt{171139148}): (a)~expected vs.\ actual verdicts across 46 golden scenarios ($100\%$); (b)~outcomes across 635 malicious mutations ($98.4\%$ contained); (c)~158 neutral benign mutations ($0.0\%$ false blocks).}
-  \label{fig:outcomes}
-\end{figure*}
-
-\begin{enumerate}[leftmargin=1.2em,itemsep=1.5pt,topsep=2pt]
-  \item \textbf{Golden Catalog \& 886 Seeded Mutations:} Across 46 golden scenarios (17 attack families) and 886 pre-registered mutations (delivery, entry, obfuscation, destination, lineage, timing), Separ achieves \textbf{100\% golden accuracy} ($46/46$), \textbf{98.4\% malicious containment} ($483$ blocked, $142$ effective holds, $10$ timing/trusted-destination misses in documented gaps), and \textbf{0.0\% neutral false blocks} ($137$ allowed, $21$ expected holds on \texttt{S49}/\texttt{S50}; Figure~\ref{fig:outcomes}).
-  \item \textbf{Live Cluster Barrier \& Command Intent:} The 16-scenario live HTTP barrier suite achieves \textbf{16/16 (100\%)} expected verdicts with per-daemon localhost token auth and DNS-rebinding protection. Pre-execution command intent prediction across 69 probe commands (including quote/\texttt{\$\{IFS\}} obfuscation) achieves \textbf{69/69 (100\%)} expected decisions.
-  \item \textbf{35-Template Interactive Attack Lab:} Mediated pre-execution via \texttt{separ lab} ($4.5\,\text{ms}$ median decision latency), Separ detects \textbf{28/28 attacks} ($27/28$ stopped before execution; ransomware burst caught on write) with \textbf{0/6} benign false alarms. Score-based blocks average $+1.62\,\text{nats}$ above $\tau_{\text{block}}$; single-signal ablation shows 9 of 22 score-based blocks rely on predicted Effect because harmless pasted commands sit deliberately at $-5.11\,\text{nats} < \tau_{\text{hold}}$.
-  \item \textbf{Adversarial Privacy Audit \& Test Suite:} Running \texttt{separ audit} across $264$ output artifacts finds \textbf{0 cleartext leaks} and \textbf{0/349} HMAC reversals across $2,119$ dictionary guesses without $K_{\text{dev}}$ (with $0/10$ single-approver escrow bypasses). The automated test suite passes \textbf{2,354 tests}.
-\end{enumerate}
-
-\subsection{Comparison Against Related Work}
-\label{sec:comparative_eval}
-
-We compare Separ against six security baselines in both \textbf{quantitative data performance} (Table~\ref{tab:rw_data}) and \textbf{methodological capabilities} (Table~\ref{tab:rw_method}).
+\paragraph{Runtime security and access control.} SELinux~\cite{smalley2001implementing} and
+AppArmor~\cite{bauer2006paranoid} enforce per-domain policy in the kernel without input
+provenance. Falco~\cite{falco2024cncf}, Tetragon~\cite{tetragon2024cilium} and
+Tracee~\cite{aqua2024tracee} observe system calls through eBPF or a kernel driver and alert (Tetragon
+can also enforce in the kernel); BPF-LSM (KRSI)~\cite{singh2019krsi} makes LSM hooks programmable,
+the mechanism complete mediation would need. Cross-view rootkit detection goes back to
+GhostBuster~\cite{wang2005strider}; signature scanners include rkhunter~\cite{rkhunter2018}.
 
 \begin{table*}[t]
-\centering
-\caption{Quantitative Comparison Against Related Work Across Benchmark Datasets and Threat Classes.}
-\label{tab:rw_data}
-\small
-\resizebox{\textwidth}{!}{%
-\begin{tabular}{@{}lcccccc@{}}
+\centering\small
+\caption{Qualitative comparison of design focus, from the cited descriptions. \emph{Nothing in
+this table was measured}; it states what each approach is built to do, not how well.}
+\label{tab:qualitative}
+\begin{tabularx}{\textwidth}{@{}lXXXX@{}}
 \toprule
-\textbf{System / Method} & \textbf{Golden} & \textbf{Mutation} & \textbf{Neutral} & \textbf{Attack Lab} & \textbf{ClickFix /} & \textbf{Cleartext} \\
- & \textbf{Acc. (46)} & \textbf{Contain. (886)} & \textbf{False Blocks} & \textbf{Detect (28)} & \textbf{Prompt Inj.} & \textbf{Leaks} \\
+\textbf{Approach} & \textbf{Where it observes} & \textbf{Decides before the action?} & \textbf{Uses input provenance?} & \textbf{Model of normal behaviour} \\
 \midrule
-SELinux / AppArmor / Seccomp~\cite{smalley2001implementing,bauer2006paranoid,corbet2012seccomp} & Static MAC & No decay & Low (static) & Partial & Missed (0\%) & Audit raw \\
-Falco / Auditd Rules~\cite{falco2024cncf} & Syscall rules & Additive bias & Moderate & Post-exec & Post-exec & Cleartext \\
-HOLMES / SLEUTH~\cite{milajerdi2019holmes,hossain2017sleuth} & Causal graph & Uncalibrated & Low & Post-exec & Partial & Graph labels \\
-UNICORN~\cite{han2020unicorn} & GNN sketch & Drift-bound & Low & Post-exec & Unexplained & Sketch only \\
-\texttt{chkrootkit} / \texttt{rkhunter}~\cite{rkhunter2018} & Signatures & N/A & Low & Rootkit only & Missed (0\%) & Local logs \\
-Strider GhostBuster~\cite{wang2005strider} & 1-pass diff & PID-churn FP & Elevated & Rootkit only & Missed (0\%) & Raw proc \\
-\midrule
-\textbf{Separ (This Work)} & \textbf{100\% (46/46)} & \textbf{98.4\%} & \textbf{0.0\%} & \textbf{100\% (28/28)} & \textbf{100\% Pre-Exec} & \textbf{0 (HMAC)} \\
+SELinux, AppArmor & kernel LSM hooks (complete for its hooks) & yes (access check) & no & per-domain policy \\
+Falco, Tracee & system calls (eBPF / driver) & no (alerts) & no & rules / signatures \\
+Tetragon & system calls (eBPF) & can enforce in kernel & no & tracing policies \\
+Provenance IDS (SLEUTH \ldots{} NODLINK) & audit or provenance graph & no (detection) & yes (graph lineage) & tags, rules or learned models \\
+CaMeL, FIDES & LLM agent tool calls & yes & yes & capability / IFC policy \\
+Mark of the Web & downloaded files & at open time & yes (zone) & none \\
+\textbf{Separ} & commands routed to it, browser, sandbox, ingested sensors & yes, on mediated paths only & yes (decaying labels) & signed role contracts \\
 \bottomrule
-\end{tabular}%
-}
+\end{tabularx}
 \end{table*}
 
-\begin{table*}[t]
-\centering
-\caption{Methodological and Architectural Comparison Across Security Paradigms.}
-\label{tab:rw_method}
-\small
-\resizebox{\textwidth}{!}{%
-\begin{tabular}{@{}lcccccc@{}}
-\toprule
-\textbf{System / Baseline} & \textbf{Origin} & \textbf{Signed} & \textbf{Monotone} & \textbf{In-Memory} & \textbf{Multi-Pass} & \textbf{Upfront Setup} \\
- & \textbf{Provenance} & \textbf{Contracts} & \textbf{Noisy-OR} & \textbf{HMAC Wall} & \textbf{Rootkit Diff} & \textbf{\& Footprint} \\
-\midrule
-SELinux / AppArmor~\cite{smalley2001implementing,bauer2006paranoid} & No & Binary-only & No & No & No & Kernel policy \\
-Falco / Tetragon~\cite{falco2024cncf,tetragon2024cilium} & Tag-only & No & Additive & No & No & Daemon + eBPF \\
-HOLMES~\cite{milajerdi2019holmes} & Causal & No & Heuristic & No & No & Graph engine \\
-UNICORN~\cite{han2020unicorn} & Graph & No & Neural GNN & No & No & Offline train \\
-Strider GhostBuster~\cite{wang2005strider} & No & No & No & No & 1-pass & Offline scan \\
-\midrule
-\textbf{Separ (This Work)} & \textbf{Half-life} & \textbf{Ed25519} & \textbf{Bayes+Gate} & \textbf{4-Eyes Escrow} & \textbf{6-Eng 2-Pass} & \textbf{\texttt{setup} / 568\,KB} \\
-\bottomrule
-\end{tabular}%
-}
-\end{table*}
-
-\begin{enumerate}[leftmargin=1.2em,itemsep=1pt,topsep=2pt]
-  \item \textbf{Pre-Execution Provenance vs.\ Static MAC:} SELinux and AppArmor permit \texttt{curl | sh} in an interactive shell; Separ links the \texttt{web} origin to predicted Effect to stop $100\%$ of ClickFix lures before execution.
-  \item \textbf{Monotone Noisy-OR vs.\ Additive Rules:} Unlike Falco's additive rule scoring and cleartext JSON logs, Separ's max-within-question operator prevents score inflation ($0.0\%$ neutral false blocks) with $0$ cleartext leaks.
-  \item \textbf{Calibrated Contracts vs.\ Graph IDS:} HOLMES lacks Bayes-optimal thresholds and signed contracts, while UNICORN's black-box embeddings lack human-auditable three-question explanations.
-  \item \textbf{Multi-Pass Cross-View vs.\ Signatures:} Signature scanners miss memory-only implants (\texttt{anonymous\_rwx\_memory}), while 1-pass diffing suffers transient PID-churn false positives eliminated by Separ's two-pass confirmation.
-\end{enumerate}
-
 % ============================================================================
-% 5. CONCLUSION
-% ============================================================================
-\section{Conclusion}
-\label{sec:conclusion}
-Separ (\emph{The Fire Shield}) demonstrates that evaluating post-compromise behavior—rather than classifying exploit payloads upfront—provides a reliable, explainable defense against zero-day exploits, ClickFix copy-paste lures, prompt-injected coding agents, and stealth rootkits. By combining half-life-decayed provenance, Ed25519-signed role contracts, a monotone Noisy-OR Bayesian log-odds calculus, and the Contract Gate invariant, Separ achieves $100\%$ golden accuracy ($46/46$), $98.4\%$ mutation containment across $886$ variants with $0.0\%$ neutral false blocks, and $28/28$ Attack Lab detection.
+\section{Discussion and Limitations}
+\label{sec:discussion}
 
-Equally important for operational deployment, Separ's in-memory HMAC-SHA256 boundary guarantees zero cleartext command or URL persistence on disk ($0/264$ leaks and $0/349$ HMAC reversals), while upfront policy signing (\texttt{separ setup}), the standalone Linux desktop GUI (\texttt{separ gui}), and compact native \texttt{.deb}/\texttt{.rpm} packages make it immediately deployable across both campus servers and developer workstations.
+\paragraph{What the approach buys.} What an attacker does after a foothold is tied to what the
+operating system lets a process do: a web worker that starts a shell or writes a script breaks
+its role contract however the exploit looked. Separ judges that consequence and explains its
+decision in three questions, with deterministic, signed configuration and no learned model at
+runtime.
 
-% ============================================================================
-% 7. FUTURE WORK
+\paragraph{Coverage.} Separ judges only what is routed to it (\S\ref{sec:threat}). A paste into a
+terminal without the guard or the browser extension, a script run by name and a compiled binary
+are not seen before they run; a kernel sensor sees what they do afterwards. A same-user attacker
+can stop a per-user daemon, and a root attacker can stop any.
+
+\paragraph{False alarms on real work.} The rule that makes ClickFix lures fail all three questions
+also blocks legitimate install instructions pasted from documentation (\S\ref{sec:lab}). In a pilot
+this must be measured on real pastes before block mode is enabled. A proposed rule (A83) would cap
+text the user selected and copied at HOLD and leave page-written clipboard content blockable; an
+attacker can, however, instruct the user to select the text themselves.
+
+\paragraph{Evidence model.} The weights are expert estimates, not fitted; the independence
+assumptions behind Eq.~\ref{eq:logodds} are untested; the hold threshold mixes a probability with
+log-odds; and the golden catalog shaped the structural rules. The variant matrix measures
+robustness to the generator's mutations of the catalog's own scenarios, not to real workloads.
+
+\paragraph{Evaluation.} Every result is a replay or a harmless stand-in; none was measured on real
+users or servers, and containment was simulated throughout. Latency was measured in process on a
+development laptop.
+
+\paragraph{Privacy.} Command text never reaches a log, but identifiers do: login names, sensor host
+names and quarantined file names are stored raw, and the system daemon's logs are readable by local
+users in \Version{} (Appendix~\ref{app:ids}). An attacker holding the device key can reverse
+low-entropy commands.
+
 % ============================================================================
 \section{Future Work}
 \label{sec:future}
-Separ currently mediates commands and files submitted through \texttt{separ guard}, its watched sandbox, and configured external sensor streams. Our primary systems engineering milestone is hooking Separ directly into Linux \texttt{eBPF} LSM and \texttt{fanotify} (or \texttt{auditd} as an intermediate step) for non-bypassable kernel-level mediation across all host processes, paired with a root-owned enforcer utilizing cgroup freezers, per-cgroup \texttt{nftables} rules, and reversible quarantine records.
-
-In addition, we plan to inspect target scripts invoked by name before execution to close the hidden-script blind spot observed in the Attack Lab, extend provenance propagation across multi-node Slurm and MPI batch jobs on shared HPC clusters, tune multi-day drift detectors for ultra-slow ransomware, and back policy signing keys with TPM hardware roots of trust prior to a longitudinal campus pilot.
-
-% ============================================================================
-% 8. AI DISCLOSURE
-% ============================================================================
-\section{AI Disclosure}
-\label{sec:ai_disclosure}
-Generative AI assistants (Claude Code and Antigravity) were used under human supervision to help write code, generate test suites, render diagrams, and typeset this document from a human-written specification. No AI or machine-learning model runs inside the Separ decision engine: every runtime verdict is a deterministic calculation governed by Ed25519-signed policies, frozen weights, and verified by $2,354$ automated tests.
+(1)~Complete mediation: an eBPF LSM or fanotify sensor that sees every execution and file access,
+with the enforcer already implemented. (2)~Evaluate the expected-cost decision rule (A82) and the
+clipboard rule (A83) on a fresh seed before enabling them. (3)~Close the recorded findings: a
+truthful \texttt{new\_file} in the web root with persistence defined for modified executables
+(F15), implied network destinations of common tools (F16), and an early full PID sweep in the
+daemon (F17). (4)~A pilot in observe mode that measures how often real pastes would be held or
+blocked, per user and week, against targets fixed in advance. (5)~TPM-backed keys for the device
+and the policy.
 
 % ============================================================================
-% REFERENCES
-% ============================================================================
-\begin{thebibliography}{99}\small\raggedright
-\setlength{\itemsep}{1.5pt}
-\setlength{\parskip}{0pt}
+\section{Conclusion}
+Separ judges the consequence of an attack, not its payload, and it does so before a mediated
+command runs. On \MalTotal{} malicious variants of a seed recorded before the code changed it
+contained \MalContainedPct\,\% with no block of \BenNeutralTotal{} neutral benign variants, and it
+detected \LabDetected{} of \LabAttacksAll{} lab attacks. The same rules block legitimate install
+commands pasted from the web, it sees only what is routed to it, and its weights are not fitted.
+A complete-mediation sensor and a measured pilot are the next steps.
 
-\bibitem{wald1945sequential}
-A.~Wald, ``\href{https://doi.org/10.1214/aoms/1177731118}{Sequential tests of statistical hypotheses},'' \emph{The Annals of Mathematical Statistics}, vol.~16, no.~2, pp.~117--186, 1945.
+\section*{AI Disclosure}
+Generative AI assistants (Claude Code and Antigravity) were used under human supervision to write
+code and tests, to produce figures, and to draft and typeset this paper from a human-written
+specification. Every number in the paper is generated from the committed data by
+\texttt{scripts/paper\_numbers.py}. No machine-learning model runs in Separ's decision engine.
 
-\bibitem{page1954continuous}
-E.~S. Page, ``\href{https://doi.org/10.1093/biomet/41.1-2.100}{Continuous inspection schemes},'' \emph{Biometrika}, vol.~41, no.~1/2, pp.~100--115, 1954.
+\bibliographystyle{plainnat}
+\bibliography{references}
 
-\bibitem{pearl1988probabilistic}
-J.~Pearl, \emph{\href{https://doi.org/10.1016/C2009-0-27609-4}{Probabilistic Reasoning in Intelligent Systems}}. Morgan Kaufmann, 1988.
-
-\bibitem{bellare1996keying}
-M.~Bellare, R.~Canetti, and H.~Krawczyk, ``\href{https://doi.org/10.1007/3-540-68697-5_1}{Keying hash functions for message authentication},'' in \emph{CRYPTO}, 1996, pp.~1--15.
-
-\bibitem{dwork2006calibrating}
-C.~Dwork, F.~McSherry, K.~Nissim, and A.~Smith, ``\href{https://doi.org/10.1007/11681878_14}{Calibrating noise to sensitivity in private data analysis},'' in \emph{TCC}, 2006, pp.~265--284.
-
-\bibitem{hossain2017sleuth}
-M.~N. Hossain et~al., ``\href{https://www.usenix.org/conference/usenixsecurity17/technical-sessions/presentation/hossain}{SLEUTH: Real-time attack scenario reconstruction from COTS audit data},'' in \emph{USENIX Security}, 2017, pp.~487--504.
-
-\bibitem{milajerdi2019holmes}
-S.~M. Milajerdi et~al., ``\href{https://doi.org/10.1109/SP.2019.00026}{HOLMES: Real-time APT detection through correlation of suspicious information flows},'' in \emph{IEEE S\&P}, 2019, pp.~1137--1152.
-
-\bibitem{han2020unicorn}
-X.~Han et~al., ``\href{https://doi.org/10.14722/ndss.2020.24046}{UNICORN: Runtime provenance-based detector for advanced persistent threats},'' in \emph{NDSS}, 2020.
-
-\bibitem{smalley2001implementing}
-S.~Smalley, C.~Vance, and W.~Salamon, ``\href{https://github.com/SELinuxProject/selinux}{Implementing SELinux as a Linux Security Module},'' NAI Labs Report, 2001.
-
-\bibitem{bauer2006paranoid}
-M.~Bauer, ``\href{https://gitlab.com/apparmor/apparmor}{Paranoid penguin: An introduction to Novell AppArmor},'' \emph{Linux Journal}, no.~148, 2006.
-
-\bibitem{corbet2012seccomp}
-J.~Corbet, ``\href{https://lwn.net/Articles/498231/}{Seccomp-BPF and syscall filtering},'' \emph{LWN.net}, 2012.
-
-\bibitem{wang2005strider}
-Y.-M. Wang et~al., ``\href{https://doi.org/10.1109/DSN.2005.39}{Detecting stealth software with the Strider GhostBuster},'' in \emph{DSN}, 2005, pp.~368--377.
-
-\bibitem{greshake2023not}
-K.~Greshake et~al., ``\href{https://doi.org/10.1145/3605764.3623985}{Not what you've signed up for: Indirect prompt injection},'' in \emph{ACM AISec}, 2023, pp.~79--90.
-
-\bibitem{mitre2024attack}
-MITRE Corporation, ``\href{https://attack.mitre.org/techniques/T1204/004/}{MITRE ATT\&CK (T1204.004 User Execution: Malicious Copy and Paste)},'' 2024--2026.
-
-\bibitem{falco2024cncf}
-CNCF, ``\href{https://falco.org/docs/}{Falco: Cloud-Native Runtime Security and Syscall Rule Engine},'' 2024.
-
-\bibitem{tetragon2024cilium}
-Cilium Project, ``\href{https://tetragon.io/docs/}{Tetragon: eBPF-Based Security Observability and Enforcement},'' 2024.
-
-\bibitem{rkhunter2018}
-Rootkit Hunter Project, ``\href{https://rkhunter.sourceforge.net/}{rkhunter and chkrootkit: Signature-Based Host Rootkit Scanners},'' 2018.
-
-\end{thebibliography}
-
-% ============================================================================
-% APPENDIX: EXTENDED EXPERIMENTAL GRAPHS & ANALYSIS (1-Column)
 % ============================================================================
 \onecolumn
 \appendix
 
-\section{Extended Experimental Graphs and Analysis}
-\label{app:graphs}
-
-This appendix presents additional empirical graphs and analytical breakdowns across comparative baselines, mutation dimensions, Attack Lab evidence margins, pre-execution latency, and frozen signal weights.
+\section{Figures}
+\label{app:figs}
 
 \begin{figure}[!htbp]
   \centering
-  \includegraphics[width=0.85\textwidth]{figures/fig_comparative.pdf}
-  \caption{(a)~Comparative security and privacy coverage across baselines (grounded in Tables~\ref{tab:rw_data}--\ref{tab:rw_method}); (b)~Separ's evolution from \texttt{v1.0} to \texttt{v2.0}, raising malicious containment to $98.4\%$ while driving neutral false blocks to $0.0\%$.}
-  \label{fig:comparative}
+  \includegraphics[width=0.95\textwidth]{figures/fig_rounds.pdf}
+  \caption{Every recorded seed and the two versions it was used for (shared variants only):
+  containment of malicious variants and false blocks of neutral benign variants (the earliest seeds
+  had no benign variants).}
+  \label{fig:rounds}
 \end{figure}
 
-\paragraph{Comparative \& Evolution Analysis.} Figure~\ref{fig:comparative}(a) highlights why static MAC and additive rule engines fail on ClickFix/prompt-injection lures ($0\%$ pre-execution catch) and expose cleartext telemetry, whereas Separ achieves $100\%$ on both without blocking benign workflows. Figure~\ref{fig:comparative}(b) shows how eliminating uncontained holds (\texttt{v1.1}), enforcing posterior monotonicity (\texttt{v1.3}), and scoping trust marks to process lineage (\texttt{v2.0}) drove neutral false blocks down from $2.0\%$ to $0.0\%$.
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.62\textwidth]{figures/fig_scenarios.pdf}
+  \caption{Outcome per malicious scenario on seed \Seed{}. S57/S58 are login stories whose identity
+  rules are in observe mode (holds that pause nothing).}
+  \label{fig:scenarios}
+\end{figure}
 
 \begin{figure}[!htbp]
   \centering
-  \includegraphics[width=0.68\textwidth]{figures/fig_dimensions.pdf}
-  \caption{Mutation containment across all six perturbation dimensions and multi-factor combinations.}
+  \includegraphics[width=0.62\textwidth]{figures/fig_dimensions.pdf}
+  \caption{Malicious variants by mutation dimension on seed \Seed.}
   \label{fig:dimensions}
 \end{figure}
 
-\paragraph{Mutation Dimension Robustness.} As shown in Figure~\ref{fig:dimensions}, delivery, entry, obfuscation, destination, and lineage mutations are contained in $100\%$ of variants. Only extreme timing delays ($>30\,\text{min}$ gaps in slow ransomware \texttt{S19} and oversized response leaks \texttt{S27}) evade rate windows ($92.6\%$).
-
 \begin{figure}[!htbp]
   \centering
-  \includegraphics[width=0.72\textwidth]{figures/fig_lab_evidence.pdf}
-  \caption{Bayesian evidence log-odds $L(S)$ across all 35 Attack Lab templates relative to $\tau_{\text{hold}}$ and $\tau_{\text{block}}$.}
-  \label{fig:lab_evidence}
+  \includegraphics[width=0.62\textwidth]{figures/fig_lab_evidence.pdf}
+  \caption{Attack Lab: posterior log-odds of every template and recorded control, with $\tau_h$ and
+  $\tau_b$.}
+  \label{fig:labevidence}
 \end{figure}
 
 \begin{figure}[!htbp]
   \centering
-  \includegraphics[width=0.72\textwidth]{figures/fig_lab_ablation_latency.pdf}
-  \caption{(a)~Single-signal ablation on the 22 score-based Attack Lab blocks; (b)~per-command latency ($4.5\,\text{ms}$ median).}
-  \label{fig:lab_ablation}
+  \includegraphics[width=0.62\textwidth]{figures/fig_lab_signals.pdf}
+  \caption{Attack Lab: which questions and signals caught the attacks.}
 \end{figure}
-
-\paragraph{Evidence Margins, Ablation, and Latency.} Figure~\ref{fig:lab_evidence} shows that score-based Attack Lab blocks average $+1.62\,\text{nats}$ above $\tau_{\text{block}}$, while harmless pasted controls sit safely at $-5.11\,\text{nats} < \tau_{\text{hold}}$. Figure~\ref{fig:lab_ablation}(a) confirms that removing any single Contract or Effect signal lets $9/22$ score-based blocks pass silently, proving that pasted attacks rely on predicted Effect. Figure~\ref{fig:lab_ablation}(b) shows $32/35$ decisions complete in under $10\,\text{ms}$ ($4.5\,\text{ms}$ median).
 
 \begin{figure}[!htbp]
   \centering
-  \includegraphics[width=0.58\textwidth]{figures/fig_weights.pdf}
-  \caption{Frozen policy signal weights ($w_j$ in nats) grouped by Origin, Contract, and Effect.}
-  \label{fig:weights}
+  \includegraphics[width=0.62\textwidth]{figures/fig_lab_ablation_latency.pdf}
+  \caption{Attack Lab: single-signal ablation of the score-based blocks and decision latency.}
 \end{figure}
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.5\textwidth]{figures/fig_weights.pdf}
+  \caption{The \Weights{} signal weights of the default policy (expert-elicited, in nats).}
+\end{figure}
+
+\FloatBarrier
+\section{Identifiers in the logs}
+\label{app:ids}
+From a lab run with synthetic users (\texttt{docs/it-facts.md}, section 4).
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}lXl@{}}
+\toprule
+\textbf{Where} & \textbf{Field} & \textbf{Form} \\
+\midrule
+\texttt{logs/events.jsonl} & device of guarded commands, browser and sandbox events & keyed pseudonym \\
+\texttt{logs/events.jsonl} & device of ingested sensor events & raw host name \\
+\texttt{logs/events.jsonl} & \texttt{actor.user}; account ids of identity sensors (\texttt{acct:<name>}) & raw \\
+\texttt{logs/events.jsonl} & command, URL, path, login line & keyed hash (HMAC) \\
+\texttt{logs/events.jsonl} & source address of a login & policy class or keyed hash of its prefix \\
+\texttt{logs/verdicts.jsonl} & \texttt{users} & raw \\
+notifications, webhook & device; message & pseudonym; fixed sentences, no user name \\
+\texttt{logs/barrier.log}, dashboard & names of quarantined files; work directory path & raw \\
+\texttt{heartbeat.json} & device; daemon PID & pseudonym; number \\
+decoy source proposals & external / internal source address of a decoy hit & raw (by design) / pseudonym and sealed value \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+In \Version{} the log files are created with the process umask under \texttt{/var/lib/separ}
+(mode 0755) for the system daemon, so local users can read them.
 
 \end{document}

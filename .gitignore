@@ -19,3 +19,11 @@ documentation/diagrams.pdf
 
 # attack lab: signed policy, private keys, sandbox, logs and saved runs (refmon lab)
 attack-lab/
+documentation/*.fdb_latexmk
+documentation/*.fls
+it-service-desk/*.aux
+it-service-desk/*.log
+it-service-desk/*.out
+it-service-desk/*.toc
+it-service-desk/*.fdb_latexmk
+it-service-desk/*.fls
