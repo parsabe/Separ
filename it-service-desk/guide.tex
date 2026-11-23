@@ -64,7 +64,7 @@
 \title{\Huge\bfseries Separ: IT Service Desk Operations,\\Setup, and Administration Guide}
 \author{\large Technical Documentation for System Administrators \& Endpoint Support\\[4pt]
 \texttt{TU Bergakademie Freiberg (tu-freiberg.de) / Linux Servers \& Workstations}\\[6pt]
-\normalsize\href{mailto:parsa.besharat@student.tu-freiberg.de}{\faEnvelope\ \texttt{parsa.besharat@student.tu-freiberg.de}} \quad|\quad \href{https://github.com/parsabe/Separ}{\faGithub\ \texttt{github.com/parsabe/Separ}}}
+\normalsize\href{mailto:parsa@parsabe.com}{\faEnvelope\ \texttt{parsa@parsabe.com}} \quad|\quad \href{https://github.com/parsabe/Separ}{\faGithub\ \texttt{github.com/parsabe/Separ}}}
 \date{November 2026 \quad | \quad Version 2.0}
 
 \begin{document}
@@ -340,7 +340,7 @@ Because a crashed daemon cannot report its own failure, schedule \texttt{separ h
 # Alert via Mattermost / Slack webhook or local mail
 separ health --workdir /var/lib/separ \
   --notify-webhook https://chat.example.org/hooks/YOUR_HOOK \
-  --notify-command "mail -s 'Separ Alert' security@tu-freiberg.de"
+  --notify-command "mail -s 'Separ Alert' admin@example.org"
 \end{lstlisting}
 
 \subsection{Common Service Desk Troubleshooting}

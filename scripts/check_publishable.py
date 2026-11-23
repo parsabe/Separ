@@ -35,8 +35,10 @@ ASSIGNED = re.compile(
     r"(?i)\b(?:api[_-]?key|passwd|password|secret|token)\b\s*[:=]\s*['\"][A-Za-z0-9+/_=.-]{12,}['\"]"
 )
 EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+# the project contact (round 2, owner decision): exactly this address, nothing else at its domain
+CONTACT_MAIL = "parsa@parsabe.com"
 SYNTHETIC_MAIL = re.compile(
-    r"@(?:[\w.-]*\.)?(?:example|invalid|test|localhost|parsabe\.com|github\.com)(?:\.\w+)?$"
+    r"@(?:[\w.-]*\.)?(?:example|invalid|test|localhost|github\.com)(?:\.\w+)?$"
 )
 HOME = re.compile(r"/home/[a-z][a-z0-9_-]*|/Users/[A-Za-z][\w-]*|/root/")
 IPV4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
@@ -47,13 +49,18 @@ PRIVATE_IP = re.compile(  # private, loopback, documentation, link-local and car
 URL = re.compile(r"https?://[A-Za-z0-9./_?=&%#:@-]+")
 OK_URL = re.compile(
     r"example\.|\.invalid|\.test\b|localhost|203\.0\.113\.|198\.51\.100\.|192\.0\.2\.|"
-    r"^https?://(?:www\.)?github\.com/|pypi\.org|python\.org|sh\.rustup\.rs|"
+    r"^https?://(?:www\.)?github\.com/|pypi\.org|sh\.rustup\.rs|"
     r"claude\.(?:com|ai)|docs\.pytest|hypothesis|astral\.sh|keepachangelog|semver|json-schema|"
     r"w3\.org|"
     r"github\.com/(?:astral-sh|pytest|HypothesisWorks)|"
     # round 2, A2: the README's badges and the project's own repository (anchored at the start,
     # so a URL that merely contains these strings elsewhere is still a finding)
     r"^https?://img\.shields\.io/badge/|^https?://github\.com/parsabe/|"
+    # round 2, owner decision: exactly the README's reference hosts, anchored the same way
+    r"^https?://(?:www\.)?(?:docs\.pydantic\.dev|pyyaml\.org|cryptography\.io|tetragon\.io"
+    r"|falco\.org|systemd\.io|shibboleth\.net|kubernetes\.io|postfix\.org|keycloak\.org"
+    r"|matplotlib\.org|latex-project\.org|python\.org|docs\.pytest\.org"
+    r"|hypothesis\.readthedocs\.io|docs\.astral\.sh)(?:[/?#:]|$)|"
     # the verbatim GPL-3.0 text in LICENSE
     r"//fsf\.org/|//www\.gnu\.org/licenses/"
 )
@@ -64,6 +71,9 @@ OK_URL = re.compile(
 SYNTHETIC_MARKERS = ("zz-secret-command-zz", "zx9lab-obfuscated-payload")
 # This script and its test contain the patterns they look for, on purpose.
 SELF = {"scripts/check_publishable.py", "tests/test_reproduce.py"}
+# The paper and its scripts are skipped, as ruff skips them; they are re-included when the paper is
+# revised (round 2, owner decision).
+SKIPPED_DIRS = ("documentation/",)
 SKIP_SUFFIXES = {".pyc", ".png", ".jpg", ".gif", ".ico", ".pdf", ".zip", ".gz"}
 
 
@@ -99,13 +109,14 @@ def line_findings(line: str, names: set[str]) -> list[str]:
     if SECRET.search(line) or ASSIGNED.search(line):
         out.append("secret")
     for m in EMAIL.finditer(line):
-        if not SYNTHETIC_MAIL.search(m.group(0)):
+        if m.group(0) != CONTACT_MAIL and not SYNTHETIC_MAIL.search(m.group(0)):
             out.append(f"e-mail address {mask_email(m.group(0))}")
     if HOME.search(line):
         out.append("home path")
     for m in IPV4.finditer(line):
         if not PRIVATE_IP.match(m.group(0)):
-            out.append(f"public IP {m.group(0)}")
+            # masked, so a report that quotes this finding is not a finding itself
+            out.append(f"public IP {'.'.join(m.group(0).split('.')[:2])}.x.x")
     for m in URL.finditer(line):
         if not OK_URL.search(m.group(0)):
             # without the scheme, so a report that quotes this finding is not a finding itself
@@ -123,7 +134,12 @@ def scan_tree(names: set[str]) -> list[str]:
     findings = []
     for rel in git("ls-files").splitlines():
         path = ROOT / rel
-        if path.suffix in SKIP_SUFFIXES or not path.is_file() or rel in SELF:
+        if (
+            path.suffix in SKIP_SUFFIXES
+            or not path.is_file()
+            or rel in SELF
+            or rel.startswith(SKIPPED_DIRS)
+        ):
             continue
         try:
             text = path.read_text(encoding="utf-8")
@@ -150,7 +166,8 @@ def scan_history(names: set[str]) -> list[str]:
         if line.startswith("commit "):
             commit = line.split()[1]
         elif line.startswith("diff --git "):
-            skip = line.split(" b/")[-1] in SELF
+            changed = line.split(" b/")[-1]
+            skip = changed in SELF or changed.startswith(SKIPPED_DIRS)
         elif line.startswith("+") and not line.startswith("+++") and not skip:
             for kind in line_findings(line[1:], names):
                 findings[f"{commit}: {kind}"] += 1

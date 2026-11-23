@@ -112,7 +112,28 @@ def test_badges_and_the_project_repository_are_allowed_and_nothing_more():
     assert any("url" in f for f in findings("https://img.shields.io.evil.org/badge/x"))
     assert any("url" in f for f in findings("https://evil.org/github.com/parsabe/x"))
     assert any("url" in f for f in findings("https://img.shields.io/endpoint?url=x"))
-    assert any("url" in f for f in findings("https://docs.pydantic.dev/"))
+    assert any("url" in f for f in findings("https://lwn.net/Articles/1/"))  # not on any list
+
+
+def test_the_owner_decisions_of_round_2_and_nothing_more():
+    """README reference hosts (anchored), the one project contact, example addresses; the paper is
+    skipped like ruff skips it; a report quoting a finding is not a finding again."""
+    for line in (
+        "https://docs.pydantic.dev/latest/", "https://www.keycloak.org/", "https://falco.org/docs",
+        "https://hypothesis.readthedocs.io/en/latest/", "https://docs.astral.sh/ruff/",
+        "write to parsa@parsabe.com", "mail -s alert admin@example.org",
+    ):  # fmt: skip
+        assert findings(line) == [], line
+    for line in (
+        "https://evil.org/?next=https://falco.org/", "https://falco.org.evil.org/x",
+        "https://docs.pydantic.dev.evil.org/", "write to someone@parsabe.com",
+        "write to parsa@parsabe.com.evil.org", "https://notpython.org/",
+    ):  # fmt: skip
+        assert findings(line), line
+    assert cp.SKIPPED_DIRS == ("documentation/",)
+    reported = findings("connect 8.8.8.8")
+    assert reported == ["public IP 8.8.x.x"] and findings(reported[0]) == []
+    assert findings(f"  {reported[0]}") == []
 
 
 def test_the_repository_itself_has_no_content_findings():
