@@ -1,12 +1,13 @@
-"""Build the charts of the Refmon paper from the committed evaluation data.
+"""Build the charts of the Separ paper from the committed evaluation data.
 
     make -C documentation figures      (needs the `paper` extra: pip install -e ".[paper]")
 
 Inputs, all in the repository: the per-variant results of every pre-registered seed
 (docs/evaluation/<version>-seed-<seed>.jsonl), the attack-lab reference run
-(docs/evaluation/lab-reference-run.json), the golden catalog titles and the signal weights of the
-default policy. Outputs: vector PDFs in documentation/figures/, one per figure, and PNG copies of
-four of them in docs/img/ for the GitHub README. Nothing is measured
+(docs/evaluation/lab-reference-run-<version>.json), the golden catalog titles and the signal
+weights of the default policy; the evaluated version and seed come from
+scripts/paper_numbers.py. Outputs: vector PDFs in documentation/figures/, one per figure, and PNG
+copies of four of them in docs/img/ for the GitHub README. Nothing is measured
 here; every number is counted from those files, with the outcome classes of
 scripts/compare_versions.py and the ablation of src/refmon/labreport.py, so a chart cannot disagree
 with a table.
@@ -21,6 +22,7 @@ from __future__ import annotations
 
 import itertools
 import json
+import re
 import statistics
 import sys
 from collections import Counter
@@ -44,6 +46,7 @@ README_FIGURES = {"fig_rounds", "fig_outcomes", "fig_scenarios", "fig_lab_eviden
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
 
 import compare_versions as cv  # noqa: E402
+import paper_numbers  # noqa: E402
 
 from refmon.evalstats import wilson_interval  # noqa: E402
 from refmon.labreport import _worst_single_removal  # noqa: E402
@@ -146,44 +149,32 @@ def _pct(k: int, n: int) -> tuple[float, float, float]:
 
 # -- data ----------------------------------------------------------------------------------------
 
-ROUNDS = [  # (seed, versions in order); each seed was recorded before the change it measures
-    ("654514256", ["v1.0", "v1.1", "v1.2", "v1.3"]),
-    ("833754500", ["v1.4", "v1.5"]),
-    ("545728926", ["v1.5", "v1.6"]),
-    ("616687759", ["v1.6", "v1.7"]),
-    ("171139148", ["v1.7", "v2.0"]),
-]
-ACTIVE = ("171139148", "v2.0")
 
-SHORT = {
-    "S01": "ClickFix, run dialog",
-    "S02": "ClickFix, terminal",
-    "S03": "FileFix, address bar",
-    "S04": "Command from a PDF",
-    "S05": "Typed from a video (gap)",
-    "S06": "Delayed persistence",
-    "S07": "Payload on file-share host",
-    "S08": "Canary credential read",
-    "S12": "Prompt-injected AI agent",
-    "S13": "Web worker spawns shell",
-    "S14": "Web shell dropped",
-    "S15": "Web worker calls out",
-    "S17": "Privilege escalation",
-    "S18": "Lateral fan-out",
-    "S19": "Ransomware burst",
-    "S20": "Security tool stopped",
-    "S21": "Poisoned package",
-    "S22": "Abused DB connection (gap)",
-    "S25": "Node2Shell child process",
-    "S26b": "Fetch, then outbound call",
-    "S26c": "Fetch, then executable write",
-    "S27": "Oversized responses",
-    "S31": "Macro starts script host",
-    "S32": "USB program persists",
-    "S33": "Fake installer",
-    "S34": "Infostealer",
-    "S35": "Drive-by hidden script",
-}
+def _version_key(v: str) -> tuple:
+    return tuple(int(x) if x.isdigit() else x for x in re.split(r"[.-]", v.lstrip("v")))
+
+
+def discover_rounds() -> list[tuple[str, list[str]]]:
+    """(seed, versions in order) for every evaluated seed, from the files in docs/evaluation/
+    (each seed was recorded before the change it measures). Flag runs such as v2.4+A82 are
+    not versions and are left out."""
+    by_seed: dict[str, list[str]] = {}
+    for path in DATA.glob("*-seed-*.jsonl"):
+        version, seed = path.stem.rsplit("-seed-", 1)
+        if "+" not in version:
+            by_seed.setdefault(seed, []).append(version)
+    rounds = [(seed, sorted(vs, key=_version_key)) for seed, vs in by_seed.items() if len(vs) > 1]
+    return sorted(rounds, key=lambda r: _version_key(r[1][-1]))
+
+
+ROUNDS = discover_rounds()
+ACTIVE = (str(paper_numbers.SEED), paper_numbers.VERSION)
+
+
+def scenario_titles() -> dict[str, str]:
+    from refmon.golden import load_golden_cases
+
+    return {c.scenario: c.expected.title for c in load_golden_cases(ROOT / "tests" / "golden")}
 
 
 def rows(version: str, seed: str) -> list[dict]:
@@ -192,11 +183,11 @@ def rows(version: str, seed: str) -> list[dict]:
 
 
 def malicious(rs: list[dict]) -> list[dict]:
-    return [r for r in rs if r["kind"] == "malicious"]
+    return [r for r in rs if r.get("kind", "malicious") == "malicious"]  # old rows: malicious
 
 
 def neutral_benign(rs: list[dict]) -> list[dict]:
-    return [r for r in rs if r["kind"] == "benign" and not r.get("adds")]
+    return [r for r in rs if r.get("kind") == "benign" and not r.get("adds")]
 
 
 def contained(r: dict) -> bool:
@@ -204,7 +195,7 @@ def contained(r: dict) -> bool:
 
 
 def lab() -> tuple[dict, list[dict]]:
-    doc = json.loads((DATA / "lab-reference-run.json").read_text())
+    doc = json.loads((DATA / f"lab-reference-run-{paper_numbers.VERSION}.json").read_text())
     return doc["meta"], doc["results"]
 
 
@@ -214,22 +205,30 @@ def lab() -> tuple[dict, list[dict]]:
 def fig_rounds() -> Path:
     steps = []
     for seed, versions in ROUNDS:
-        data = {v: rows(v, seed) for v in versions}
+        data = {v: {(r["scenario"], r["variant"]): r for r in rows(v, seed)} for v in versions}
         for a, b in itertools.pairwise(versions):
-            steps.append((seed, a, b, data[a], data[b]))
+            shared = sorted(set(data[a]) & set(data[b]))  # later catalogs have more scenarios
+            steps.append((seed, a, b, [data[a][k] for k in shared], [data[b][k] for k in shared]))
     steps.reverse()  # newest on top
     fig, (ax1, ax2) = plt.subplots(
-        1, 2, figsize=(FULL, 2.35), sharey=True, gridspec_kw={"wspace": 0.08}
+        1, 2, figsize=(FULL, 0.9 + 0.32 * len(steps)), sharey=True, gridspec_kw={"wspace": 0.08}
     )
     ys = range(len(steps))
+    lows = {0: [], 1: []}
+    highs = {0: [], 1: []}
     for y, (_, _a, _b, ra, rb) in zip(ys, steps, strict=True):
         for ax, pick, test in (
             (ax1, malicious, contained),
             (ax2, neutral_benign, lambda r: r["decision"] == "block"),
         ):
             pa, pb = pick(ra), pick(rb)
+            if not pa or not pb:
+                continue  # the first rounds had no benign variants
             va = _pct(sum(map(test, pa)), len(pa))
             vb = _pct(sum(map(test, pb)), len(pb))
+            side = 0 if ax is ax1 else 1
+            lows[side] += [va[1], vb[1]]
+            highs[side] += [va[2], vb[2]]
             for v, dy, color, face in ((va, 0.16, BEFORE, SURFACE), (vb, -0.16, BLOCK, BLOCK)):
                 ax.plot([v[1], v[2]], [y + dy, y + dy], color=color, linewidth=0.8, zorder=2)
                 ax.plot(v[0], y + dy, "o", ms=4.2, mfc=face, mec=color, mew=1.0, zorder=3)
@@ -239,10 +238,10 @@ def fig_rounds() -> Path:
             )  # fmt: skip
     labels = [f"{a} → {b}\nseed {seed}" for seed, a, b, _, _ in steps]
     ax1.set_yticks(list(ys), labels, fontsize=6.2)
-    ax1.set_xlim(84, 101.5)
+    ax1.set_xlim(min(lows[0]) - 2, 101.5)
     ax1.set_xlabel("malicious variants contained (block or effective hold), %")
     ax1.set_title("(a) Containment of attacks")
-    ax2.set_xlim(-0.4, 8.6)
+    ax2.set_xlim(-0.4, max(highs[1]) + 2.5)
     ax2.set_xlabel("neutral benign variants blocked (false blocks), %")
     ax2.set_title("(b) False blocks on harmless work")
     for ax in (ax1, ax2):
@@ -257,7 +256,7 @@ def fig_rounds() -> Path:
     return _save(fig, "fig_rounds", FULL)
 
 
-# -- figure 2: golden catalog and the v2.0 outcome split -----------------------------------------
+# -- figure 2: golden catalog and the outcome split of the evaluated version ----------------------
 
 
 def _donut(ax, parts: list[tuple[str, int, str]], center: str, sub: str, title: str) -> None:
@@ -348,7 +347,7 @@ def fig_scenarios() -> Path:
         return ((c["block"] + c["effective hold"]) / n, c["block"] / n)
 
     order = sorted(per, key=lambda s: (share(s), s))  # weakest at the bottom
-    fig, ax = plt.subplots(figsize=(COL, 4.6))
+    fig, ax = plt.subplots(figsize=(COL, 0.6 + 0.135 * len(order)))
     for y, sid in enumerate(order):
         c = per[sid]
         n = sum(c.values())
@@ -361,7 +360,9 @@ def fig_scenarios() -> Path:
             left += w
         if unc:
             ax.text(101.5, y, f"{unc}/{n} missed", va="center", fontsize=5.8, color=ERROR)
-    ax.set_yticks(range(len(order)), [f"{s}  {SHORT.get(s, s)}" for s in order], fontsize=6.2)
+    titles = scenario_titles()
+    short = {k: (v if len(v) <= 34 else v[:33].rstrip() + "…") for k, v in titles.items()}
+    ax.set_yticks(range(len(order)), [f"{s}  {short.get(s, s)}" for s in order], fontsize=5.6)
     ax.set_xlim(0, 100)
     ax.set_xticks([0, 25, 50, 75, 100])
     ax.set_xlabel(f"share of mutated variants, % ({version}, seed {seed})")
@@ -416,8 +417,9 @@ def fig_dimensions() -> Path:
         ax.annotate(f"{cont[0]:.0f}%", (cont[0], y), xytext=(6, 0), textcoords="offset points",
                     va="center", fontsize=6)  # fmt: skip
     ax.set_yticks(range(len(order)), [f"{d}  (n={stats[d][0]})" for d in order], fontsize=6.2)
-    ax.set_xlim(40, 106)
-    ax.set_xticks([40, 50, 60, 70, 80, 90, 100])
+    floor = 10 * int(min(stats[d][2][0] for d in stats) // 10)
+    ax.set_xlim(floor, 106)
+    ax.set_xticks(list(range(floor, 101, 10)))
     ax.set_xlabel(f"malicious variants, % ({version}, seed {seed})")
     _xgrid(ax)
     ax.spines["left"].set_visible(False)
@@ -436,21 +438,20 @@ def fig_dimensions() -> Path:
 
 
 def _lab_kind(r: dict) -> str:
-    if r["category"] == "benign":
-        return "benign"
-    if r["category"] == "known-limit":
-        return "limit"
-    return "attack"
+    """attack | limit | benign | control-web | control-typed (the reference run's own fields)."""
+    if r["kind"] == "control":
+        return r["category"]
+    return {"stop": "attack", "miss": "limit", "allow": "benign"}[r["kind"]]
 
 
 def fig_lab_evidence() -> Path:
     meta, res = lab()
     prior, tb, th = meta["prior"], meta["tau_block"], meta["tau_hold"]
-    groups = [
-        ("attack", "Attacks (28)"),
-        ("limit", "Known limit (1)"),
-        ("benign", "Benign controls (6)"),
-    ]
+    names = {"attack": "Attacks", "limit": "Known limit", "benign": "Benign (typed, no network)",
+             "control-web": "Everyday commands pasted from the web",
+             "control-typed": "Everyday network commands typed"}  # fmt: skip
+    count = Counter(_lab_kind(r) for r in res)
+    groups = [(k, f"{names[k]} ({count[k]})") for k in names if count[k]]
     # top to bottom: a heading row, then the group sorted by evidence (strongest first)
     lines: list[tuple[str, dict | None]] = []
     for kind, name in groups:
@@ -458,7 +459,7 @@ def fig_lab_evidence() -> Path:
         part = sorted((r for r in res if _lab_kind(r) == kind), key=lambda r: -r["log_odds"])
         lines.extend((r["template_id"].replace("_", " "), r) for r in part)
     lines.reverse()  # y grows upward
-    fig, ax = plt.subplots(figsize=(COL, 5.5))
+    fig, ax = plt.subplots(figsize=(COL, 0.9 + 0.088 * len(lines)))
     lo_x, hi_x = prior - 0.25, max(r["log_odds"] for r in res) + 1.15
     ax.axvspan(lo_x, th, color=TRACK, lw=0, zorder=0)
     ax.axvspan(th, tb, color="#e7f0fb", lw=0, zorder=0)
@@ -475,8 +476,8 @@ def fig_lab_evidence() -> Path:
         ticks.append(y)
         names.append(name)
         dec = r["decision"]
-        missed = _lab_kind(r) != "benign" and dec == "allow"
-        false_alarm = _lab_kind(r) == "benign" and dec != "allow"
+        missed = _lab_kind(r) in ("attack", "limit") and dec == "allow"
+        false_alarm = _lab_kind(r) == "benign" and dec != "allow"  # controls: recorded, not scored
         color = ERROR if (missed or false_alarm) else colors[dec]
         ax.plot([prior, r["log_odds"]], [y, y], color=color, lw=1.0, zorder=2)
         marker = "D" if r["override"] else "o"
@@ -587,11 +588,11 @@ def fig_lab_ablation_latency() -> Path:
         left += v
     ax1.set_xlim(0, total)
     ax1.set_yticks([])
-    ax1.set_xticks([0, 5, 10, 15, 20, total])
+    ax1.set_xticks(sorted({*range(0, total, 5), total}))
     ax1.spines["left"].set_visible(False)
     ax1.set_xlabel(f"score-based lab blocks (of {total}), worst case with one signal removed")
     ax1.set_title("(a) Single-signal ablation (contract gate applied)")
-    ms = sorted(r["judge_ms"] for r in res)
+    ms = sorted(r["judge_ms"] for r in res if _lab_kind(r) in ("attack", "limit", "benign"))
     med = statistics.median(ms)
     edges = [1.0 * (10 ** (i / 6)) for i in range(0, 15)]
     ax2.hist(ms, bins=edges, color=HOLD, edgecolor=SURFACE, linewidth=0.6)
@@ -603,7 +604,7 @@ def fig_lab_ablation_latency() -> Path:
     ax2.set_ylabel("commands")
     ax2.grid(axis="y", color=GRID, linewidth=0.5)
     ax2.set_axisbelow(True)
-    ax2.set_title(f"(b) Decision latency, {len(ms)} lab commands")
+    ax2.set_title(f"(b) Decision latency, {len(ms)} lab templates")
     ax2.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:g}"))
     return _save(fig, "fig_lab_ablation_latency", COL)
 
@@ -627,10 +628,10 @@ def fig_weights() -> Path:
         list(ys), ["external origin" if n == "external" else n for n in names], fontsize=6.1
     )
     ax.set_xlabel("weight w (nats) = ln P(signal | attack) / P(signal | benign)")
-    ax.set_xlim(0, 5)
+    ax.set_xlim(0, max(weights.values()) + 0.5)
     _xgrid(ax)
     ax.spines["left"].set_visible(False)
-    ax.set_title("Signal weights of the signed policy (frozen since v1.0)", loc="left")
+    ax.set_title("Signal weights of the default policy (expert-elicited)", loc="left")
     ax.legend(
         [Patch(color=Q_COLORS[q]) for q in ("origin", "contract", "effect")],
         ["Origin", "Contract", "Effect"], loc="lower right", handlelength=1.0,
