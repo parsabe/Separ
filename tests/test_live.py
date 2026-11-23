@@ -347,3 +347,38 @@ def test_a_symlinked_work_directory_is_refused(tmp_path: Path) -> None:
     link.symlink_to(target)
     with pytest.raises(PermissionError):
         make_barrier(link)
+
+
+def test_a_symlink_in_the_web_root_is_reported_and_its_target_never_changed(tmp_path: Path) -> None:
+    """Review 2026-11, item 5: the watcher uses lstat, never follows or chmods a link."""
+    barrier = make_barrier(tmp_path / "wd")
+    outside = tmp_path / "outside-secret.php"
+    outside.write_text("<?php echo 'stand-in, outside the web root'; ?>\n", encoding="utf-8")
+    outside.chmod(0o644)
+    link = barrier.web_root_dir / "innocent.php"
+    link.symlink_to(outside)
+    (barrier.web_root_dir / "linked-dir").symlink_to(tmp_path, target_is_directory=True)
+
+    incidents = barrier.scan_sandbox_once()
+    kinds = [i["kind"] for i in incidents]
+    assert kinds.count("web_root_symlink") == 2
+    assert "web_root_write" not in kinds  # not judged as a dropped file
+    assert outside.stat().st_mode & 0o777 == 0o644  # the target's mode is unchanged
+    assert link.is_symlink() and outside.read_text().startswith("<?php")
+    assert list(barrier.quarantine_dir.iterdir()) == []
+    notes = (barrier.logs_dir / "notifications.jsonl").read_text()
+    assert "Symlink in web root" in notes
+    assert str(outside) not in notes and "innocent" not in notes  # no raw path
+    # reported once, not on every scan
+    assert barrier.scan_sandbox_once() == []
+
+
+def test_quarantine_refuses_a_link_and_sets_the_mode_without_following(tmp_path: Path) -> None:
+    barrier = make_barrier(tmp_path / "wd")
+    outside = tmp_path / "target.txt"
+    outside.write_text("x")
+    outside.chmod(0o644)
+    link = barrier.web_root_dir / "l.php"
+    link.symlink_to(outside)
+    assert barrier._quarantine_file(link) is None
+    assert link.is_symlink() and outside.stat().st_mode & 0o777 == 0o644

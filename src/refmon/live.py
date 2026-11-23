@@ -17,6 +17,7 @@ import secrets
 import shutil
 import signal
 import socket
+import stat
 import subprocess
 import sys
 import threading
@@ -348,6 +349,7 @@ class LiveBarrier:
         self._barrier_tail: deque[str] = deque(maxlen=150)
         self._events_tail: deque[str] = deque(maxlen=100)
         self._seen_files: dict[str, tuple[int, int]] = {}
+        self._seen_links: set[str] = set()
         self._stop_event = threading.Event()
         self._watcher_thread: threading.Thread | None = None
         self.watcher_beat = time.monotonic()  # the watcher loop's last turn (health check)
@@ -1183,10 +1185,27 @@ class LiveBarrier:
 
     def _snapshot_existing_sandbox(self) -> None:
         for root in (self.web_root_dir, self.workspace_dir):
-            for path in root.rglob("*"):
-                if path.is_file():
-                    st = path.stat()
-                    self._seen_files[str(path)] = (st.st_mtime_ns, st.st_size)
+            for path, st in _regular_files(root):
+                self._seen_files[str(path)] = (st.st_mtime_ns, st.st_size)
+
+    def _report_web_root_symlink(self, path: Path) -> dict[str, Any] | None:
+        """A symlink in the web root is a finding of its own (it can expose any file the server
+        can read); it is never followed, judged as a file, quarantined or chmod-ed."""
+        key = str(path)
+        if key in self._seen_links:
+            return None
+        self._seen_links.add(key)
+        self._log_line("WEB ROOT SYMLINK found (not followed, not changed)")
+        self.notify(
+            Notification(
+                "alert", "warning", "Symlink in web root",
+                "a symbolic link appeared in the watched web root. Separ does not follow it or "
+                "change its target; check where it points and who created it.",
+                self.device_pseudonym,
+            ),
+            key="webroot-symlink:" + hmac.new(self._device_key, key.encode(), "sha256").hexdigest(),
+        )  # fmt: skip
+        return {"kind": "web_root_symlink", "story_id": None, "decision": "finding"}
 
     def scan_sandbox_once(
         self,
@@ -1202,11 +1221,12 @@ class LiveBarrier:
             user = os.environ.get("USER") or "operator"
 
             # 1. Check web_root for dropped scripts or executables.
-            for path in sorted(self.web_root_dir.rglob("*")):
-                if not path.is_file():
-                    continue
+            for link in _symlinks(self.web_root_dir):
+                finding = self._report_web_root_symlink(link)
+                if finding is not None:
+                    incidents.append(finding)
+            for path, st in _regular_files(self.web_root_dir):
                 key = str(path)
-                st = path.stat()
                 sig = (st.st_mtime_ns, st.st_size)
                 if self._seen_files.get(key) == sig:
                     continue
@@ -1267,11 +1287,8 @@ class LiveBarrier:
 
             # 2. Check workspace for mass file modifications (ransomware / wiper burst).
             changed_ws: list[Path] = []
-            for path in sorted(self.workspace_dir.rglob("*")):
-                if not path.is_file():
-                    continue
+            for path, st in _regular_files(self.workspace_dir):
                 key = str(path)
-                st = path.stat()
                 sig = (st.st_mtime_ns, st.st_size)
                 if self._seen_files.get(key) == sig:
                     continue
@@ -1321,15 +1338,33 @@ class LiveBarrier:
                 )
         return incidents
 
-    def _quarantine_file(self, path: Path) -> str:
+    def _quarantine_file(self, path: Path) -> str | None:
+        """Move a regular file into quarantine, 0400. Never follows a symlink: the entry itself
+        is renamed (a link swapped in after the check is moved, not its target), and the mode is
+        set through an O_NOFOLLOW descriptor."""
+        try:
+            st = path.lstat()
+        except FileNotFoundError:
+            return None
+        if not stat.S_ISREG(st.st_mode):
+            self._log_line("QUARANTINE refused: not a regular file (symlinks are never followed)")
+            return None
         stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         dest = self.quarantine_dir / f"{stamp}_{path.name}.quarantined"
         counter = 1
-        while dest.exists():
+        while dest.exists() or dest.is_symlink():
             dest = self.quarantine_dir / f"{stamp}_{counter}_{path.name}.quarantined"
             counter += 1
-        shutil.move(str(path), str(dest))
-        dest.chmod(0o400)
+        os.rename(path, dest)  # same file system: the work directory holds both
+        try:
+            fd = os.open(dest, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        except OSError:
+            self._log_line(f"QUARANTINED {dest.name}: a link was swapped in; its target unchanged")
+            return dest.name
+        try:
+            os.fchmod(fd, 0o400)
+        finally:
+            os.close(fd)
         self._log_line(f"QUARANTINED {path.name} -> {dest.name} (mode 0400, preserved safely)")
         return dest.name
 
@@ -1918,6 +1953,27 @@ class LiveBarrier:
             }
 
 
+def _walk(root: Path):
+    """Every entry under `root`, by lstat; never descends into a symlinked directory."""
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        for name in sorted(dirnames + filenames):
+            path = Path(dirpath) / name
+            try:
+                yield path, path.lstat()
+            except FileNotFoundError:
+                continue
+
+
+def _regular_files(root: Path) -> list[tuple[Path, os.stat_result]]:
+    return sorted(
+        ((p, st) for p, st in _walk(root) if stat.S_ISREG(st.st_mode)), key=lambda x: x[0]
+    )
+
+
+def _symlinks(root: Path) -> list[Path]:
+    return sorted(p for p, st in _walk(root) if stat.S_ISLNK(st.st_mode))
+
+
 def _rank(decision: Decision) -> int:
     return {Decision.ALLOW: 0, Decision.HOLD: 1, Decision.BLOCK: 2}[decision]
 
@@ -1939,8 +1995,14 @@ def _describe_enforcement(
 def _looks_executable_web_file(path: Path, mode: int) -> bool:
     if path.suffix.lower() in _WEB_EXEC_SUFFIXES or bool(mode & 0o111):
         return True
-    try:
-        head = path.read_bytes()[:64]
+    try:  # the first bytes only, never through a symlink
+        fd = os.open(
+            path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        )
+        try:
+            head = os.read(fd, 64)
+        finally:
+            os.close(fd)
     except OSError:
         return False
     return head.startswith((b"#!", b"<?php", b"<%"))
