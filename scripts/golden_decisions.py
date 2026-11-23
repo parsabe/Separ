@@ -12,7 +12,11 @@ import argparse
 import json
 
 from refmon.golden import load_golden_cases
-from refmon.keys import LAB_REPLAY_KEY
+
+try:
+    from refmon.keys import LAB_REPLAY_KEY
+except ImportError:  # a tagged version from before review 2026-11 (item 8): the same bytes
+    LAB_REPLAY_KEY = b"refmon-device-key"
 from refmon.pipeline import Pipeline
 from refmon.policy import default_policy
 from refmon.replay import ReplaySource
