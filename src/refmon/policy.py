@@ -196,6 +196,11 @@ class MathParams(_Model):
     baseline_rate_long_default: float = 30.0
     ema_beta: float = 0.1  # smoothing of the exponential moving averages of the baselines
     bloom_fp_rate: float = 0.001  # false-positive target of shipped threat lists
+    # Design decision A81 (review 2026-11, item 15; **needs owner approval**, so "max" until then):
+    # how the Origin question combines the labels of a story. "noisy_or" uses the combination
+    # C11.2 states and that the Contract and Effect signals already use for their threshold;
+    # "max" is the strongest single label, as before.
+    origin_combination: Literal["max", "noisy_or"] = "max"
     # Attenuation a_e in (0, 1] of a label along an edge of a given kind (C11.2): "write" for a
     # file written by a labeled process, "persist" for a persistence item. 1.0 when not listed.
     attenuation: dict[str, float] = Field(default_factory=dict)

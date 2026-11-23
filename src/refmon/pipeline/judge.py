@@ -1,6 +1,7 @@
 """Judge: the three questions and the overrides for one story (CLAUDE.md Part A).
 
-Origin fails when the strongest label in the story is at least `origin_strength`. Contract fails on
+Origin fails when the labels of the story reach `origin_strength`: the strongest one ("max"), or
+their noisy-OR (`math.origin_combination`, A81, needs approval). Contract fails on
 any Contract signal, including those carried by persistent labels (D21). Effect fails on any Effect
 signal. An Effect that a role's contract allows is ignored unless the story carries an external
 origin label (D23). Overrides come first. `rule_decision` is the plain 3/2/1 rule; `decision` is
@@ -12,6 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from ..calculus import evidence as calc
+from ..calculus.labels import noisy_or
 from ..policy import Policy
 from ..rules import rule_id
 from ..schemas import Contribution, Decision, Effect, Mode, Override
@@ -95,7 +97,10 @@ def judge(rec: StoryRecord, tagger: Tagger, policy: Policy) -> Judgement:
     ts = rec.last_ts
     thr = policy.thresholds.origin_strength
     strengths = {i: tagger.strength(i, ts) for i in rec.label_ids}
-    origin = max(strengths.values(), default=0.0)
+    if policy.math.origin_combination == "noisy_or":  # A81 (needs approval)
+        origin = noisy_or(strengths.values())
+    else:
+        origin = max(strengths.values(), default=0.0)
     labeled = origin >= thr
 
     signals: list[Signal] = []
