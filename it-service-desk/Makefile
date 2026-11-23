@@ -1,11 +1,12 @@
-LATEX ?= pdflatex
-MAIN  ?= guide
+# Build the English and German IT security guides (needs latexmk and a TeX Live with babel-german).
+GUIDES := guide guide-de
 
-.PHONY: pdf clean
+.PHONY: all clean
 
-pdf:
-	$(LATEX) -interaction=nonstopmode -halt-on-error $(MAIN).tex
-	$(LATEX) -interaction=nonstopmode -halt-on-error $(MAIN).tex
+all: $(GUIDES:=.pdf)
+
+%.pdf: %.tex style.tex
+	latexmk -pdf -interaction=nonstopmode -halt-on-error $<
 
 clean:
-	rm -f $(MAIN).aux $(MAIN).log $(MAIN).out $(MAIN).toc $(MAIN).pdf
+	latexmk -c $(GUIDES:=.tex)

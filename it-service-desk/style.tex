@@ -1,0 +1,41 @@
+% Shared preamble of the English and German IT security guides (guide.tex, guide-de.tex).
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[margin=0.9in]{geometry}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{fontawesome5}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{tcolorbox}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+\setlength{\emergencystretch}{2em}
+\setlist{itemsep=2pt,topsep=3pt}
+
+\definecolor{separblue}{HTML}{0550AE}
+\definecolor{separbg}{HTML}{F6F8FA}
+\definecolor{separborder}{HTML}{D0D7DE}
+\definecolor{separwarn}{HTML}{FFF8C5}
+\definecolor{separwarnborder}{HTML}{D4A72C}
+
+\lstset{
+  backgroundcolor=\color{separbg}, frame=single, rulecolor=\color{separborder},
+  basicstyle=\ttfamily\small, breaklines=true, columns=fullflexible, keepspaces=true,
+  showstringspaces=false, aboveskip=6pt, belowskip=6pt, xleftmargin=4pt, xrightmargin=4pt,
+  upquote=true
+}
+\newtcolorbox{callout}[1][]{colback=separbg, colframe=separblue, boxrule=0.8pt, arc=3pt,
+  left=8pt, right=8pt, top=6pt, bottom=6pt, #1}
+\newtcolorbox{warnbox}[1][]{colback=separwarn, colframe=separwarnborder, boxrule=0.8pt, arc=3pt,
+  left=8pt, right=8pt, top=6pt, bottom=6pt, #1}
+
+% a fact the repository does not hold yet (listed in the build report)
+\newcommand{\todo}[1]{\textcolor{red}{\textbf{[TODO:} #1\textbf{]}}}
+\newcommand{\cmd}[1]{\texttt{#1}}
+\newcommand{\contact}{\href{mailto:parsa@parsabe.com}{\texttt{parsa@parsabe.com}}}
+\newcommand{\repo}{\href{https://github.com/parsabe/Separ}{\texttt{github.com/parsabe/Separ}}}
+\newcommand{\releases}{\href{https://github.com/parsabe/Separ/releases}{\texttt{github.com/parsabe/Separ/releases}}}
