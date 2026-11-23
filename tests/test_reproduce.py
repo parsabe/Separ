@@ -103,6 +103,18 @@ def test_the_publishability_check_leaves_synthetic_data_alone():
         assert findings(line) == [], line
 
 
+def test_badges_and_the_project_repository_are_allowed_and_nothing_more():
+    """Round 2, A2: img.shields.io badges and github.com/parsabe are publishable; a URL that only
+    contains those strings, and every other host, is still reported."""
+    assert findings("[![v](https://img.shields.io/badge/Version-2.4.0-0f766e)](docs/x.md)") == []
+    assert findings("see https://github.com/parsabe/Separ/releases/download/v2.4/x.deb") == []
+    assert any("url" in f for f in findings("https://evil.org/?u=img.shields.io/badge/x"))
+    assert any("url" in f for f in findings("https://img.shields.io.evil.org/badge/x"))
+    assert any("url" in f for f in findings("https://evil.org/github.com/parsabe/x"))
+    assert any("url" in f for f in findings("https://img.shields.io/endpoint?url=x"))
+    assert any("url" in f for f in findings("https://docs.pydantic.dev/"))
+
+
 def test_the_repository_itself_has_no_content_findings():
     names = cp.own_names()
     assert cp.scan_tree(names) == []
