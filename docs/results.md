@@ -15,8 +15,8 @@ Earlier evaluations on retired seeds are listed at the end.
 <!-- BEGIN GENERATED: versions -->
 | tag | commit | |
 |---|---|---|
-| v2.3.1-base | cbf07d0 | v2.3 plus the review 2026-11 Part 1 fixes (no evaluated decision changed) |
-| v2.4 | 79cae65 | review 2026-11 Part 2; A80 to A82 behind policy flags, off until approved |
+| v2.3.1-base | e450808 | v2.3 plus the review 2026-11 Part 1 fixes (no evaluated decision changed) |
+| v2.4 | 7137457 | review 2026-11 Part 2; A80 to A82 behind policy flags, off until approved |
 <!-- END GENERATED: versions -->
 
 `v1.0` is frozen. Each later version changes structural rules in response to the findings of the
@@ -294,7 +294,7 @@ Privacy audit
 ## 6. Tests
 
 <!-- BEGIN GENERATED: tests -->
-`2559 passed, 5 skipped, 1 xfailed`
+`2562 passed, 5 skipped, 1 xfailed`
 <!-- END GENERATED: tests -->
 
 The suite includes property tests (labels never lost along process chains, no raw content in any
@@ -406,14 +406,12 @@ regenerated; `make publishable` runs it alone). The content is clean. These are 
 ```
 tracked files scanned: 482, history: every ref
 findings in the working tree: 0
-findings in the history (added lines of every commit of every ref): 7
-  123d893: public IP 139.18.x.x
-  5210f89: public IP 139.18.x.x
+findings in new commits (not on origin/master; failing): 0
+findings already published on origin/master (reported, not failing): 4
   558ef68: e-mail address p***@s***.de
   558ef68: e-mail address s***@t***.de
   558ef68: home path
   558ef68: public IP 139.18.x.x
-  e5574db: public IP 139.18.x.x
 replay events checked as post-Observe events: 528, rejected: 0
 identities recorded by git as author or committer: 5 (masked here so that this output can be published)
   G***b <n***y@g***b.com>
@@ -421,7 +419,7 @@ identities recorded by git as author or committer: 5 (masked here so that this o
   P***t <p***t@s***g.de>
   P***t <p***u@m***1.cluster>
   p***e <p***9@g***l.com>
-content: FINDINGS
+content: CLEAN
 identities: present in the history, the owner decides before publishing
 ```
 <!-- END GENERATED: publishable -->
