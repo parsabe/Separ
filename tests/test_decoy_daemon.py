@@ -9,9 +9,9 @@ import time
 from pathlib import Path
 
 import pytest
+from tests.livehelp import make_barrier
 
 from refmon.cli import main as cli_main
-from refmon.live import LiveBarrier
 from refmon.policy_io import load_policy_data
 from refmon.yamlio import write_document
 
@@ -32,6 +32,14 @@ def adopt(barrier):
     barrier.adopt_policy(loaded, why="test")
 
 
+def policy_args(barrier) -> list[str]:
+    return ["--policy", str(barrier.policy_path), "--public-key", str(barrier.pub_path)]
+
+
+def key_args(barrier) -> list[str]:
+    return ["--key", str(barrier.test_admin_key)]
+
+
 def notes(barrier) -> list[dict]:
     path = barrier.logs_dir / "notifications.jsonl"
     if not path.exists():
@@ -41,7 +49,7 @@ def notes(barrier) -> list[dict]:
 
 @pytest.fixture
 def setup(tmp_path):
-    barrier = LiveBarrier(workdir=tmp_path / "wd")
+    barrier = make_barrier(tmp_path / "wd")
     config = tmp_path / "decoys.yaml"
     write_document(
         {
@@ -57,7 +65,7 @@ def setup(tmp_path):
         },
         config,
     )  # fmt: skip
-    args = ["--workdir", str(barrier.workdir), "--config", str(config)]
+    args = ["--workdir", str(barrier.workdir), "--config", str(config), *policy_args(barrier)]
     assert cli_main(["decoy", "plant", *args]) == 0
     yield barrier, config, args
     barrier.stop_decoys()
@@ -88,7 +96,9 @@ def test_full_flow(setup, tmp_path, capsys):
     barrier, config, args = setup
     from refmon.deception.runtime import load_settings
 
-    assert cli_main(["decoy", "approve-canaries", *args, "--by", "admin-ana"]) == 0
+    assert (
+        cli_main(["decoy", "approve-canaries", *args, *key_args(barrier), "--by", "admin-ana"]) == 0
+    )
     adopt(barrier)
     assert {c.class_ for c in barrier.policy.canaries} >= {"file", "service", "beacon"}
     barrier.start_decoys(load_settings(config))
@@ -110,11 +120,15 @@ def test_full_flow(setup, tmp_path, capsys):
     ext = next(e for e in barrier.decoy_sources.entries() if not e.internal)
     assert ext.address == OUTSIDE
     capsys.readouterr()
-    assert cli_main(["decoy", "sources", "--workdir", str(barrier.workdir)]) == 0
+    assert (
+        cli_main(["decoy", "sources", "--workdir", str(barrier.workdir), *policy_args(barrier)])
+        == 0
+    )
     assert ext.id in capsys.readouterr().out
     marker = tmp_path / "firewall.txt"
     fw = f"{sys.executable} -c \"import sys; open(sys.argv[1], 'w').write(sys.argv[2])\" {marker} {{ip}}"
     assert cli_main(["decoy", "approve-source", ext.id, "--workdir", str(barrier.workdir),
+                     *policy_args(barrier), *key_args(barrier),
                      "--by", "admin-ben", "--firewall-command", fw]) == 0  # fmt: skip
     assert marker.read_text() == OUTSIDE
     adopt(barrier)
@@ -141,13 +155,14 @@ def test_an_internal_source_cannot_be_approved_by_command(setup, capsys):
     barrier, config, args = setup
     from refmon.deception.runtime import load_settings
 
-    cli_main(["decoy", "approve-canaries", *args, "--by", "admin-ana"])
+    cli_main(["decoy", "approve-canaries", *args, *key_args(barrier), "--by", "admin-ana"])
     adopt(barrier)
     barrier.start_decoys(load_settings(config))
     barrier.decoy_connection("ssh-legacy", "10.9.8.7", None, "")
     (entry,) = barrier.decoy_sources.entries()
     before = barrier.policy_path.read_bytes()
     code = cli_main(["decoy", "approve-source", entry.id, "--workdir", str(barrier.workdir),
+                     *policy_args(barrier), *key_args(barrier),
                      "--by", "admin-ana"])  # fmt: skip
     assert code != 0 and "four-eyes" in capsys.readouterr().err
     assert barrier.policy_path.read_bytes() == before
@@ -158,6 +173,6 @@ def test_approval_refuses_a_tampered_policy(setup, capsys):
     barrier, _, args = setup
     text = barrier.policy_path.read_text().replace("mode: block", "mode: observe")
     barrier.policy_path.write_text(text)
-    code = cli_main(["decoy", "approve-canaries", *args, "--by", "admin-ana"])
+    code = cli_main(["decoy", "approve-canaries", *args, *key_args(barrier), "--by", "admin-ana"])
     assert code != 0 and "signature" in capsys.readouterr().err
     assert barrier.policy_path.read_text() == text  # the tampered file was not re-signed

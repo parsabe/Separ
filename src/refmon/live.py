@@ -32,8 +32,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from . import signing
 from .calculus import evidence as calc
+from .config import (
+    SETUP_HINT,
+    PolicyMissing,
+    check_trusted,
+    resolve_policy_paths,
+)
 from .families import NONE as NO_FAMILY
 from .families import classify, classify_judgement
 from .golden import load_golden_cases
@@ -42,8 +47,8 @@ from .keys import new_device_key
 from .live_ui import DASHBOARD_HTML
 from .notify import LogChannel, Notification, NotificationHub
 from .pipeline import Pipeline
-from .policy import Policy, default_policy_dict
-from .policy_io import LoadedPolicy, load_policy_data, read_document, write_signed
+from .policy import Policy
+from .policy_io import LoadedPolicy, PolicyRejected, load_policy_data
 from .pseudonym import Pseudonymizer
 from .replay import ReplaySource
 from .report import Reporter, action_taken, what_happened
@@ -305,10 +310,24 @@ class LiveBarrier:
         self,
         workdir: str | Path | None = None,
         *,
+        policy_path: str | Path | None = None,
+        public_key_path: str | Path | None = None,
         golden_dir: Path | None = None,
         hub: NotificationHub | None = None,
     ) -> None:
+        """`policy_path` and `public_key_path` default to /etc/separ (root) or the user's
+        $XDG_CONFIG_HOME/separ. Without a signed policy there the barrier refuses to start: it
+        never generates a policy and never holds a private key (review 2026-11, items 1 and 2)."""
         self.workdir = Path(workdir) if workdir is not None else default_live_workdir()
+        self.policy_path, self.pub_path = resolve_policy_paths(policy_path, public_key_path)
+        for path, what in ((self.policy_path, "signed policy"), (self.pub_path, "public key")):
+            if not path.is_file():
+                raise PolicyMissing(f"no {what} at {path}: {SETUP_HINT}")
+        self.trust_warnings: list[str] = []
+        for path in (self.policy_path, self.pub_path):
+            for w in check_trusted(path):
+                if w not in self.trust_warnings:
+                    self.trust_warnings.append(w)
         self.golden_dir = golden_dir or (Path(__file__).resolve().parents[2] / "tests" / "golden")
         self._lock = threading.RLock()
         self._seq = 0
@@ -323,11 +342,8 @@ class LiveBarrier:
         self.quarantine_dir = self.workdir / "quarantine"
         self.logs_dir = self.workdir / "logs"
 
-        self.key_path = self.workdir / "admin.key"
-        self.pub_path = self.workdir / "admin.pub"
         self.device_key_path = self.workdir / "device.key"
         self.api_token_path = self.workdir / "api.token"
-        self.policy_path = self.workdir / "policy.yaml"
         self.events_log_path = self.logs_dir / "events.jsonl"
         self.verdicts_log_path = self.logs_dir / "verdicts.jsonl"
         self.barrier_log_path = self.logs_dir / "barrier.log"
@@ -357,7 +373,7 @@ class LiveBarrier:
         self.hub.local.insert(0, LogChannel(self.logs_dir / "notifications.jsonl"))
         if self.hub.on_failure is None:
             self.hub.on_failure = self._log_line
-        loaded = load_policy_data(self.policy_path, [self._public_key()])
+        loaded = self._load_verified()
         self.policy: Policy = loaded.policy
         self.policy_digest: str = loaded.digest
         self.signature_ok: bool = True
@@ -410,36 +426,38 @@ class LiveBarrier:
                 encoding="utf-8",
             )
 
-        if not self.key_path.exists() or not self.pub_path.exists():
-            priv, pub = signing.generate_keypair()
-            self.key_path.unlink(missing_ok=True)
-            _secret_file(self.key_path, lambda: priv)
-            self.pub_path.write_text(pub + "\n", encoding="utf-8")
-
-        if not self.policy_path.exists():
-            pol_dict = default_policy_dict()
-            pol_dict["mode"] = "block"
-            write_signed(pol_dict, self._private_key(), self.policy_path)
-
         for log_file in (self.events_log_path, self.verdicts_log_path, self.barrier_log_path):
             log_file.touch(exist_ok=True)
-
-    def _private_key(self) -> str:
-        return self.key_path.read_text(encoding="utf-8").strip()
 
     def _public_key(self) -> str:
         return self.pub_path.read_text(encoding="utf-8").strip()
 
-    def set_mode(self, mode_name: str) -> dict[str, Any]:
-        mode = Mode(mode_name.lower())
+    def _load_verified(self) -> LoadedPolicy:
+        """Re-check who can change the files, then verify the signature with the public key."""
+        warnings: list[str] = []
+        for path in (self.policy_path, self.pub_path):
+            warnings += [w for w in check_trusted(path) if w not in warnings]
+        loaded = load_policy_data(self.policy_path, [self._public_key()])
+        self.trust_warnings = warnings
+        return loaded
+
+    def reload_policy(self, *, why: str = "reload requested") -> dict[str, Any]:
+        """Re-read and verify the signed policy file (SIGHUP, `separ reload`, /api/reload). It
+        never writes or signs anything; a rejected file keeps the last valid policy in force."""
         with self._lock:
-            doc = read_document(self.policy_path)
-            unsigned = {k: v for k, v in doc.items() if k != signing.SIGNATURE_FIELD}
-            unsigned["mode"] = mode.value
-            write_signed(unsigned, self._private_key(), self.policy_path)
-            loaded = load_policy_data(self.policy_path, [self._public_key()])
-            self.adopt_policy(loaded, why="mode switched")
-            return {"mode": self.policy.mode.value, "digest": self.policy_digest}
+            try:
+                loaded = self._load_verified()
+            except (PolicyRejected, OSError, ValueError) as exc:
+                self._log_line(f"POLICY RELOAD REJECTED ({type(exc).__name__}); last valid kept")
+                return {
+                    "reloaded": False,
+                    "error": str(exc),
+                    "mode": self.policy.mode.value,
+                    "digest": self.policy_digest,
+                }
+            if loaded.digest != self.policy_digest:
+                self.adopt_policy(loaded, why=why)
+            return {"reloaded": True, "mode": self.policy.mode.value, "digest": self.policy_digest}
 
     def adopt_policy(self, loaded: LoadedPolicy, *, why: str) -> None:
         """Put a verified policy in force (the caller loaded it with signature checking)."""
@@ -1050,6 +1068,21 @@ class LiveBarrier:
             return []
         known = {c.value for c in self.policy.canaries if c.class_ == "service"}
         return sorted(s.name for s in self.decoy_settings.listen.services if s.name not in known)
+
+    def policy_conditions(self) -> list[tuple[str, str, str, str, str, str]]:
+        """Degraded protection when the daemon's own user can replace its policy or public key
+        (the per-user configuration): a process of that user could roll the policy back."""
+        if "owner_writable" not in self.trust_warnings:
+            return []
+        return [
+            (
+                "degraded:policy_owner_writable", "degraded", "warning", "Degraded protection",
+                f"the policy {self.policy_path} or its public key belongs to the daemon's own "
+                "user, so any process of that user can replace them with an older signed policy; "
+                "the system daemon (root, /etc/separ) does not have this weakness",
+                "policy_owner_writable",
+            )
+        ]  # fmt: skip
 
     # -- sensor ingest (v2.2, A73) -------------------------------------------------------------
 
@@ -1980,8 +2013,10 @@ def make_http_server(
                     )
                     self._send_json(HTTPStatus.OK, res)
                     return
-                if self.path == "/api/mode":
-                    res = barrier.set_mode(str(data["mode"]))
+                if self.path == "/api/reload":
+                    # only re-reads and verifies the signed file: a mode change is a new signed
+                    # policy made with the admin's key (separ policy set-mode), never an API call
+                    res = barrier.reload_policy(why="reload requested over the API")
                     self._send_json(HTTPStatus.OK, res)
                     return
                 if self.path == "/api/rootkit":
@@ -2051,13 +2086,17 @@ def serve_forever(
     open_browser: bool = False,
     decoys: str | Path | None = None,
     ingest: str | Path | None = None,
+    policy_path: str | Path | None = None,
+    public_key_path: str | Path | None = None,
 ) -> int:
     from .health import LIVE_CAPABILITIES, HealthMonitor
     from .notify import ConsoleChannel
 
     hub = hub if hub is not None else NotificationHub()
     hub.local.append(ConsoleChannel())
-    barrier = LiveBarrier(workdir=workdir, hub=hub)
+    barrier = LiveBarrier(
+        workdir=workdir, hub=hub, policy_path=policy_path, public_key_path=public_key_path
+    )
     barrier.start_background_watcher()
     if decoys is not None:
         from .deception.runtime import load_settings
@@ -2087,7 +2126,11 @@ def serve_forever(
     print(f"Separ Live Security Barrier active on {ui_url}", flush=True)
     if open_browser:
         threading.Timer(0.3, lambda: open_desktop_app(ui_url)).start()
-    print(f"  Signed policy : {barrier.policy_path} (mode={pol.mode.value})", flush=True)
+    print(
+        f"  Signed policy : {barrier.policy_path} (mode={pol.mode.value}, verified with "
+        f"{barrier.pub_path}; change it with `separ policy set-mode`, then `separ reload`)",
+        flush=True,
+    )
     print(f"  Sandbox watch : {barrier.sandbox_dir}", flush=True)
     print(f"  Quarantine    : {barrier.quarantine_dir}", flush=True)
     print(f"  Live logs     : {barrier.logs_dir}", flush=True)
@@ -2107,8 +2150,16 @@ def serve_forever(
     def _terminate(signum: int, frame: Any) -> None:  # systemd and kill send SIGTERM
         raise KeyboardInterrupt
 
+    def _hangup(signum: int, frame: Any) -> None:  # separ reload, systemctl reload
+        threading.Thread(
+            target=barrier.reload_policy, kwargs={"why": "SIGHUP"}, daemon=True
+        ).start()
+
     in_main = threading.current_thread() is threading.main_thread()
     previous = signal.signal(signal.SIGTERM, _terminate) if in_main else None
+    previous_hup = (
+        signal.signal(signal.SIGHUP, _hangup) if in_main and hasattr(signal, "SIGHUP") else None
+    )
     barrier.notify(
         Notification(
             "lifecycle", "info", "Separ started",
@@ -2128,6 +2179,8 @@ def serve_forever(
     finally:
         if in_main:
             signal.signal(signal.SIGTERM, previous)
+            if hasattr(signal, "SIGHUP"):
+                signal.signal(signal.SIGHUP, previous_hup)
         monitor.stop()
         server.server_close()
         with contextlib.suppress(OSError):
@@ -2268,6 +2321,8 @@ def launch_gui(
     open_browser: bool = True,
     decoys: str | Path | None = None,
     ingest: str | Path | None = None,
+    policy_path: str | Path | None = None,
+    public_key_path: str | Path | None = None,
 ) -> int:
     """Launch the Separ Reference Monitor GUI, connecting to an active daemon if one exists."""
     import urllib.request
@@ -2336,4 +2391,6 @@ def launch_gui(
         open_browser=open_browser,
         decoys=decoys,
         ingest=ingest_cfg,
+        policy_path=policy_path,
+        public_key_path=public_key_path,
     )

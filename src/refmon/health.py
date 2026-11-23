@@ -34,7 +34,7 @@ from typing import TYPE_CHECKING, Any
 from . import heartbeat as heartbeat_module
 from .alerts import AlertLog
 from .notify import Notification, NotificationHub
-from .policy_io import PolicyRejected, load_policy_data
+from .policy_io import PolicyRejected
 from .schemas import Decision
 from .selftest import SelfTestScheduler
 
@@ -150,7 +150,8 @@ class HealthMonitor:
                 "new files in the sandbox and the web root are no longer checked or quarantined",
                 "sandbox_watcher",
             )  # fmt: skip
-        for name in ("decoy_conditions", "ingest_conditions"):  # v2.1 deception, v2.2 ingest
+        # v2.1 deception, v2.2 ingest, review 2026-11: who can change the policy, containment
+        for name in ("decoy_conditions", "ingest_conditions", "policy_conditions"):
             extra = getattr(self.barrier, name, None)
             for key, category, severity, title, message, subject in extra() if extra else ():
                 out[key] = Condition(key, category, severity, title, message, subject)
@@ -215,7 +216,7 @@ class HealthMonitor:
             return
         self._policy_stat = stat
         try:
-            loaded = load_policy_data(barrier.policy_path, [barrier._public_key()])
+            loaded = barrier._load_verified()
         except (PolicyRejected, OSError, ValueError) as exc:
             self.policy_rejections += 1
             self._policy_rejected = True

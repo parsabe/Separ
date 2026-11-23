@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from tests.livehelp import make_barrier
 
 from refmon.intent import analyze
 from refmon.live import LiveBarrier
@@ -184,7 +185,7 @@ def test_hosts_and_paths_for_observe():
 
 @pytest.fixture(scope="module")
 def barrier(tmp_path_factory) -> LiveBarrier:
-    return LiveBarrier(workdir=tmp_path_factory.mktemp("intent-live"))
+    return make_barrier(tmp_path_factory.mktemp("intent-live"))
 
 
 @pytest.mark.parametrize("name", sorted(ATTACKS))

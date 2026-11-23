@@ -37,7 +37,7 @@ def test_every_template_reaches_its_expected_outcome_in_block_mode(tmp_path: Pat
 
 def test_never_run_templates_are_not_executed_even_in_observe_mode(tmp_path: Path) -> None:
     lab, executed = _lab(tmp_path)
-    lab.barrier.set_mode("observe")
+    lab.set_mode("observe")
     for t in TEMPLATES:
         if t.kind == "command":
             lab.run_template(t)
@@ -135,7 +135,7 @@ def test_help_and_guide_explain_how_to_test(
 
 def test_observe_mode_score_does_not_credit_lab_safety_as_a_stop(tmp_path: Path) -> None:
     lab, _ = _lab(tmp_path)
-    lab.barrier.set_mode("observe")
+    lab.set_mode("observe")
     for t in TEMPLATES:
         if t.never_run:
             lab.run_template(t)
@@ -222,7 +222,7 @@ def test_compare_runs_side_by_side(tmp_path: Path, capsys: pytest.CaptureFixture
     for t in select(["clickfix", "echo"]):
         lab.run_template(t[1])
     a = lab.save_report(tmp_path / "reports")
-    lab.barrier.set_mode("observe")
+    lab.set_mode("observe")
     lab.results.clear()
     for t in select(["clickfix", "echo"]):
         lab.run_template(t[1])
@@ -277,7 +277,7 @@ def test_analysis_flags_attacks_let_through_in_observe_mode(tmp_path: Path) -> N
     from refmon.labreport import analyze
 
     lab, _ = _lab(tmp_path)
-    lab.barrier.set_mode("observe")
+    lab.set_mode("observe")
     for _, t in select(["clickfix", "steal_ssh"]):
         lab.run_template(t)
     text = "\n".join(analyze(lab.records(), lab.thresholds()))

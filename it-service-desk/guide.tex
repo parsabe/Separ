@@ -88,7 +88,7 @@ Separ takes a different approach: it watches \textbf{how programs behave} and en
 \begin{callout}[title=\textbf{Key Benefits for IT Service Desk Teams}]
 \begin{itemize}[leftmargin=1.3em,itemsep=2pt,topsep=2pt]
   \item \textbf{Zero Cleartext Telemetry Exposure:} Sensitive command arguments, URLs, and file paths are hashed in RAM using a local device key before anything is written to logs.
-  \item \textbf{Cryptographically Signed Policies:} Every security rule and mode change is signed with an administrator Ed25519 key (\texttt{admin.key}). Unsigned or tampered configs are rejected automatically.
+  \item \textbf{Cryptographically Signed Policies:} Every security rule and mode change is signed with an administrator Ed25519 key (\texttt{admin.key}) that stays on the admin's machine; the daemon only holds the public key (\texttt{admin.pub}) and cannot sign or switch its own mode. Unsigned or tampered configs are rejected automatically.
   \item \textbf{Standalone Desktop GUI:} Opens directly as a dedicated Linux application window (\texttt{separ gui}) showing live sensor events, blocked incidents, and quarantined files—like Wireshark for system behavior.
   \item \textbf{Lightweight Native Packages:} Installs cleanly via \texttt{.deb} (568\,KB), \texttt{.rpm} (293\,KB), or \texttt{install.sh} with no bundled Python interpreter or Electron bloat.
 \end{itemize}
@@ -187,39 +187,41 @@ If installed via \texttt{.deb} or \texttt{.rpm}, this registers \texttt{/usr/bin
 % ============================================================================
 
 \begin{warnbox}[title=\textbf{Important: Configure Policies Before Starting the App}]
-Administrators and laptop users must initialize their signing keys and signed policy \textbf{before} starting the daemon or GUI. Separ refuses to enforce unsigned or modified \texttt{policy.yaml} files.
+Administrators and laptop users must initialize their signing keys and signed policy \textbf{before} starting the daemon or GUI. Without a signed \texttt{policy.yaml} the daemon refuses to start (it never generates a policy itself), and it refuses unsigned or modified files and files that group or others can write.
 \end{warnbox}
 
 \subsection{Setup for Campus Servers (IT Admins)}
-Run as root to configure \texttt{/etc/separ/} (or \texttt{/var/lib/separ}):
+Run as root to configure \texttt{/etc/separ/}, which the system daemon reads (its state lives in \texttt{/var/lib/separ}):
 \begin{lstlisting}[language=bash]
 # Start in observe mode for pilot, or block mode for active enforcement
 sudo separ setup --server --mode observe
 \end{lstlisting}
 This creates:
 \begin{itemize}[leftmargin=1.4em,itemsep=2pt]
-  \item \textbf{\texttt{admin.key}:} Your private Ed25519 signing key (strictly \texttt{0600} root-owned; keep backups secure).
+  \item \textbf{\texttt{\textasciitilde/.separ-admin/admin.key}:} Your private Ed25519 signing key (\texttt{0600} in a \texttt{0700} folder, or \texttt{--key PATH}). Move it to the admin's machine; it does not belong on the server. Keep backups secure.
+  \item \textbf{\texttt{/etc/separ/admin.pub}:} The public key the daemon verifies with (root-owned \texttt{0644}).
   \item \textbf{\texttt{policy.yaml}:} Pre-configured and signed with TUBAF campus subnets (\texttt{139.18/16}, campus VPN \texttt{10.0.0.0/8}, eduroam \texttt{172.16.0.0/12}), internal domain \texttt{tu-freiberg.de}, and Shibboleth SSO apps (OPAL, Moodle, Nextcloud, Zoom).
 \end{itemize}
 
 \subsection{Setup for Staff / Developer Laptops}
-Run as your normal user (no \texttt{sudo} needed):
+Run as your normal user (no \texttt{sudo} needed); the policy goes to \texttt{\textasciitilde/.config/separ/}, which the per-user daemon reads:
 \begin{lstlisting}[language=bash]
 separ setup --laptop --mode block
 \end{lstlisting}
 This tailors the policy for endpoint workstations, allowing standard developer tools (VS Code, Cursor, Git, Pip, Cargo, SSH clients, browsers) while blocking ClickFix pastes, credential theft, and reverse shells.
 
 \subsection{Customizing \& Re-Signing \texttt{policy.yaml}}
-Whenever an IT admin edits \texttt{policy.yaml} (for example, adding a new internal software repository or trusted host), it \textbf{must} be re-signed before reloading:
+Whenever an IT admin edits \texttt{policy.yaml} (for example, adding a new internal software repository or trusted host), it \textbf{must} be re-signed on the admin's machine, copied to the server and reloaded. The daemon never signs anything and has no API to change its mode:
 \begin{lstlisting}[language=bash]
-# 1. Edit policy (e.g. add trusted internal host)
-sudo nano /etc/separ/policy.yaml
+# 1. On the admin machine: edit and re-sign (or change only the mode)
+nano policy.yaml
+separ policy sign --policy policy.yaml --key ~/.separ-admin/admin.key
+separ policy set-mode block --policy policy.yaml --key ~/.separ-admin/admin.key
 
-# 2. Re-sign with admin.key
-sudo separ sign /etc/separ/policy.yaml /etc/separ/admin.key
-
-# 3. Verify signature integrity
-sudo separ verify /etc/separ/policy.yaml /etc/separ/admin.pub
+# 2. On the server: install root-owned 0644, verify, reload
+sudo install -o root -g root -m 0644 policy.yaml /etc/separ/policy.yaml
+sudo separ policy show --policy /etc/separ/policy.yaml
+sudo separ reload --workdir /var/lib/separ     # or: sudo systemctl reload separ
 \end{lstlisting}
 
 % ============================================================================
@@ -303,6 +305,8 @@ systemctl --user enable --now separ-user.service
 \textbf{Command} & \textbf{Purpose} \\
 \midrule
 \texttt{separ setup --server|--laptop} & Initialize keys and generate signed \texttt{policy.yaml} upfront. \\
+\texttt{separ policy show|sign|set-mode} & Verify, re-sign or change the mode of the policy (admin key via \texttt{--key}). \\
+\texttt{separ reload} & Make the running daemon re-read and verify its signed policy. \\
 \texttt{separ gui} & Open standalone Reference Monitor GUI (attaches to active daemon). \\
 \texttt{separ serve} & Run background daemon headlessly (for servers / \texttt{systemd}). \\
 \texttt{separ health --json} & External heartbeat check for Nagios, Icinga, cron, or Prometheus. \\
@@ -333,7 +337,7 @@ separ health --workdir /var/lib/separ \
 \begin{enumerate}[leftmargin=1.4em,itemsep=4pt]
   \item \textbf{Error: \texttt{PolicyRejected} on startup} \\
   \emph{Cause:} \texttt{policy.yaml} was edited manually without re-signing, or is missing its signature. \\
-  \emph{Fix:} Run \texttt{sudo separ sign /etc/separ/policy.yaml /etc/separ/admin.key}.
+  \emph{Fix:} Re-sign on the admin machine (\texttt{separ policy sign --policy policy.yaml --key \textasciitilde/.separ-admin/admin.key}), copy it to \texttt{/etc/separ/} root-owned \texttt{0644}, then \texttt{sudo separ reload}. If the daemon says ``no signed policy'', run \texttt{sudo separ setup --server} first.
 
   \item \textbf{Warning: \texttt{Degraded protection: no host sensor}} \\
   \emph{Cause:} Separ is running without any external sensors connected in \texttt{ingest.yaml}, so it only sees commands passed through \texttt{separ guard} or files in its watched sandbox. \\
@@ -341,7 +345,7 @@ separ health --workdir /var/lib/separ \
 
   \item \textbf{A legitimate internal script or campus portal was blocked} \\
   \emph{Cause:} The destination host is not listed in the policy's trusted hosts/subnets. \\
-  \emph{Fix:} Add the internal domain/CIDR to \texttt{policy.yaml}, re-sign with \texttt{separ sign}, and reload.
+  \emph{Fix:} Add the internal domain/CIDR to \texttt{policy.yaml}, re-sign with \texttt{separ policy sign --key ...} on the admin machine, and \texttt{separ reload}.
 
   \item \textbf{Running GUI on a headless server over SSH} \\
   \emph{Fix:} Start the daemon headlessly on the server with \texttt{sudo separ gui --no-browser} (or \texttt{separ serve}), and forward port \texttt{8765} over SSH: \texttt{ssh -L 8765:127.0.0.1:8765 server}, then open the printed \texttt{http://localhost:8765/\#token=...} URL locally.

@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from tests.livehelp import make_barrier
 
 from refmon.cli import main as cli_main
 from refmon.ingest.mapping import (
@@ -278,9 +279,8 @@ def test_a_source_is_exactly_one_kind():
 
 
 def test_the_daemon_judges_ingested_events_and_reports_capabilities(tmp_path):
-    from refmon.live import LiveBarrier
 
-    barrier = LiveBarrier(workdir=tmp_path / "wd")
+    barrier = make_barrier(tmp_path / "wd")
     log = tmp_path / "tetragon.log"
     log.write_text("")
     cfg = IngestConfig.model_validate(

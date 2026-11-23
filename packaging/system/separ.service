@@ -10,7 +10,10 @@ RuntimeDirectory=separ
 RuntimeDirectoryMode=0755
 StateDirectory=separ
 WorkingDirectory=/var/lib/separ
-ExecStart=/usr/bin/separ serve --port 8765 --workdir /var/lib/separ --ingest /etc/separ/ingest.yaml
+# The daemon refuses to start without a signed /etc/separ/policy.yaml + admin.pub (separ setup).
+ExecStart=/usr/bin/separ serve --port 8765 --workdir /var/lib/separ --ingest /etc/separ/ingest.yaml --policy /etc/separ/policy.yaml --public-key /etc/separ/admin.pub
+# re-read and verify the signed policy (it never signs or changes it)
+ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=5
 

@@ -14,8 +14,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from tests.livehelp import change_mode, make_barrier, provision
 
 from refmon import signing
+from refmon.admin import read_private_key, write_signed_policy
 from refmon.cli import main as cli_main
 from refmon.health import (
     CHECK_STATE_FILE,
@@ -34,7 +36,7 @@ from refmon.notify import (
     parse_categories,
 )
 from refmon.policy import RuleSetting
-from refmon.policy_io import read_document, write_signed
+from refmon.policy_io import read_document
 from refmon.schemas import Decision
 from refmon.selftest import Case, build_catalog
 
@@ -67,7 +69,7 @@ def _note(category: str = "alert", title: str = "t") -> Notification:
 def _barrier(tmp_path: Path, *channels) -> tuple[LiveBarrier, Collect]:
     sink = Collect()
     hub = NotificationHub(local=[sink, *channels])
-    return LiveBarrier(workdir=tmp_path / "wd", hub=hub), sink
+    return make_barrier(tmp_path / "wd", hub=hub), sink
 
 
 # -- the hub -------------------------------------------------------------------------------------
@@ -196,7 +198,7 @@ def test_an_allow_sends_nothing_and_demo_stories_are_never_incidents(tmp_path: P
 
 def test_observe_mode_says_would_block(tmp_path: Path):
     barrier, sink = _barrier(tmp_path)
-    barrier.set_mode("observe")
+    change_mode(barrier, "observe")
     barrier.guard_command(CLICKFIX, origin="web", execute=False)
     titles = [n.title for n in sink.notes]
     assert "Would block (not enforced)" in titles
@@ -292,7 +294,7 @@ def test_a_validly_signed_policy_change_is_adopted(tmp_path: Path):
     unsigned = {k: v for k, v in doc.items() if k != signing.SIGNATURE_FIELD}
     unsigned["mode"] = "warn"
     time.sleep(0.01)  # a new mtime
-    write_signed(unsigned, barrier._private_key(), barrier.policy_path)
+    write_signed_policy(unsigned, read_private_key(barrier.test_admin_key), barrier.policy_path)
     mon.tick(T0 + timedelta(seconds=1))
     assert barrier.policy.mode.value == "warn"
     assert barrier.pipeline.policy.mode.value == "warn"
@@ -454,10 +456,17 @@ def test_serve_starts_beats_notifies_and_reports_its_stop(tmp_path: Path):
         holder["server"], holder["barrier"] = server, barrier
         return server
 
+    policy, public, _ = provision(tmp_path / "config")
     with patch.object(live, "make_http_server", make):
         t = threading.Thread(
             target=live.serve_forever,
-            kwargs={"workdir": tmp_path / "wd", "hub": hub, "rootkit_interval_s": 0},
+            kwargs={
+                "workdir": tmp_path / "wd",
+                "hub": hub,
+                "rootkit_interval_s": 0,
+                "policy_path": policy,
+                "public_key_path": public,
+            },
             daemon=True,
         )
         t.start()

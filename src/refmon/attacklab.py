@@ -271,7 +271,11 @@ class AttackLab:
             color = self.out.isatty() and not os.environ.get("NO_COLOR")
         self.s = Style(color)
         self.ask = ask  # callable(prompt) -> str for hold questions; None = never release
-        self.barrier = LiveBarrier(workdir=workdir if workdir is not None else lab_home())
+        lab_dir = Path(workdir) if workdir is not None else lab_home()
+        self.policy_path, self.public_key_path, self.admin_key_path = provision_lab_policy(lab_dir)
+        self.barrier = LiveBarrier(
+            workdir=lab_dir, policy_path=self.policy_path, public_key_path=self.public_key_path
+        )
         self.home = self.barrier.sandbox_dir / "fakehome"
         self._prepare_sandbox()
         self.results: list[LabResult] = []
@@ -339,6 +343,15 @@ class AttackLab:
     @property
     def mode(self) -> str:
         return self.barrier.policy.mode.value
+
+    def set_mode(self, mode: str) -> str:
+        """The lab is its own admin: sign the mode change with the lab key (kept apart from the
+        daemon's files), then the barrier re-reads and verifies it, as `separ reload` does."""
+        from .admin import set_mode
+
+        set_mode(mode, self.policy_path, self.public_key_path, self.admin_key_path)
+        self.barrier.reload_policy(why="lab mode change")
+        return self.mode
 
     def run_command(
         self,
@@ -702,6 +715,28 @@ class _Tee(io.TextIOBase):
         return self._copy.getvalue()
 
 
+def provision_lab_policy(lab_dir: Path, mode: str = "block") -> tuple[Path, Path, Path]:
+    """(policy, public key, private key) of the lab. The lab plays the admin, so it holds a key,
+    but in <lab>/admin/ (0700), never in the daemon's own files; the policy and public key are in
+    <lab>/config/. An existing lab policy is kept as it is."""
+    from .admin import ensure_admin_key, write_public_key, write_signed_policy
+    from .config import secure_dir
+    from .policy import default_policy_dict
+
+    secure_dir(lab_dir, 0o700)
+    config, key = lab_dir / "config", lab_dir / "admin" / "admin.key"
+    secure_dir(config, 0o700)
+    priv, pub, _ = ensure_admin_key(key)
+    policy, public = config / "policy.yaml", config / "admin.pub"
+    if not public.exists():
+        write_public_key(pub, public)
+    if not policy.exists():
+        doc = default_policy_dict()
+        doc["mode"] = mode  # the lab demonstrates enforcement; `--mode` changes it
+        write_signed_policy(doc, priv, policy)
+    return policy, public, key
+
+
 def lab_home() -> Path:
     """Everything the lab writes lives in <Refmon repo>/attack-lab: the signed policy and keys,
     the sandbox, quarantine, Refmon's own logs (logs/) and the saved runs (runs/)."""
@@ -980,8 +1015,8 @@ def interactive(
                 lab.verbose = not lab.verbose
                 lab.p(f"verbose {'on' if lab.verbose else 'off'}")
             elif cmd == "m":
-                lab.barrier.set_mode(arg)
-                lab.p(f"policy re-signed: mode={lab.mode}")
+                lab.set_mode(arg)
+                lab.p(f"policy re-signed with the lab key and reloaded: mode={lab.mode}")
             elif cmd == "o":
                 if arg not in ORIGINS:
                     raise ValueError(f"origin must be one of {', '.join(ORIGINS)}")
@@ -1049,7 +1084,7 @@ def main(args: Any) -> int:
         record_own=args.record_own_commands,
     )
     if args.mode:
-        lab.barrier.set_mode(args.mode)
+        lab.set_mode(args.mode)
     spec = ["all"] if args.test_all else args.run
     if spec:
         for n, t in select(spec):

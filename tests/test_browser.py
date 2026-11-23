@@ -9,6 +9,7 @@ import urllib.request
 from pathlib import Path
 
 import pytest
+from tests.livehelp import make_barrier
 
 from refmon.live import BROWSER_RATE, LiveBarrier, browser_action, make_http_server
 from refmon.schemas import Decision, Mode
@@ -19,7 +20,7 @@ DOC_COPY = "ls -la"
 
 @pytest.fixture
 def barrier(tmp_path: Path) -> LiveBarrier:
-    return LiveBarrier(workdir=tmp_path)
+    return make_barrier(tmp_path)
 
 
 def _all_logs(b: LiveBarrier) -> str:

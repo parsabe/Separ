@@ -1,5 +1,7 @@
 """The human steps around the policy, end to end: keygen, sign, learn, approve, apply, load."""
 
+from tests.livehelp import make_barrier
+
 from refmon.cli import main
 from refmon.policy import default_policy
 from refmon.policy_io import load_policy, read_document
@@ -41,9 +43,9 @@ def test_an_edited_policy_does_not_verify(tmp_path, capsys):
 def test_cli_gui_attaches_to_running_daemon(tmp_path, capsys):
     import threading
 
-    from refmon.live import LiveBarrier, make_http_server
+    from refmon.live import make_http_server
 
-    barrier = LiveBarrier(workdir=tmp_path)
+    barrier = make_barrier(tmp_path)
     server = make_http_server(barrier, host="127.0.0.1", port=0)
     port = server.server_address[1]
     thread = threading.Thread(target=server.serve_forever, daemon=True)

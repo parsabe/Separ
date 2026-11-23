@@ -7,8 +7,23 @@ Separ operates as a behavioral reference monitor daemon on servers. It evaluates
 ### 1. Verify Configuration Files
 Configuration files live in `/etc/separ/`:
 - **`ingest.yaml`**: Configures which sensors feed into Separ (Tetragon, SSH, Shibboleth, Dovecot).
-- **`policy.yaml`**: University security policy (campus CIDR ranges, internal domains).
+- **`policy.yaml`**: University security policy (campus CIDR ranges, internal domains), signed.
+- **`admin.pub`**: The admin's public key. The daemon verifies `policy.yaml` with it and refuses to
+  start without both (run `sudo separ setup --server` first). Both files must be root-owned 0644;
+  the daemon refuses a policy or key that group/others can write.
 - **`mappings/`**: Ready-to-use YAML mapping definitions for external sensors.
+
+The **private** signing key is never on a server: `separ setup` creates it in the admin's
+`~/.separ-admin/admin.key` (or `--key PATH`). Keep it on the admin's machine and copy only
+`policy.yaml` and `admin.pub` to the servers. Changes are made there and then reloaded:
+```bash
+separ policy set-mode block --policy policy.yaml --key ~/.separ-admin/admin.key
+separ policy sign --policy policy.yaml --key ~/.separ-admin/admin.key   # after editing
+separ policy show --policy /etc/separ/policy.yaml                       # verify
+sudo separ reload --workdir /var/lib/separ    # or: sudo systemctl reload separ
+```
+The daemon has no API to change its mode or sign anything; `separ reload` only makes it re-read
+and verify the file.
 
 ### 2. Test Sensor Mappings Safely
 Test your mapping against real log lines without leaking sensitive data into terminal history:

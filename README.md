@@ -67,9 +67,10 @@ $ separ setup --laptop
 ================================================================
  Separ Security Configuration & Policy Setup
 ================================================================
-✓ Generated administrative signing key: /home/user/.separ/admin.key
+✓ Generated the admin signing key: ~/.separ-admin/admin.key (0600, in a 0700 folder)
 ✓ Configuring for: Workstation / Laptop Endpoint
-✓ Signed and verified policy written to: /home/user/.separ/policy.yaml
+✓ Signed policy written to: ~/.config/separ/policy.yaml (0644)
+✓ Public key written to   : ~/.config/separ/admin.pub (0644; the daemon verifies with it)
   Mode                  : OBSERVE
   Campus CIDRs protected: 139.18/16, 10.0.0.0/8, 172.16.0.0/12
   Internal domains      : tu-freiberg.de
@@ -133,12 +134,18 @@ sudo ./install.sh
 
 ### Configure & Launch
 ```bash
-# 1. Configure and sign policy upfront
-sudo separ setup --server --mode observe   # Campus / production server
-separ setup --laptop --mode block          # Developer laptop
+# 1. Configure and sign policy upfront (the daemon refuses to start without a signed policy)
+sudo separ setup --server --mode observe   # system daemon: /etc/separ/policy.yaml + admin.pub
+separ setup --laptop --mode block          # per-user daemon: ~/.config/separ/
+# The private key (default ~/.separ-admin/admin.key, --key PATH) belongs on the admin's
+# machine, not on the endpoints: the daemon only ever gets the public key.
 
 # 2. Launch standalone desktop GUI (or click "Separ" in your Linux App Menu)
 separ gui
+
+# Later changes are signed by the admin, never by the daemon, then reloaded
+separ policy set-mode block --key ~/.separ-admin/admin.key
+separ reload
 
 # 3. Verify host integrity, privacy audit, and full attack lab
 separ scan-rootkit

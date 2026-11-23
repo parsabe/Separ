@@ -30,6 +30,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from . import signing
+from .admin import read_private_key
 from .learning import (
     ContractLearner,
     apply_proposal,
@@ -40,10 +41,6 @@ from .learning import (
 from .policy import default_policy_dict
 from .policy_io import PolicyRejected, load_policy_data, read_document, write_document, write_signed
 from .replay import ReplaySource
-
-
-def _read_key(path: str) -> str:
-    return Path(path).read_text(encoding="utf-8").strip()
 
 
 def _notify_args(parser: argparse.ArgumentParser) -> None:
@@ -71,6 +68,18 @@ def _notify_args(parser: argparse.ArgumentParser) -> None:
         metavar="LIST",
         help=f"categories for the webhook/command: comma list of {', '.join(CATEGORIES)} or all "
         "(default: block,hold,alert,rootkit,lifecycle; the log file and terminal get everything)",
+    )
+
+
+def _policy_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--policy",
+        default=None,
+        help="the signed policy (default: /etc/separ/policy.yaml as root, else "
+        "$XDG_CONFIG_HOME/separ/policy.yaml); the daemon refuses to start without one",
+    )
+    parser.add_argument(
+        "--public-key", default=None, help="the admin's public key (default: next to the policy)"
     )
 
 
@@ -113,7 +122,46 @@ def main(argv: list[str] | None = None) -> int:
         default="observe",
         help="initial policy enforcement mode (default: observe)",
     )
-    setup.add_argument("--workdir", default=None, help="target configuration directory")
+    setup.add_argument(
+        "--config-dir",
+        "--workdir",
+        dest="config_dir",
+        default=None,
+        help="where the daemon reads policy.yaml and admin.pub (default: /etc/separ as root, "
+        "else $XDG_CONFIG_HOME/separ)",
+    )
+    setup.add_argument(
+        "--key",
+        default=None,
+        help="the admin's private signing key (default ~/.separ-admin/admin.key; created if "
+        "missing). Keep it on the admin's machine, never on the endpoints",
+    )
+
+    pol = sub.add_parser(
+        "policy",
+        help="show, sign or change the signed policy (admin side: needs the private key)",
+        description="The daemon only verifies; every signature is made here with --key. After a "
+        "change run `separ reload` (or systemctl reload separ).",
+    )
+    psub = pol.add_subparsers(dest="policy_command", required=True)
+    for name in ("show", "sign", "set-mode"):
+        pp = psub.add_parser(name)
+        if name == "set-mode":
+            pp.add_argument("mode", choices=("observe", "warn", "block"))
+        pp.add_argument("--policy", default=None, help="default: <config dir>/policy.yaml")
+        pp.add_argument("--public-key", default=None, help="default: next to the policy")
+        if name != "show":
+            pp.add_argument("--key", default=None, help="default ~/.separ-admin/admin.key")
+        if name == "show":
+            pp.add_argument("--json", action="store_true", dest="as_json")
+    rl = sub.add_parser(
+        "reload",
+        help="tell the running daemon to re-read and verify its signed policy",
+        description="Sends an authenticated /api/reload to the daemon of --workdir (SIGHUP to "
+        "its pid when the API cannot be reached). The daemon never writes or signs a policy.",
+    )
+    rl.add_argument("--workdir", default=None, help="the daemon's work directory")
+    rl.add_argument("--host", default="localhost")
 
     keygen = sub.add_parser("keygen")
     keygen.add_argument("keyfile")
@@ -162,6 +210,7 @@ def main(argv: list[str] | None = None) -> int:
     srv.add_argument("--workdir", default=None)
     srv.add_argument("--decoys", default=None, help="decoys.yaml: run decoy services and watcher")
     srv.add_argument("--ingest", default=None, help="ingest.yaml: external sensors (mapping files)")
+    _policy_args(srv)
     _notify_args(srv)
     srv.add_argument(
         "--rootkit-interval",
@@ -181,6 +230,7 @@ def main(argv: list[str] | None = None) -> int:
     gui.add_argument("--host", default="127.0.0.1")
     gui.add_argument("--port", type=int, default=8765)
     gui.add_argument("--workdir", default=None)
+    _policy_args(gui)
     gui.add_argument(
         "--no-browser",
         action="store_true",
@@ -328,16 +378,20 @@ def _run(args: argparse.Namespace) -> int:
 
         return run_setup(args)
     elif args.command == "keygen":
+        from .config import write_secret
+
         private, public = signing.generate_keypair()
-        path = Path(args.keyfile)
-        path.write_text(private + "\n", encoding="utf-8")
-        path.chmod(0o600)
+        write_secret(Path(args.keyfile), private)  # 0600 from the start, never overwritten
         print(public)
+    elif args.command == "policy":
+        return _policy_command(args)
+    elif args.command == "reload":
+        return _reload_command(args)
     elif args.command == "init-policy":
         write_document(default_policy_dict(), args.out)
     elif args.command == "sign":
         document = read_document(args.document)
-        write_signed(document, _read_key(args.keyfile), args.document)
+        write_signed(document, read_private_key(args.keyfile), args.document)
     elif args.command == "verify":
         loaded = load_policy_data(args.policy, [args.public_key.strip()])
         print(f"ok {loaded.digest} packs={len(loaded.packs)}")
@@ -372,7 +426,7 @@ def _run(args: argparse.Namespace) -> int:
             {k: v for k, v in document.items() if k != signing.SIGNATURE_FIELD},
             read_proposal(args.proposal),
         )
-        write_signed(data, _read_key(args.keyfile), args.out)
+        write_signed(data, read_private_key(args.keyfile), args.out)
         print(f"signed policy written: {args.out}")
     elif args.command == "scan-rootkit":
         import json
@@ -434,6 +488,8 @@ def _run(args: argparse.Namespace) -> int:
             rootkit_interval_s=args.rootkit_interval,
             decoys=args.decoys,
             ingest=ingest_cfg,
+            policy_path=args.policy,
+            public_key_path=args.public_key,
         )
     elif args.command == "ingest":
         from .ingest.cli import run as run_ingest
@@ -467,6 +523,8 @@ def _run(args: argparse.Namespace) -> int:
             open_browser=not args.no_browser,
             decoys=getattr(args, "decoys", None),
             ingest=ingest_cfg,
+            policy_path=args.policy,
+            public_key_path=args.public_key,
         )
     elif args.command == "health":
         import json
@@ -589,6 +647,68 @@ def _run(args: argparse.Namespace) -> int:
             if res.get("output"):
                 print(res["output"])
         return 1 if res.get("blocked_by_barrier") else 0
+    return 0
+
+
+def _policy_command(args: argparse.Namespace) -> int:
+    import json
+
+    from . import admin
+    from .config import resolve_policy_paths
+
+    policy, public = resolve_policy_paths(args.policy, args.public_key)
+    if args.policy_command == "show":
+        info = admin.show(policy, public)
+        if args.as_json:
+            print(json.dumps(info, indent=2))
+        else:
+            for key, value in info.items():
+                print(f"  {key:16} {value}")
+    elif args.policy_command == "sign":
+        admin.sign_file(policy, args.key)
+        print(f"signed {policy}; run `separ reload` so the daemon adopts it")
+    else:
+        loaded = admin.set_mode(args.mode, policy, public, args.key)
+        print(
+            f"{policy}: mode={loaded.policy.mode.value} digest={loaded.digest}; "
+            "run `separ reload` so the daemon adopts it"
+        )
+    return 0
+
+
+def _reload_command(args: argparse.Namespace) -> int:
+    import json
+    import os
+    import signal
+    import urllib.error
+    import urllib.request
+
+    from .config import default_workdir, is_root
+
+    workdir = Path(args.workdir) if args.workdir else default_workdir()
+    token = (workdir / "api.token").read_text(encoding="utf-8").strip()
+    try:
+        port = int((workdir / "daemon.port").read_text(encoding="utf-8").strip())
+        req = urllib.request.Request(
+            f"http://{args.host}:{port}/api/reload",
+            data=b"{}",
+            headers={"Content-Type": "application/json", "X-Separ-Token": token},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=6.0) as resp:
+            res = json.loads(resp.read().decode("utf-8"))
+    except (OSError, ValueError, urllib.error.URLError):
+        beat = json.loads((workdir / "heartbeat.json").read_text(encoding="utf-8"))
+        pid = int(beat["pid"])
+        if not is_root() and os.stat(workdir / "heartbeat.json").st_uid != os.getuid():
+            raise PermissionError("the daemon belongs to another user") from None
+        os.kill(pid, signal.SIGHUP)
+        print(f"sent SIGHUP to the daemon (pid {pid}); `separ health` shows the mode it adopted")
+        return 0
+    if not res.get("reloaded"):
+        print(f"separ reload: rejected, the last valid policy stays: {res.get('error')}")
+        return 1
+    print(f"reloaded: mode={res['mode']} digest={res['digest']}")
     return 0
 
 

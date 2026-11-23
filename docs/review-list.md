@@ -55,3 +55,10 @@ Answered by the instruction to finish (2026-10-29): F5 and F6 are fixed in v1.2 
 Answered by the instruction to finish (2026-10-29): F8 is fixed in v1.3 (A55) and benign variants are generated (A56).
 
 Open after v1.3: none that blocks. A lower long-window baseline (A49) from a pilot; F10; the decisions before publishing in docs/results.md.
+
+## Code review 2026-11 (SEPAR_FIXES.md): items done differently from the instruction
+
+| # | Item | What the instruction says | What was done, and why |
+|---|---|---|---|
+| R1 | 1 and 2 | two separate commits | One commit: once the daemon no longer generates a policy, the code that re-signed it on `/api/mode` has no key to use, so the two items cannot be separated without adding code that the next commit deletes. |
+| R2 | 2 | "the daemon refuses a policy or public key that is writable by its own (non-root) user" | Done for the system configuration: a root daemon refuses anything not owned by root, and a non-root daemon refuses a file in /etc/separ that its own user owns. In the per-user configuration ($XDG_CONFIG_HOME/separ, item 1) the user owns the folder by definition, so the literal rule would make a per-user daemon impossible. There the daemon starts, and `separ health` reports degraded protection `policy_owner_writable` (a process of that user could roll the policy back to an older signed one). Group- or other-writable files, symlinks and folders are refused everywhere. **Needs owner decision**: keep this, or require root-owned files for per-user daemons too. |

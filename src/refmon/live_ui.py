@@ -494,10 +494,15 @@ details summary {
     <!-- Panel 1: Signed Policy, Holds, Quarantine & Rootkit -->
     <div class="panel">
       <h2>Signed Policy &amp; Security Scope (TUBAF Campus)</h2>
-      <div style="display:flex; gap:6px; margin-bottom:8px;">
-        <button id="btn-mode-block" onclick="setMode('block')" style="flex:1;">Mode: Block</button>
-        <button id="btn-mode-warn" onclick="setMode('warn')" style="flex:1;">Mode: Warn</button>
-        <button id="btn-mode-observe" onclick="setMode('observe')" style="flex:1;">Mode: Observe</button>
+      <div style="display:flex; gap:6px; margin-bottom:4px;">
+        <button id="btn-mode-block" disabled style="flex:1;">Mode: Block</button>
+        <button id="btn-mode-warn" disabled style="flex:1;">Mode: Warn</button>
+        <button id="btn-mode-observe" disabled style="flex:1;">Mode: Observe</button>
+      </div>
+      <div style="font-size:11px; color:var(--muted); margin-bottom:8px;">
+        The mode is part of the signed policy. The daemon cannot change it: an admin runs
+        <code>separ policy set-mode MODE --key KEY</code>, then <code>separ reload</code>
+        (<button class="btn-sm" onclick="reloadPolicy()">re-read policy now</button>).
       </div>
       <div id="policy-kv"></div>
 
@@ -1044,9 +1049,9 @@ async function resolveHold(hold_id, platform, answer) {
   await refresh();
 }
 
-async function setMode(mode) {
+async function reloadPolicy() {
   try {
-    await api('/api/mode', {mode});
+    await api('/api/reload', {});
   } catch (e) {
     alert(e.message || String(e));
   }

