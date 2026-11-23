@@ -12,6 +12,7 @@ from evhelp import T0, ev
 from refmon.exposure import ExposureManager, load_advisories, load_inventory
 from refmon.gate import RecordingNotifier
 from refmon.heartbeat import HeartbeatMonitor, build
+from refmon.keys import LAB_REPLAY_KEY
 from refmon.pipeline import Pipeline
 from refmon.policy import default_policy, default_policy_dict
 from refmon.pseudonym import Pseudonymizer
@@ -31,7 +32,9 @@ def inventory(name):
 
 def test_warn_mode_tells_and_touches_nothing():
     notifier = RecordingNotifier()
-    pipe = Pipeline(default_policy(mode="warn", engine="rule"), gate=True, notifier=notifier)
+    pipe = Pipeline(
+        default_policy(mode="warn", engine="rule"), gate=True, notifier=notifier, key=LAB_REPLAY_KEY
+    )
     out = []
     for e in (
         ev("request_in", "web_worker", "p-1", f=1, source_class="inbound_request", t=0),
@@ -127,19 +130,19 @@ def no_weights():
 
 def test_the_fallback_to_the_plain_rule_is_logged(caplog):
     with caplog.at_level(logging.WARNING, logger="refmon.pipeline"):
-        Pipeline(no_weights())
+        Pipeline(no_weights(), key=LAB_REPLAY_KEY)
     assert "decision engine fallback" in caplog.text and "3/2/1" in caplog.text
 
 
 def test_no_log_when_the_calculus_or_an_explicit_rule_engine_is_in_use(caplog):
     with caplog.at_level(logging.WARNING, logger="refmon.pipeline"):
-        Pipeline(default_policy())
-        Pipeline(default_policy(engine="rule"))  # chosen, not a fallback
+        Pipeline(default_policy(), key=LAB_REPLAY_KEY)
+        Pipeline(default_policy(engine="rule"), key=LAB_REPLAY_KEY)  # chosen, not a fallback
     assert caplog.text == ""
 
 
 def test_a_reload_that_loses_the_weights_is_logged(caplog):
-    pipe = Pipeline(default_policy())
+    pipe = Pipeline(default_policy(), key=LAB_REPLAY_KEY)
     with caplog.at_level(logging.WARNING, logger="refmon.pipeline"):
         pipe.set_policy(no_weights())
         pipe.set_policy(no_weights())  # still the fallback: said once

@@ -23,6 +23,7 @@ from refmon.exposure import (
     satisfies,
 )
 from refmon.gate import RecordingNotifier
+from refmon.keys import LAB_REPLAY_KEY
 from refmon.pipeline import Pipeline
 from refmon.policy import default_policy
 from refmon.policy_io import write_signed
@@ -258,7 +259,9 @@ def acts(out):
 
 def test_s16_escalates_on_an_exposed_component_and_reverts_after_the_patch():
     manager = ExposureManager(default_policy(mode="observe"))
-    pipe = Pipeline(manager.effective_policy, gate=True, notifier=RecordingNotifier())
+    pipe = Pipeline(
+        manager.effective_policy, gate=True, notifier=RecordingNotifier(), key=LAB_REPLAY_KEY
+    )
 
     # 0. nothing is known to be exposed: the global mode is observe, so the attack is only recorded
     before = replay_attack(pipe, 0)
@@ -291,7 +294,9 @@ def test_s16_escalates_on_an_exposed_component_and_reverts_after_the_patch():
 def test_the_verdict_summary_names_the_reason():
     manager = ExposureManager(default_policy(mode="observe"))
     manager.update(inventory("s16.inventory.exposed.yaml"), ADVISORIES)
-    pipe = Pipeline(manager.effective_policy, gate=True, notifier=RecordingNotifier())
+    pipe = Pipeline(
+        manager.effective_policy, gate=True, notifier=RecordingNotifier(), key=LAB_REPLAY_KEY
+    )
     reporter = Reporter(pipe, None)
     for e in s13_events():
         reporter.consume(pipe.process(e))
@@ -304,7 +309,7 @@ def test_the_verdict_summary_names_the_reason():
 def test_a_role_that_is_not_exposed_is_not_escalated_by_someone_elses_flaw():
     manager = ExposureManager(default_policy(mode="observe"))
     manager.update(inventory("s16.inventory.exposed.yaml"), ADVISORIES)
-    pipe = Pipeline(manager.effective_policy, gate=True)
+    pipe = Pipeline(manager.effective_policy, gate=True, key=LAB_REPLAY_KEY)
     other = [
         ev("request_in", "node_app_server", "p-5", f=40, source_class="inbound_request", t=0),
         ev("exec", "node_app_server", "p-5", f=41, t=1, exec_class="unknown"),

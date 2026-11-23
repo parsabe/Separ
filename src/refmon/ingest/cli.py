@@ -73,9 +73,10 @@ def run(args: argparse.Namespace) -> int:
                   f"object {event.object.class_}, {size}, attrs {sorted(event.attrs)}")  # fmt: skip
     print("summary: " + ", ".join(f"{k} {v}" for k, v in sorted(outcomes.items())))
     if args.judge and events:
+        from ..keys import new_device_key
         from ..pipeline import Pipeline
 
-        pipe = Pipeline(policy)
+        pipe = Pipeline(policy, new_device_key())  # a fresh random key: nothing is kept
         for event in events:
             pipe.process(event)
         for sid, j in pipe.judgements().items():

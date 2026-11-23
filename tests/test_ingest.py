@@ -28,6 +28,7 @@ from refmon.ingest.mapping import (
     value_spec,
 )
 from refmon.ingest.runtime import IngestConfig, IngestRunner, SourceSpec, follow_file
+from refmon.keys import LAB_REPLAY_KEY
 from refmon.pipeline import Pipeline
 from refmon.policy import default_policy
 
@@ -159,7 +160,7 @@ def test_tetragon_template_links_exec_and_connect_into_one_blocked_story():
     exec_ev, conn_ev = out[0][0], out[1][0]
     assert exec_ev.actor.role == "web_worker"  # php-fpm8.2 -> php-fpm
     assert conn_ev.actor.parent == exec_ev.actor.id  # the started program is the child
-    pipe = Pipeline(default_policy())
+    pipe = Pipeline(default_policy(), key=LAB_REPLAY_KEY)
     for ev in (exec_ev, conn_ev):
         pipe.process(ev)
     (j,) = pipe.judgements().values()
@@ -174,13 +175,13 @@ def test_falco_template_web_shell_write_blocks_and_cache_write_is_allowed():
                            "new_file": True, "executable": True}  # fmt: skip
     assert cache.attrs["path_group"] == "cache" and "executable" not in cache.attrs
     for ev, want in ((shell, "block"), (cache, "allow")):
-        pipe = Pipeline(default_policy())
+        pipe = Pipeline(default_policy(), key=LAB_REPLAY_KEY)
         pipe.process(ev)
         assert next(iter(pipe.judgements().values())).decision.value == want
 
 
 def test_nothing_raw_survives_observe_for_any_template_sample():
-    pipe = Pipeline(default_policy())
+    pipe = Pipeline(default_policy(), key=LAB_REPLAY_KEY)
     for template, sample in (
         ("tetragon.yaml", "tetragon-sample.jsonl"),
         ("falco.yaml", "falco-sample.jsonl"),
@@ -357,7 +358,7 @@ def test_identity_templates_map_their_samples_to_one_actor_per_account(template)
 def test_every_template_sample_passes_observe_and_judge_without_error():
     """Every allowlisted attribute of a mapped event is a valid identifier after Observe (a long
     SAML URN would otherwise break the Event); nothing raw survives."""
-    pipe = Pipeline(default_policy())
+    pipe = Pipeline(default_policy(), key=LAB_REPLAY_KEY)
     for template, (sample, _) in sorted(ALL_SAMPLES.items()):
         template = "tetragon.yaml" if template == "tetragon-k8s" else template
         for ev, _ in mapped(template, sample):
@@ -389,7 +390,7 @@ def test_m365_forwarding_outside_is_held_and_inside_is_not():
 
     data = default_policy_dict()
     data["identity"] = {"internal_mail_domains": ["example.org"]}
-    pipe = Pipeline(Policy.parse(data))
+    pipe = Pipeline(Policy.parse(data), key=LAB_REPLAY_KEY)
     out = mapped("m365-audit.yaml", "m365-sample.jsonl")
     rules = [ev for ev, _ in out if ev is not None and ev.type.value == "mail_rule"]
     outside, inside = rules
@@ -411,7 +412,7 @@ def judged_alone(template, sample):
         if ev is None:
             out.append(outcome)
             continue
-        pipe = Pipeline(pol)
+        pipe = Pipeline(pol, key=LAB_REPLAY_KEY)
         pipe.process(ev)
         j = list(pipe.judgements().values())[-1]
         out.append((ev.actor.role, j.decision.value))
@@ -443,7 +444,7 @@ def test_tetragon_container_and_terraform_records_follow_the_contracts():
 
 
 def test_a_terraform_local_exec_that_fetches_is_one_blocked_story():
-    pipe = Pipeline(default_policy())
+    pipe = Pipeline(default_policy(), key=LAB_REPLAY_KEY)
     for ev, _ in mapped("tetragon.yaml", "tetragon-k8s-sample.jsonl")[2:]:
         pipe.process(ev)
     best = pipe.best()
@@ -459,7 +460,7 @@ def test_a_scoped_exception_lets_ci_deploy_daemonsets_f13():
                            "scope": {"role": "ci_deployer"}, "disables": ["R-EFF-PERSIST"],
                            "expires": "2099-12-31"}]  # fmt: skip
     daemonset = mapped("k8s-audit.yaml", "k8s-audit-sample.jsonl")[3][0]
-    pipe = Pipeline(Policy.parse(data))
+    pipe = Pipeline(Policy.parse(data), key=LAB_REPLAY_KEY)
     pipe.process(daemonset)
     assert pipe.best().decision.value == "allow"
     other = mapped("k8s-audit.yaml", "k8s-audit-sample.jsonl")[1][0]  # not in scope: still blocked

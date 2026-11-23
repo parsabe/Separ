@@ -5,6 +5,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from evhelp import ev, raw
+from refmon.keys import LAB_REPLAY_KEY
 from refmon.pipeline import Pipeline
 from refmon.policy import default_policy
 from scenario_run import run_events
@@ -36,7 +37,7 @@ def test_labels_are_never_lost_along_a_process_chain(depth, spawn_roles):
 @settings(max_examples=60, deadline=None)
 @given(secret=words, host=words, path=words, program=words)
 def test_no_raw_content_in_any_output(secret, host, path, program):
-    p = Pipeline(default_policy())
+    p = Pipeline(default_policy(), key=LAB_REPLAY_KEY)
     outputs = []
     for e in [
         raw(

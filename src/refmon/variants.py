@@ -39,6 +39,7 @@ import yaml
 
 from .gate import RecordingNotifier
 from .golden import GoldenCase, ScenarioKind, load_golden_cases
+from .keys import LAB_REPLAY_KEY
 from .pipeline import Pipeline
 from .pipeline.observe import EXTERNAL_SOURCES
 from .policy import Policy, default_policy
@@ -500,7 +501,7 @@ def other_share(events: Iterable[Event]) -> float:
 
 
 def run(variant: Variant, policy: Policy) -> Result:
-    pipe = Pipeline(policy)
+    pipe = Pipeline(policy, key=LAB_REPLAY_KEY)
     for event in variant.events:
         pipe.process(event)
     best = pipe.best()
@@ -526,7 +527,7 @@ def run(variant: Variant, policy: Policy) -> Result:
 def action_profile(variant: Variant, policy: Policy) -> dict[str, int]:
     """What the Gate does with a variant in block mode, counted by action type. Every action the
     replay issues counts, so a hold that later times out still shows the pause it started with."""
-    pipe = Pipeline(policy.model_copy(update={"mode": "block"}), gate=True)
+    pipe = Pipeline(policy.model_copy(update={"mode": "block"}), gate=True, key=LAB_REPLAY_KEY)
     counts: Counter[str] = Counter()
     for event in variant.events:
         for out in pipe.process(event):
@@ -541,7 +542,7 @@ def hold_outcomes(variant: Variant, policy: Policy) -> dict[str, str]:
     outcomes: dict[str, str] = {}
     answers: dict[str, tuple[str, ...]] = {}
     for answer in ("stop", "continue", "timeout", "confirm", "release", "silent"):
-        pipe = Pipeline(block, gate=True, notifier=RecordingNotifier())
+        pipe = Pipeline(block, gate=True, notifier=RecordingNotifier(), key=LAB_REPLAY_KEY)
         actions: list[Action] = []
         for event in variant.events:
             actions += [o for o in pipe.process(event) if isinstance(o, Action)]

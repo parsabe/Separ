@@ -9,6 +9,7 @@ from __future__ import annotations
 import math
 
 from evhelp import ev
+from refmon.keys import LAB_REPLAY_KEY
 from refmon.pipeline import Pipeline
 from refmon.policy import default_policy
 from refmon.schemas import Action, Decision, Mode, Override
@@ -20,7 +21,7 @@ BLOCKING = POLICY.model_copy(update={"mode": Mode.BLOCK})
 
 
 def run(events, policy=POLICY, **kw):
-    p = Pipeline(policy, **kw)
+    p = Pipeline(policy, **kw, key=LAB_REPLAY_KEY)
     out = []
     for e in events:
         out += p.process(e)

@@ -12,6 +12,7 @@ import argparse
 import json
 
 from refmon.golden import load_golden_cases
+from refmon.keys import LAB_REPLAY_KEY
 from refmon.pipeline import Pipeline
 from refmon.policy import default_policy
 from refmon.replay import ReplaySource
@@ -24,7 +25,7 @@ def main(argv=None) -> int:
     policy = default_policy()
     out = {}
     for case in load_golden_cases(args.golden):
-        pipe = Pipeline(policy)
+        pipe = Pipeline(policy, key=LAB_REPLAY_KEY)
         for event in ReplaySource(case.events_path, extra_roles=policy.extra_roles):
             pipe.process(event)
         best = pipe.best()

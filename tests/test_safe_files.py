@@ -163,3 +163,44 @@ def test_the_new_locations_are_still_separ_itself(command):
     from refmon.intent import analyze
 
     assert analyze(command).tamper == "self"
+
+
+def test_no_production_class_has_a_default_key():
+    """Review 2026-11, item 8: a forgotten key is an error, never the constant everyone knows."""
+    import inspect
+
+    from refmon.pipeline import Pipeline
+    from refmon.policy import default_policy
+    from refmon.rootkit import RootkitScanner, evaluate_rootkit_scan
+
+    for fn in (Pipeline.__init__, RootkitScanner.__init__, evaluate_rootkit_scan):
+        param = inspect.signature(fn).parameters["key"]
+        assert param.default is inspect.Parameter.empty, fn
+    with pytest.raises(TypeError):
+        Pipeline(default_policy())
+    src = Path(__file__).resolve().parents[1] / "src" / "refmon"
+    holders = sorted(
+        str(p.relative_to(src)) for p in src.rglob("*.py") if b"refmon-device-key" in p.read_bytes()
+    )
+    assert holders == [
+        "audit.py",
+        "keys.py",
+    ]  # the named lab replay key, and the audit's guess list
+
+
+def test_ingest_check_judge_uses_a_fresh_random_key(tmp_path, monkeypatch):
+    import refmon.keys as keys
+
+    made = []
+    real = keys.new_device_key
+    monkeypatch.setattr(keys, "new_device_key", lambda: made.append(1) or real())
+    maps = Path(__file__).resolve().parents[1] / "src" / "refmon" / "ingest" / "mappings"
+    sample = tmp_path / "ssh.jsonl"
+    sample.write_text(
+        '{"_COMM": "sshd", "MESSAGE": "Accepted password for alice from 203.0.113.7 port 22 ssh2",'
+        ' "__REALTIME_TIMESTAMP": "1795000000000000", "_HOSTNAME": "h"}\n'
+    )
+    cli_main(
+        ["ingest", "check", str(maps / "sshd-journald.yaml"), "--input", str(sample), "--judge"]
+    )
+    assert made

@@ -7,6 +7,7 @@ from hypothesis import strategies as st
 
 from evhelp import ev, raw
 from refmon.calculus.rarity import Baseline
+from refmon.keys import LAB_REPLAY_KEY
 from refmon.pipeline import Observe, Pipeline
 from refmon.pipeline.features import (
     encoded_char_ratio,
@@ -164,7 +165,7 @@ def test_features_are_measured_on_the_raw_text_before_whitespace_is_normalized()
 
 
 def test_a_long_padding_run_raises_hide():
-    pipe = Pipeline(default_policy())
+    pipe = Pipeline(default_policy(), key=LAB_REPLAY_KEY)
     pipe.process(raw("exec", "interactive_shell", "p-1", content="x" + " " * 100 + "y"))
     [j] = pipe.judgements().values()
     assert "effect_hide" in {s.name for s in j.signals}
@@ -173,10 +174,10 @@ def test_a_long_padding_run_raises_hide():
 def test_high_entropy_content_raises_hide_and_normal_text_does_not():
     noisy = "".join(chr(33 + (i * 7919) % 90) for i in range(400))  # many distinct characters
     assert shannon_entropy(noisy) > default_policy().math.entropy_max_bits
-    pipe = Pipeline(default_policy())
+    pipe = Pipeline(default_policy(), key=LAB_REPLAY_KEY)
     pipe.process(raw("exec", "interactive_shell", "p-1", content=noisy))
     assert "effect_hide" in {s.name for j in pipe.judgements().values() for s in j.signals}
-    calm = Pipeline(default_policy())
+    calm = Pipeline(default_policy(), key=LAB_REPLAY_KEY)
     calm.process(raw("exec", "interactive_shell", "p-1", content="echo hello from the lab"))
     assert "effect_hide" not in {s.name for j in calm.judgements().values() for s in j.signals}
 
@@ -185,7 +186,7 @@ def test_the_entropy_limit_comes_from_the_policy():
     strict = default_policy(
         math={"weights": default_policy().math.weights, "entropy_max_bits": 1.0}
     )
-    pipe = Pipeline(strict)
+    pipe = Pipeline(strict, key=LAB_REPLAY_KEY)
     pipe.process(raw("exec", "interactive_shell", "p-1", content="echo hello from the lab"))
     assert "effect_hide" in {s.name for j in pipe.judgements().values() for s in j.signals}
 

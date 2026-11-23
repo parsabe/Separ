@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from refmon.keys import LAB_REPLAY_KEY
 from refmon.pipeline import Pipeline
 from refmon.pipeline.identity import IdentityTracker
 from refmon.policy import Policy, default_policy, default_policy_dict
@@ -29,7 +30,7 @@ def policy(**identity) -> Policy:
 
 class Feed:
     def __init__(self, pol=None):
-        self.pipe = Pipeline(pol or policy())
+        self.pipe = Pipeline(pol or policy(), key=LAB_REPLAY_KEY)
         self.t = T0
         self.n = 0
 
@@ -226,7 +227,7 @@ def test_once_enforced_a_held_login_story_pauses_the_account_session():
         data = default_policy_dict()
         data["mode"] = "block"
         data["rules"] = [r | {"mode": mode} for r in data["rules"]]
-        pipe = Pipeline(Policy.parse(data), gate=True)
+        pipe = Pipeline(Policy.parse(data), gate=True, key=LAB_REPLAY_KEY)
         return [(a.type.value, a.target.ref) for e in s57()[0] for a in pipe.process(e)
                 if isinstance(a, Action)]  # fmt: skip
 

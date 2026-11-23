@@ -15,6 +15,7 @@ from refmon.heartbeat import (
     build,
     degraded_from,
 )
+from refmon.keys import LAB_REPLAY_KEY
 from refmon.pipeline import Pipeline
 from refmon.policy import Policy, RuleSetting, default_policy, default_policy_dict
 from refmon.pseudonym import Pseudonymizer
@@ -25,7 +26,13 @@ NOW = T0 + timedelta(hours=1)
 
 
 def live(policy=None, **kw):
-    return Pipeline(policy or default_policy(), gate=True, notifier=RecordingNotifier(), **kw)
+    return Pipeline(
+        policy or default_policy(),
+        gate=True,
+        notifier=RecordingNotifier(),
+        **kw,
+        key=LAB_REPLAY_KEY,
+    )
 
 
 def scheduler(pipe, intent=None):

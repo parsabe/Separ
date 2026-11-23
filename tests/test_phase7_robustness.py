@@ -15,6 +15,7 @@ import pytest
 
 from refmon import variants as v
 from refmon.golden import ScenarioKind, load_golden_cases
+from refmon.keys import LAB_REPLAY_KEY
 from refmon.policy import default_policy
 from refmon.replay import ReplaySource
 from refmon.schemas import Decision, EventType
@@ -222,7 +223,7 @@ def test_a_hold_pauses_nothing_only_when_every_process_behind_it_is_a_channel_ro
         if r.outcome == "hold_pauses_nothing" and not v.identity_only(r.variant.events)
     ]
     for r in nothing:
-        pipe = Pipeline(POLICY)
+        pipe = Pipeline(POLICY, key=LAB_REPLAY_KEY)
         for event in r.variant.events:
             pipe.process(event)
         best = pipe.best()

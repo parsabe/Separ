@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from pydantic import ValidationError
 
+from refmon.keys import LAB_REPLAY_KEY
 from refmon.pipeline import Pipeline
 from refmon.policy import Policy, default_policy_dict
 from refmon.schemas import Action, ActionType, Decision, Override, RawEvent
@@ -42,7 +43,7 @@ def raw(i, typ, role, pid, cls, content=None, **attrs) -> RawEvent:
 
 
 def run(events, pol=None, sink=None):
-    p = Pipeline(pol or policy(), gate=True)
+    p = Pipeline(pol or policy(), gate=True, key=LAB_REPLAY_KEY)
     if sink is not None:
         p.observe.decoy_sink = sink
     out = []

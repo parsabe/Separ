@@ -4,6 +4,7 @@ import pytest
 
 from evhelp import ev
 from refmon.gate import RecordingNotifier
+from refmon.keys import LAB_REPLAY_KEY
 from refmon.pipeline import Pipeline
 from refmon.policy import default_policy
 from refmon.pseudonym import Pseudonymizer
@@ -17,7 +18,7 @@ from scenario_run import cases
 def run_case_reported(scenario, mode="block", pseudonymize=False):
     case = next(c for c in cases() if c.scenario == scenario)
     policy = default_policy(mode=mode, reporting={"pseudonymize": pseudonymize})
-    pipe = Pipeline(policy, gate=True, notifier=RecordingNotifier())
+    pipe = Pipeline(policy, gate=True, notifier=RecordingNotifier(), key=LAB_REPLAY_KEY)
     reporter = Reporter(pipe, Pseudonymizer(b"k" * 32))
     for event in ReplaySource(case.events_path, extra_roles=policy.extra_roles):
         reporter.consume(pipe.process(event))
@@ -132,7 +133,7 @@ def test_export_replaces_device_and_users_by_pseudonyms():
 
 def test_export_without_a_pseudonymizer_is_refused_when_the_policy_asks_for_pseudonyms():
     policy = default_policy(mode="block")
-    pipe = Pipeline(policy, gate=True)
+    pipe = Pipeline(policy, gate=True, key=LAB_REPLAY_KEY)
     reporter = Reporter(pipe, None)
     for e in [
         ev("request_in", "web_worker", "p-1", f=1, source_class="inbound_request", t=0),

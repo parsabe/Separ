@@ -16,6 +16,7 @@ import json
 from collections import Counter
 
 import refmon
+from refmon.keys import LAB_REPLAY_KEY
 from refmon.pipeline import Pipeline
 from refmon.policy import default_policy
 from refmon.schemas import Action, Event
@@ -31,7 +32,7 @@ def event_hash(events) -> str:
 
 
 def decide(events, policy):
-    pipe = Pipeline(policy)
+    pipe = Pipeline(policy, key=LAB_REPLAY_KEY)
     for e in events:
         pipe.process(e)
     best = pipe.best()
@@ -42,7 +43,7 @@ def decide(events, policy):
 
 
 def gate_actions(events, policy) -> dict[str, int]:
-    pipe = Pipeline(policy.model_copy(update={"mode": "block"}), gate=True)
+    pipe = Pipeline(policy.model_copy(update={"mode": "block"}), gate=True, key=LAB_REPLAY_KEY)
     counts: Counter[str] = Counter()
     for e in events:
         for out in pipe.process(e):

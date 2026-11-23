@@ -12,6 +12,7 @@ from collections import Counter
 from pathlib import Path
 
 from refmon.enforcer import SimulatedEnforcer
+from refmon.keys import LAB_REPLAY_KEY
 from refmon.pipeline import Pipeline
 from refmon.policy import default_policy
 from refmon.schemas import Action, Decision, Event
@@ -30,7 +31,7 @@ def main(argv=None) -> int:
         events = [Event.from_json_line(e, extra_roles=extra) for e in json.loads(line)["events"]]
         world = SimWorld.from_events(events)
         enforcer = SimulatedEnforcer(world)
-        pipe = Pipeline(policy.model_copy(update={"mode": "block"}), gate=True)
+        pipe = Pipeline(policy.model_copy(update={"mode": "block"}), gate=True, key=LAB_REPLAY_KEY)
         for event in events:
             for out in pipe.process(event):
                 if isinstance(out, Action):

@@ -130,7 +130,7 @@ def judged(events, half_life):
     """Every story's log-odds under a label half-life. The alive floor is lowered to nothing so that
     a faster decay changes the strength of labels and not which stories they link."""
     policy = default_policy(thresholds={"decay_half_life": half_life, "label_alive_floor": 0.0})
-    pipe = Pipeline(policy)
+    pipe = Pipeline(policy, key=LAB_REPLAY_KEY)
     for e in events:
         pipe.process(e)
     return {sid: j.log_odds for sid, j in pipe.judgements().items()}
@@ -177,6 +177,7 @@ def test_the_slow_variants_are_pinned_to_numbers_not_to_a_seed():
 # -- benign variants and their labels (docs/variant-seeds.md, "Benign variants") ------------------------
 
 from refmon.golden import ScenarioKind, load_golden_cases  # noqa: E402
+from refmon.keys import LAB_REPLAY_KEY  # noqa: E402
 
 CASES = load_golden_cases(GOLDEN_DIR)
 BENIGN = [c for c in CASES if c.expected.kind is ScenarioKind.BENIGN]

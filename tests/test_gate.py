@@ -7,6 +7,7 @@ import pytest
 from evhelp import T0, ev
 from refmon.enforcer import SimulatedEnforcer
 from refmon.gate import HoldState, RecordingNotifier
+from refmon.keys import LAB_REPLAY_KEY
 from refmon.pipeline import Pipeline
 from refmon.policy import default_policy
 from refmon.schemas import Action, ActionType, Decision, Mode, Verdict
@@ -14,7 +15,7 @@ from refmon.simworld import SimWorld
 
 
 def run(events, policy, *, notifier=None):
-    pipe = Pipeline(policy, gate=True, notifier=notifier or RecordingNotifier())
+    pipe = Pipeline(policy, gate=True, notifier=notifier or RecordingNotifier(), key=LAB_REPLAY_KEY)
     out = []
     for e in events:
         out.extend(pipe.process(e))
@@ -254,7 +255,7 @@ def test_the_action_carries_the_story_and_verdict_it_belongs_to():
 def test_run_through_the_enforcer_the_world_changes(tmp_path):
     events = endpoint_hold_events()
     enforcer = SimulatedEnforcer(SimWorld.from_events(events))
-    pipe = Pipeline(block_policy(), gate=True)
+    pipe = Pipeline(block_policy(), gate=True, key=LAB_REPLAY_KEY)
     for e in events:
         for o in pipe.process(e):
             if isinstance(o, Action):

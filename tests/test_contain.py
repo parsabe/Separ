@@ -6,6 +6,7 @@ from hypothesis import strategies as st
 
 from evhelp import ev
 from refmon.contain import Contain
+from refmon.keys import LAB_REPLAY_KEY
 from refmon.pipeline import Pipeline
 from refmon.policy import default_policy
 from refmon.schemas import UNDO_OPS, Action, ActionType, Effect
@@ -163,7 +164,7 @@ def test_contain_never_touches_an_unlabeled_object(stream):
                 **attrs,
             )
         )
-    pipe = Pipeline(default_policy(mode="block"), gate=True)
+    pipe = Pipeline(default_policy(mode="block"), gate=True, key=LAB_REPLAY_KEY)
     actions: list[Action] = []
     for e in events:
         actions += [o for o in pipe.process(e) if isinstance(o, Action)]

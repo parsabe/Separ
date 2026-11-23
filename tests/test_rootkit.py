@@ -10,6 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from refmon.cli import main as cli_main
+from refmon.keys import LAB_REPLAY_KEY
 from refmon.rootkit import (
     RootkitScanner,
     ScanConfig,
@@ -72,7 +73,7 @@ def _cfg(proc: Path, sys_: Path, etc: Path, **over) -> ScanConfig:
 
 def test_clean_tree_with_gpu_taint_is_allowed_with_zero_findings(tmp_path):
     proc, sys_, etc = _make_clean_tree(tmp_path)
-    report, run_rep = evaluate_rootkit_scan(_cfg(proc, sys_, etc))
+    report, run_rep = evaluate_rootkit_scan(_cfg(proc, sys_, etc), key=LAB_REPLAY_KEY)
     assert report.findings == ()
     assert report.calculus_decision is Decision.ALLOW
     assert report.pipeline_decision is Decision.ALLOW
@@ -94,7 +95,7 @@ def test_etc_ld_so_preload_triggers_self_tamper_block_and_redacts_raw_path(tmp_p
     raw_so = "/var/tmp/stealth_hook.so"
     (etc / "ld.so.preload").write_text(f"# comment\n{raw_so}\n")
 
-    report, _ = evaluate_rootkit_scan(_cfg(proc, sys_, etc))
+    report, _ = evaluate_rootkit_scan(_cfg(proc, sys_, etc), key=LAB_REPLAY_KEY)
     assert report.self_tamper is True
     assert report.calculus_decision is Decision.BLOCK
     assert report.pipeline_decision is Decision.BLOCK
@@ -108,7 +109,7 @@ def test_process_ld_preload_on_self_triggers_self_tamper_override(tmp_path):
     proc, sys_, etc = _make_clean_tree(tmp_path)
     (proc / "100" / "environ").write_bytes(b"LD_PRELOAD=/dev/shm/rk.so\x00PATH=/usr/bin\x00")
 
-    report, run_rep = evaluate_rootkit_scan(_cfg(proc, sys_, etc, self_pid=100))
+    report, run_rep = evaluate_rootkit_scan(_cfg(proc, sys_, etc, self_pid=100), key=LAB_REPLAY_KEY)
     assert report.self_tamper is True
     assert report.pipeline_decision is Decision.BLOCK
     assert run_rep.verdicts[0].override is Override.SELF_TAMPER
@@ -123,7 +124,7 @@ def test_memfd_and_deleted_executables_are_blocked(tmp_path):
     (p200 / "maps").write_text("")
     (p200 / "exe").symlink_to("/memfd:implant (deleted)")
 
-    report, _ = evaluate_rootkit_scan(_cfg(proc, sys_, etc))
+    report, _ = evaluate_rootkit_scan(_cfg(proc, sys_, etc), key=LAB_REPLAY_KEY)
     assert any(f.kind == "memfd_execution" for f in report.findings)
     assert report.calculus_decision is Decision.BLOCK
     assert report.pipeline_decision is Decision.BLOCK
@@ -139,7 +140,7 @@ def test_ptrace_tracer_pid_and_deleted_shared_object_detected(tmp_path):
         "7f100000-7f105000 r-xp 00000000 00:19 555 /dev/shm/inject.so (deleted)\n"
     )
 
-    report, _ = evaluate_rootkit_scan(_cfg(proc, sys_, etc))
+    report, _ = evaluate_rootkit_scan(_cfg(proc, sys_, etc), key=LAB_REPLAY_KEY)
     kinds = {f.kind for f in report.findings}
     assert {"ptrace_attached", "deleted_or_ephemeral_so", "ephemeral_ld_library_path"} <= kinds
     assert report.calculus_decision is Decision.BLOCK
@@ -150,7 +151,7 @@ def test_lone_anonymous_rwx_region_holds_without_false_block(tmp_path):
     proc, sys_, etc = _make_clean_tree(tmp_path)
     (proc / "100" / "maps").write_text("7f200000-7f204000 rwxp 00000000 00:00 0 \n")
 
-    report, _ = evaluate_rootkit_scan(_cfg(proc, sys_, etc, self_pid=9999))
+    report, _ = evaluate_rootkit_scan(_cfg(proc, sys_, etc, self_pid=9999), key=LAB_REPLAY_KEY)
     assert [f.kind for f in report.findings] == ["anonymous_rwx_memory"]
     assert report.calculus_decision is Decision.HOLD
     assert report.pipeline_decision is Decision.HOLD
@@ -177,7 +178,7 @@ def _rwx_process(proc: Path, pid: int, exe: str) -> None:
 def test_jit_runtime_rwx_memory_is_a_note_not_evidence(tmp_path, exe, cls):
     proc, sys_, etc = _make_clean_tree(tmp_path)
     _rwx_process(proc, 400, exe)
-    report, _ = evaluate_rootkit_scan(_cfg(proc, sys_, etc))
+    report, _ = evaluate_rootkit_scan(_cfg(proc, sys_, etc), key=LAB_REPLAY_KEY)
     assert report.findings == ()
     assert report.calculus_decision is Decision.ALLOW
     note = next(n for n in report.context_notes if "JIT runtime" in n)
@@ -191,7 +192,7 @@ def test_jit_runtime_rwx_memory_is_a_note_not_evidence(tmp_path, exe, cls):
 def test_a_jit_name_never_excuses_a_deleted_memfd_or_tmp_executable(tmp_path, exe):
     proc, sys_, etc = _make_clean_tree(tmp_path)
     _rwx_process(proc, 400, exe)
-    report, _ = evaluate_rootkit_scan(_cfg(proc, sys_, etc))
+    report, _ = evaluate_rootkit_scan(_cfg(proc, sys_, etc), key=LAB_REPLAY_KEY)
     assert "anonymous_rwx_memory" in {f.kind for f in report.findings}
     assert report.calculus_decision is not Decision.ALLOW
 
@@ -199,7 +200,7 @@ def test_a_jit_name_never_excuses_a_deleted_memfd_or_tmp_executable(tmp_path, ex
 def test_strict_jit_scores_jit_rwx_memory(tmp_path):
     proc, sys_, etc = _make_clean_tree(tmp_path)
     _rwx_process(proc, 400, "/usr/bin/node")
-    report, _ = evaluate_rootkit_scan(_cfg(proc, sys_, etc, strict_jit=True))
+    report, _ = evaluate_rootkit_scan(_cfg(proc, sys_, etc, strict_jit=True), key=LAB_REPLAY_KEY)
     assert [f.kind for f in report.findings] == ["anonymous_rwx_memory"]
     assert report.calculus_decision is Decision.HOLD
 
@@ -208,7 +209,7 @@ def test_jit_process_keeps_its_other_checks(tmp_path):
     proc, sys_, etc = _make_clean_tree(tmp_path)
     _rwx_process(proc, 400, "/usr/bin/node")
     (proc / "400" / "environ").write_bytes(b"LD_PRELOAD=/srv/u/hook.so\x00")
-    report, _ = evaluate_rootkit_scan(_cfg(proc, sys_, etc))
+    report, _ = evaluate_rootkit_scan(_cfg(proc, sys_, etc), key=LAB_REPLAY_KEY)
     assert {f.kind for f in report.findings} == {"process_ld_preload"}
     assert report.calculus_decision is Decision.BLOCK
 
@@ -235,7 +236,7 @@ def test_hidden_kernel_module_caught_by_sysfs_vs_proc_modules_crossview(tmp_path
     (sys_ / "module" / "diamorphine").mkdir(parents=True)
     (sys_ / "module" / "diamorphine" / "initstate").write_text("live\n")
 
-    report, _ = evaluate_rootkit_scan(_cfg(proc, sys_, etc))
+    report, _ = evaluate_rootkit_scan(_cfg(proc, sys_, etc), key=LAB_REPLAY_KEY)
     assert any(f.kind == "hidden_kernel_module" for f in report.findings)
     assert report.calculus_decision is Decision.BLOCK
     assert "diamorphine" not in format_scan_report(report)
@@ -243,7 +244,7 @@ def test_hidden_kernel_module_caught_by_sysfs_vs_proc_modules_crossview(tmp_path
 
 def test_transient_single_pass_module_churn_is_suppressed_by_two_pass_intersection(tmp_path):
     proc, sys_, etc = _make_clean_tree(tmp_path)
-    scanner = RootkitScanner(_cfg(proc, sys_, etc, passes=2))
+    scanner = RootkitScanner(_cfg(proc, sys_, etc, passes=2), key=LAB_REPLAY_KEY)
     snapshots = [({"transient_mod"}, 3), (set(), 2)]
     with patch.object(scanner, "_snapshot_hidden_modules", side_effect=snapshots):
         findings, _, _, _ = scanner.scan()
@@ -254,7 +255,7 @@ def test_forced_kernel_module_taint_is_flagged(tmp_path):
     proc, sys_, etc = _make_clean_tree(tmp_path)
     (proc / "sys" / "kernel" / "tainted").write_text(str(1 << 1) + "\n")  # insmod -f
 
-    report, _ = evaluate_rootkit_scan(_cfg(proc, sys_, etc))
+    report, _ = evaluate_rootkit_scan(_cfg(proc, sys_, etc), key=LAB_REPLAY_KEY)
     assert any(f.kind == "kernel_forced_taint" for f in report.findings)
     assert report.calculus_decision is Decision.BLOCK
 
@@ -265,7 +266,7 @@ def test_hidden_tcp_sockets_and_promiscuous_sniffer_detected(tmp_path):
     (proc / "net" / "sockstat").write_text("sockets: used 9\nTCP: inuse 5 orphan 0 tw 0 alloc 7\n")
     (sys_ / "class" / "net" / "eth0" / "flags").write_text("0x1103\n")  # IFF_PROMISC (0x100) set
 
-    report, _ = evaluate_rootkit_scan(_cfg(proc, sys_, etc))
+    report, _ = evaluate_rootkit_scan(_cfg(proc, sys_, etc), key=LAB_REPLAY_KEY)
     kinds = {f.kind for f in report.findings}
     assert "hidden_tcp_socket" in kinds
     assert "promiscuous_interface" in kinds
@@ -291,7 +292,7 @@ def test_hidden_pid_detected_when_omitted_from_proc_getdents(tmp_path):
             yield item
 
     with patch.object(Path, "iterdir", hooked_iterdir):
-        report, _ = evaluate_rootkit_scan(_cfg(proc, sys_, etc))
+        report, _ = evaluate_rootkit_scan(_cfg(proc, sys_, etc), key=LAB_REPLAY_KEY)
     assert any(f.kind == "hidden_pid_discrepancy" for f in report.findings)
     assert report.calculus_decision is Decision.BLOCK
 

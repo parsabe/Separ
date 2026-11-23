@@ -15,6 +15,7 @@ import pytest
 from evhelp import T0, ev
 from refmon.calculus.stats import poisson_tail
 from refmon.gate import RecordingNotifier
+from refmon.keys import LAB_REPLAY_KEY
 from refmon.pipeline import Pipeline
 from refmon.policy import default_policy, default_policy_dict
 from refmon.schemas import Action, ActionType, Decision
@@ -34,7 +35,12 @@ def policy_with(contracts=None, **overrides):
 
 
 def gate_run(events, policy=None):
-    pipe = Pipeline(policy or default_policy(mode="block"), gate=True, notifier=RecordingNotifier())
+    pipe = Pipeline(
+        policy or default_policy(mode="block"),
+        gate=True,
+        notifier=RecordingNotifier(),
+        key=LAB_REPLAY_KEY,
+    )
     actions: list[Action] = []
     for e in events:
         actions += [o for o in pipe.process(e) if isinstance(o, Action)]

@@ -237,7 +237,7 @@ class RootkitScanner:
         self,
         config: ScanConfig | None = None,
         *,
-        key: bytes = b"refmon-device-key",
+        key: bytes,
     ) -> None:
         if not key:
             raise ValueError("RootkitScanner requires a non-empty HMAC key")
@@ -895,7 +895,7 @@ def evaluate_rootkit_scan(
     config: ScanConfig | None = None,
     *,
     policy: Policy | None = None,
-    key: bytes = b"refmon-device-key",
+    key: bytes,
 ) -> tuple[RootkitScanReport, RunReport]:
     """Run all rootkit scanners, score with the Bayesian evidence calculus, and run `Pipeline`."""
     pol = default_policy() if policy is None else policy

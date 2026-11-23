@@ -12,6 +12,7 @@ import pytest
 from golden_more import META, SCENARIOS, derive_actions
 from refmon.enforcer import SimulatedEnforcer
 from refmon.golden import ScenarioKind
+from refmon.keys import LAB_REPLAY_KEY
 from refmon.pipeline import Pipeline
 from refmon.policy import default_policy
 from refmon.replay import ReplaySource
@@ -31,7 +32,7 @@ def policy():
 def replay(case, *, world=True):
     events = list(ReplaySource(case.events_path, extra_roles=policy().extra_roles))
     enforcer = SimulatedEnforcer(SimWorld.from_events(events) if world else None)
-    pipe = Pipeline(policy(), gate=True)
+    pipe = Pipeline(policy(), gate=True, key=LAB_REPLAY_KEY)
     actions: list[Action] = []
     for event in events:
         for out in pipe.process(event):

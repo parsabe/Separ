@@ -10,6 +10,7 @@ from refmon.calculus.evidence import block_threshold, hold_threshold, prior_log_
 from refmon.coverage import gaps, parse_coverage_map
 from refmon.enforcer import SimulatedEnforcer
 from refmon.golden import ScenarioKind
+from refmon.keys import LAB_REPLAY_KEY
 from refmon.pipeline import Pipeline
 from refmon.policy import default_policy
 from refmon.replay import ReplaySource
@@ -56,7 +57,7 @@ def test_s11_is_allowed_and_s05_is_held():
 
 
 def verdicts_of(case):
-    pipe = Pipeline(default_policy())
+    pipe = Pipeline(default_policy(), key=LAB_REPLAY_KEY)
     out = []
     for e in ReplaySource(case.events_path, extra_roles=default_policy().extra_roles):
         out += [o for o in pipe.process(e) if isinstance(o, Verdict)]
@@ -143,7 +144,7 @@ def replay_with_gate(case):
     policy = default_policy(mode="block")
     events = list(ReplaySource(case.events_path, extra_roles=policy.extra_roles))
     enforcer = SimulatedEnforcer(SimWorld.from_events(events))
-    pipe = Pipeline(policy, gate=True)
+    pipe = Pipeline(policy, gate=True, key=LAB_REPLAY_KEY)
     actions = []
     for event in events:
         for out in pipe.process(event):

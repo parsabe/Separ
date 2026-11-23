@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from refmon.golden import GoldenCase, load_golden_cases
+from refmon.keys import LAB_REPLAY_KEY
 from refmon.pipeline import Pipeline
 from refmon.policy import Policy, default_policy
 from refmon.replay import ReplaySource
@@ -17,7 +18,7 @@ def cases() -> list[GoldenCase]:
 
 
 def run_events(events, policy: Policy | None = None, **kw) -> Pipeline:
-    p = Pipeline(policy or default_policy(), **kw)
+    p = Pipeline(policy or default_policy(), **kw, key=LAB_REPLAY_KEY)
     out = []
     for e in events:
         out.extend(p.process(e))

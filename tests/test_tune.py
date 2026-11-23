@@ -7,6 +7,7 @@ import pytest
 from evhelp import ev, raw
 from refmon import signing
 from refmon.gate import RecordingNotifier
+from refmon.keys import LAB_REPLAY_KEY
 from refmon.pipeline import Pipeline
 from refmon.policy import Policy, default_policy, default_policy_dict
 from refmon.policy_io import load_policy, write_signed
@@ -35,7 +36,12 @@ def worker_story(pipe):
 
 
 def tuner(policy=None):
-    pipe = Pipeline(policy or default_policy(mode="block"), gate=True, notifier=RecordingNotifier())
+    pipe = Pipeline(
+        policy or default_policy(mode="block"),
+        gate=True,
+        notifier=RecordingNotifier(),
+        key=LAB_REPLAY_KEY,
+    )
     return pipe, Tuner(pipe, lambda: TODAY)
 
 
@@ -143,7 +149,7 @@ def test_confirmed_block_list_entries_flag_the_object_in_observe(tmp_path):
     assert spec["kind"] == "fingerprint" and spec["entries"] == s.blocklist.entries
     policy = Policy.parse(data)
     fp = s.blocklist.entries[0]
-    again = Pipeline(policy)
+    again = Pipeline(policy, key=LAB_REPLAY_KEY)
     event = ev("net_connect", "script_host", "p-8", f=3, destination_class="unknown")
     assert event.object.fingerprint == fp
     # an Event passes Observe unchanged; a RawEvent with the same fingerprint is checked

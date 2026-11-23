@@ -30,7 +30,7 @@ class Pipeline:
     def __init__(
         self,
         policy: Policy,
-        key: bytes = b"refmon-device-key",
+        key: bytes,
         *,
         features=None,
         rates=None,

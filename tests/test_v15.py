@@ -12,6 +12,7 @@ from datetime import timedelta
 import pytest
 
 from evhelp import T0, ev
+from refmon.keys import LAB_REPLAY_KEY
 from refmon.pipeline import Pipeline
 from refmon.pipeline.rates import StatRates
 from refmon.policy import default_policy
@@ -22,7 +23,7 @@ HALF = POLICY.thresholds.decay_half_life
 
 
 def signals(events, **kw):
-    p = Pipeline(POLICY, **kw)
+    p = Pipeline(POLICY, **kw, key=LAB_REPLAY_KEY)
     for e in events:
         p.process(e)
     return p, {s.name for j in p.judgements().values() for s in j.signals}
@@ -118,7 +119,7 @@ def _busy(n_stories: int, gap: float):
 
 def test_retain_must_cover_the_windows():
     with pytest.raises(ValueError):
-        Pipeline(POLICY, retain=60)
+        Pipeline(POLICY, retain=60, key=LAB_REPLAY_KEY)
 
 
 def test_a_long_running_pipeline_stays_bounded():
@@ -150,7 +151,7 @@ def test_forgetting_never_changes_a_decision_of_a_story_still_kept():
 def test_a_story_with_a_pending_hold_is_never_forgotten():
     events = [ev("net_connect", "script_host", "p-h", f=3, t=0, destination_class="unknown")]
     blocking = POLICY.model_copy(update={"mode": Mode.BLOCK})
-    p = Pipeline(blocking, gate=True, retain=POLICY.rates.long_window)
+    p = Pipeline(blocking, gate=True, retain=POLICY.rates.long_window, key=LAB_REPLAY_KEY)
     for e in events:
         p.process(e)
     assert p.gate.open_hold_stories()
@@ -174,7 +175,7 @@ def test_a_timed_out_hold_contains_the_producer_when_only_a_channel_role_saw_the
         ev("persist", "launcher", "p-1", parent="p-0", f=4, t=3 * gap, persist_kind="startup"),
     ]  # fmt: skip
     blocking = POLICY.model_copy(update={"mode": Mode.BLOCK})
-    p = Pipeline(blocking, gate=True)
+    p = Pipeline(blocking, gate=True, key=LAB_REPLAY_KEY)
     actions = [o for e in stream for o in p.process(e) if hasattr(o, "target")]
     touched = {(a.type.value, a.target.ref) for a in actions}
     assert ("kill_process_tree", "p-2") in touched
