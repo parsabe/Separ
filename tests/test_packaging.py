@@ -77,3 +77,23 @@ def test_one_version_everywhere(capsys):
     except SystemExit as exc:
         assert exc.code == 0
     assert capsys.readouterr().out.strip() == f"separ {refmon.__version__}"
+
+
+def test_a_version_tag_releases_only_install_tested_packages():
+    """Round 2, A4: the release job runs on tags v* (not *-base), after the container install
+    checks, and attaches the .deb, the .rpm and their checksums."""
+    import yaml
+
+    ci = yaml.safe_load((ROOT / ".github" / "workflows" / "ci.yml").read_text())
+    jobs = ci["jobs"]
+    release = jobs["release"]
+    assert "refs/tags/v" in release["if"] and "-base" in release["if"]
+    assert {"test", "packages", "install-test"} <= set(release["needs"])
+    assert release["permissions"] == {"contents": "write"}
+    images = {inc["image"] for inc in jobs["install-test"]["strategy"]["matrix"]["include"]}
+    assert images == {"ubuntu:24.04", "debian:13", "rockylinux:9"}
+    script = "\n".join(step.get("run", "") for step in release["steps"])
+    for asset in ("separ_*_amd64.deb", "separ-*.x86_64.rpm", "SHA256SUMS"):
+        assert asset in script
+    readme = (ROOT / "README.md").read_text()
+    assert "github.com/parsabe/Separ/releases/download" in readme

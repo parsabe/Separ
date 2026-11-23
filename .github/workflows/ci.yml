@@ -87,3 +87,36 @@ jobs:
           # no daemon runs in the container: 1 (not running) is the expected answer; 2+ is a bug
           echo "separ health exited $rc"
           test "$rc" -le 1
+
+  release:
+    # round 2, A4: a version tag publishes the packages that passed every check above, including the
+    # install in ubuntu:24.04, debian:13 and rockylinux:9. Evaluation base tags (*-base) publish nothing.
+    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-base')
+    needs: [test, packages, install-test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: packages
+          path: dist
+      - name: The tag names the packaged version
+        run: |
+          ver=$(sed -n 's/^__version__ = "\([^"]*\)".*/\1/p' src/refmon/__init__.py)
+          tag="${GITHUB_REF_NAME#v}"
+          case "$ver" in
+            "$tag" | "$tag".0) echo "tag $GITHUB_REF_NAME packages version $ver" ;;
+            *) echo "tag $GITHUB_REF_NAME does not match the packaged version $ver"; exit 1 ;;
+          esac
+          ls dist/separ_"$ver"_amd64.deb dist/separ-"$ver"-1.x86_64.rpm
+      - name: Checksums
+        run: cd dist && sha256sum separ_*_amd64.deb separ-*.x86_64.rpm > SHA256SUMS && cat SHA256SUMS
+      - name: Attach the packages to a GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "Separ $GITHUB_REF_NAME" \
+            --notes "Packages built and install-tested (ubuntu:24.04, debian:13, rockylinux:9) by CI. Verify with: sha256sum --ignore-missing -c SHA256SUMS" \
+            dist/separ_*_amd64.deb dist/separ-*.x86_64.rpm dist/SHA256SUMS

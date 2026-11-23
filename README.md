@@ -120,20 +120,31 @@ Separ Rootkit & Stealth Scanner
 
 ## 🚀 Installation & Quick Start
 
-### Option A: Native Linux Packages (Recommended)
+### Option A: Native Linux Packages from GitHub Releases (Recommended)
 Separ needs **Python 3.12+** and pydantic 2. The packages carry their own pinned wheels and install
 them into a private venv (`/opt/separ/venv`) without internet access; they never use the
-distribution's `python3-pydantic` (1.x on Ubuntu 24.04 and Debian 12). Packages are
-per-architecture (amd64/x86_64; arm64 with `--arch arm64`) and are built, not committed:
+distribution's `python3-pydantic` (1.x on Ubuntu 24.04 and Debian 12). Every version tag is built by
+CI, install-tested in `ubuntu:24.04`, `debian:13` and `rockylinux:9`, and attached with a
+`SHA256SUMS` file to its release on
+[github.com/parsabe/Separ/releases](https://github.com/parsabe/Separ/releases):
 ```bash
-python3.12 packaging/build_packages.py --all --arch amd64    # -> dist/ (~17 MB each)
+V=2.4                                     # the release tag; the packages are version 2.4.0
+BASE=https://github.com/parsabe/Separ/releases/download/v$V
+curl -fLO "$BASE/SHA256SUMS"
 
 # Debian 13 / Ubuntu 24.04 (Python 3.13 / 3.12)
-sudo apt install ./dist/separ_2.4.0_amd64.deb
+curl -fLO "$BASE/separ_${V}.0_amd64.deb"
+sha256sum --ignore-missing -c SHA256SUMS
+sudo apt install "./separ_${V}.0_amd64.deb"
 
 # Rocky / Alma / RHEL 9 (needs python3.12 from AppStream) and Fedora
-sudo dnf install python3.12 ./dist/separ-2.4.0-1.x86_64.rpm
+curl -fLO "$BASE/separ-${V}.0-1.x86_64.rpm"
+sha256sum --ignore-missing -c SHA256SUMS
+sudo dnf install python3.12 "./separ-${V}.0-1.x86_64.rpm"
 ```
+Debian 12 is not supported (its Python is 3.11). To build the packages yourself (arm64 too):
+`python3.12 packaging/build_packages.py --all --arch amd64` (or `--arch arm64`) writes them to
+`dist/` (~17 MB each); packages are built, never committed.
 
 ### Option B: POSIX Installer Script (`install.sh`)
 Builds the same private venv from a wheel directory (`dist/wheels-<arch>`, made once with

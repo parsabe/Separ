@@ -155,13 +155,21 @@ On an \textbf{interactive laptop}, an unanswered \texttt{HOLD} prompt eventually
 
 Separ requires \textbf{Python 3.12 or newer} (3.12, 3.13 or 3.14). Its Python dependencies (pydantic 2, PyYAML, cryptography) are \emph{not} taken from the distribution: the packages ship pinned wheels and install them into a private venv in \texttt{/opt/separ/venv} during installation, without internet access. The distribution's \texttt{python3-pydantic} (1.x on Ubuntu 24.04 and Debian 12) is never used.
 
+Download the packages and \texttt{SHA256SUMS} from the release on \texttt{https://github.com/parsabe/Separ/releases}. CI builds every version tag and install-tests it in \texttt{ubuntu:24.04}, \texttt{debian:13} and \texttt{rockylinux:9} before attaching it.
+
 \subsection{Option A: Debian 13 / Ubuntu 24.04 (\texttt{.deb}, amd64)}
 \begin{lstlisting}[language=bash]
+BASE=https://github.com/parsabe/Separ/releases/download/v2.4
+curl -fLO $BASE/SHA256SUMS && curl -fLO $BASE/separ_2.4.0_amd64.deb
+sha256sum --ignore-missing -c SHA256SUMS
 sudo apt install ./separ_2.4.0_amd64.deb
 \end{lstlisting}
 
 \subsection{Option B: Rocky / Alma / RHEL 9, Fedora (\texttt{.rpm}, x86\_64)}
 \begin{lstlisting}[language=bash]
+BASE=https://github.com/parsabe/Separ/releases/download/v2.4
+curl -fLO $BASE/SHA256SUMS && curl -fLO $BASE/separ-2.4.0-1.x86_64.rpm
+sha256sum --ignore-missing -c SHA256SUMS
 sudo dnf install python3.12 ./separ-2.4.0-1.x86_64.rpm
 \end{lstlisting}
 Debian 12 is not supported (its Python is 3.11).
