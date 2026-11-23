@@ -104,9 +104,9 @@ Setup complete! You can now start Separ:
 
 ### 3. Six-Engine, Two-Pass Rootkit Scanner (`separ scan-rootkit`)
 ```text
-$ separ scan-rootkit
+$ separ scan-rootkit                      # --calibrate 20 first: measure p_race on a clean host
 Separ Rootkit & Stealth Scanner
-  two-view passes        2
+  two-view passes        2 (pid sweep: full; p_race 0.001, assumed)
   own processes checked  2
   kernel modules checked 109
   net interfaces checked 6

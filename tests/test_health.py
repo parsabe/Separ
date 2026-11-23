@@ -54,9 +54,10 @@ def clean_host(tmp_path_factory, monkeypatch):
     for name in ("proc", "sys", "etc"):
         (root / name).mkdir()
 
-    def scan(self):
+    def scan(self, pid_sweep: str = "bounded"):
         cfg = ScanConfig(proc_root=root / "proc", sys_root=root / "sys", etc_root=root / "etc",
-                         passes=2, pass_interval_s=0.0, run_external=False)  # fmt: skip
+                         passes=2, pass_interval_s=0.0, run_external=False,
+                         pid_sweep=pid_sweep)  # fmt: skip
         return evaluate_rootkit_scan(cfg, policy=self.policy, key=self._device_key)[0]
 
     monkeypatch.setattr(LiveBarrier, "_run_rootkit_scan", scan)

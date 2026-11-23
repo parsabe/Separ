@@ -217,6 +217,22 @@ def main(argv: list[str] | None = None) -> int:
     rk.add_argument("--interval-ms", type=float, default=50.0)
     rk.add_argument("--with-external", action="store_true")
     rk.add_argument(
+        "--pid-sweep",
+        choices=("full", "bounded", "off"),
+        default="full",
+        help="read-only os.stat sweep for PIDs hidden from /proc: full = 1..pid_max (default; "
+        "seconds), bounded = up to the highest PID allocated so far",
+    )
+    rk.add_argument(
+        "--calibrate",
+        type=int,
+        default=None,
+        metavar="N",
+        help="run N clean single passes, store the observed transient discrepancy rate in "
+        "<workdir>/rootkit-calibration.json and exit; later scans weigh cross-views with it",
+    )
+    rk.add_argument("--workdir", default=None, help="where the calibration is stored and read")
+    rk.add_argument(
         "--strict-jit",
         action="store_true",
         help="also score anonymous rwx memory of JIT runtimes (node, java, Claude Code, ...)",
@@ -462,17 +478,40 @@ def _run(args: argparse.Namespace) -> int:
     elif args.command == "scan-rootkit":
         import json
 
-        from .rootkit import ScanConfig, evaluate_rootkit_scan, format_scan_report
+        from .config import default_workdir, write_public
+        from .keys import new_device_key
+        from .rootkit import (
+            CALIBRATION_FILE,
+            ScanConfig,
+            calibrate,
+            evaluate_rootkit_scan,
+            format_scan_report,
+            load_calibration,
+        )
         from .schemas import Decision
 
+        cal_path = (Path(args.workdir) if args.workdir else default_workdir()) / CALIBRATION_FILE
         cfg = ScanConfig(
             passes=max(1, args.passes),
             pass_interval_s=max(0.0, args.interval_ms / 1000.0),
             run_external=args.with_external,
             strict_jit=args.strict_jit,
+            pid_sweep=args.pid_sweep,
         )
-        from .keys import new_device_key
+        if args.calibrate is not None:
+            result = calibrate(cfg, args.calibrate, key=new_device_key())
+            cal_path.parent.mkdir(parents=True, exist_ok=True)
+            write_public(cal_path, json.dumps(result, indent=2) + "\n", mode=0o644)
+            print(json.dumps(result, indent=2) if args.as_json else
+                  f"p_race = {result['race_prob']:.4g} from {result['passes']} clean passes "
+                  f"({result['snapshots_with_a_discrepancy']} with a transient discrepancy); "
+                  f"stored in {cal_path}")  # fmt: skip
+            return 0
+        measured = load_calibration(cal_path)
+        if measured is not None:
+            import dataclasses
 
+            cfg = dataclasses.replace(cfg, race_prob=measured, race_prob_source="calibrated")
         # fresh random key per run: fingerprints correlate within this report and reverse nowhere
         report, _ = evaluate_rootkit_scan(cfg, key=new_device_key())
         if args.as_json:

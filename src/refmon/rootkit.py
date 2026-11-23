@@ -124,6 +124,12 @@ class ScanConfig:
     device: str = "local-host"
     jit_runtimes: tuple[tuple[str, tuple[str, ...]], ...] = DEFAULT_JIT_RUNTIMES
     strict_jit: bool = False  # True: anonymous rwx memory of a JIT runtime is scored like any other
+    # review 2026-11, item 17: read-only os.stat sweep for PIDs hidden from readdir("/proc").
+    # "full": 1..pid_max (seconds on a 4M pid_max; `separ scan-rootkit`); "bounded": up to the
+    # highest PID allocated so far, plus a margin (the daemon's periodic scan); "off".
+    pid_sweep: str = "full"
+    pid_sweep_margin: int = 1024
+    race_prob_source: str = "assumed"  # "assumed" or "calibrated" (separ scan-rootkit --calibrate)
 
 
 @dataclass(frozen=True)
@@ -161,9 +167,15 @@ class RootkitScanReport:
     self_tamper: bool
     verdicts_emitted: int
     actions_emitted: int
+    race_prob: float = 1e-3
+    race_prob_source: str = "assumed"
+    pid_sweep: str = "off"
 
     def to_dict(self) -> dict[str, object]:
         return {
+            "race_prob": self.race_prob,
+            "race_prob_source": self.race_prob_source,
+            "pid_sweep": self.pid_sweep,
             "scanned_at": self.scanned_at,
             "passes": self.passes,
             "own_processes_inspected": self.own_processes_inspected,
@@ -284,7 +296,7 @@ class RootkitScanner:
             )
 
         # 3 & 4 & 5. Multi-pass cross-view snapshots (modules, PIDs, sockets) + kernel taint/net.
-        mod_sets: list[set[str]] = []
+        mod_sets: list[dict[str, set[str]]] = []
         pid_sets: list[set[int]] = []
         tcp_gaps: list[int] = []
         tcp6_gaps: list[int] = []
@@ -303,18 +315,23 @@ class RootkitScanner:
 
         cv_weight = crossview_nats(passes, cfg.race_prob, cfg.max_crossview_nats)
 
-        persistent_mods = set.intersection(*mod_sets) if mod_sets else set()
-        for mod_name in sorted(persistent_mods):
-            findings.append(
-                RootkitFinding(
-                    scanner="kernel_module_crossview",
-                    kind="hidden_kernel_module",
-                    question="effect",
-                    severity="high",
-                    subject_fingerprint=self._record_fp(f"kmod:{mod_name}"),
-                    nats=max(SCANNER_WEIGHTS["hidden_kernel_module"], cv_weight),
-                )
+        # Each direction of the module cross-view is its own kind; all use the weight of a hidden
+        # module (no new weight): the same evidence, seen from a different view.
+        for kind in MODULE_DISCREPANCIES:
+            persistent_mods = (
+                set.intersection(*(m.get(kind, set()) for m in mod_sets)) if mod_sets else set()
             )
+            for mod_name in sorted(persistent_mods):
+                findings.append(
+                    RootkitFinding(
+                        scanner="kernel_module_crossview",
+                        kind=kind,
+                        question="effect",
+                        severity="high",
+                        subject_fingerprint=self._record_fp(f"kmod:{kind}:{mod_name}"),
+                        nats=max(SCANNER_WEIGHTS["hidden_kernel_module"], cv_weight),
+                    )
+                )
 
         persistent_pids = set.intersection(*pid_sets) if pid_sets else set()
         for pid in sorted(persistent_pids):
@@ -603,11 +620,16 @@ class RootkitScanner:
 
     # -- Scanner 3: Kernel module cross-view + kernel taint decoding ------------------------------
 
-    def _snapshot_hidden_modules(self) -> tuple[set[str], int]:
+    def _snapshot_hidden_modules(self) -> tuple[dict[str, set[str]], int]:
+        """The three views of the loaded modules, compared in every direction (item 17):
+        sysfs but not /proc/modules (the classic hidden module), /proc/modules but not sysfs (a
+        module that removed its kobject), and /proc/kallsyms but not /proc/modules (symbols of a
+        module that unlinked itself from the module list), the last only when kallsyms is
+        readable."""
         proc_modules = self.config.proc_root / "modules"
         sys_module_dir = self.config.sys_root / "module"
         if not proc_modules.is_file() or not sys_module_dir.is_dir():
-            return set(), 0
+            return {}, 0
         try:
             proc_set = {
                 line.split()[0]
@@ -618,8 +640,15 @@ class RootkitScanner:
             # built-in subsystems do not, giving an exact 1-to-1 invariant on clean kernels.
             sys_set = {p.parent.name for p in sys_module_dir.glob("*/initstate")}
         except OSError:
-            return set(), 0
-        return sys_set - proc_set, len(sys_set)
+            return {}, 0
+        out = {
+            "hidden_kernel_module": sys_set - proc_set,
+            "module_missing_from_sysfs": proc_set - sys_set,
+        }
+        kallsyms = _kallsyms_modules(self.config.proc_root / "kallsyms")
+        if kallsyms is not None:
+            out["module_only_in_kallsyms"] = kallsyms - proc_set
+        return out, len(sys_set)
 
     def _scan_kernel_taint(self) -> tuple[list[RootkitFinding], list[str]]:
         taint_path = self.config.proc_root / "sys" / "kernel" / "tainted"
@@ -704,6 +733,9 @@ class RootkitScanner:
             except (OSError, ValueError, IndexError):
                 pass
 
+        # item 17: every PID that answers a direct lookup, swept read-only (os.stat, no signal)
+        referenced |= self._sweep_pids(enum_pids)
+
         hidden: set[int] = set()
         for candidate in referenced - enum_pids:
             # Ignore non-leader threads that legitimately live under /proc/<tgid>/task/<tid>
@@ -715,6 +747,39 @@ class RootkitScanner:
             if tgid is None or tgid == candidate:
                 hidden.add(candidate)
         return hidden
+
+    def _sweep_limit(self, enum_pids: set[int]) -> int:
+        cfg = self.config
+        kernel = cfg.proc_root / "sys" / "kernel"
+        pid_max = _read_int(kernel / "pid_max")
+        if cfg.pid_sweep == "full" and pid_max:
+            return pid_max
+        last = max([*enum_pids, _read_int(kernel / "ns_last_pid") or 0, 1])
+        bounded = last + max(0, cfg.pid_sweep_margin)
+        return min(bounded, pid_max) if pid_max else bounded
+
+    def _sweep_pids(self, enum_pids: set[int]) -> set[int]:
+        """The PIDs that exist on direct lookup (threads included; the caller keeps only thread
+        group leaders). Read-only: os.stat relative to an open /proc, never a signal."""
+        if self.config.pid_sweep == "off":
+            return set()
+        limit = self._sweep_limit(enum_pids)
+        try:
+            fd = os.open(self.config.proc_root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        except OSError:
+            return set()
+        found: set[int] = set()
+        stat = os.stat
+        try:
+            for pid in range(1, limit + 1):
+                try:
+                    stat(str(pid), dir_fd=fd, follow_symlinks=False)
+                except OSError:
+                    continue
+                found.add(pid)
+        finally:
+            os.close(fd)
+        return found
 
     # -- Scanner 5: Network sockstat cross-view & promiscuous sniffer check -----------------------
 
@@ -790,6 +855,37 @@ class RootkitScanner:
                     )
                 )
         return out
+
+
+MODULE_DISCREPANCIES = (
+    "hidden_kernel_module",
+    "module_missing_from_sysfs",
+    "module_only_in_kallsyms",
+)
+# names in brackets in /proc/kallsyms that are not loadable modules
+_KALLSYMS_NOT_MODULES = ("bpf",)
+
+
+def _kallsyms_modules(path: Path) -> set[str] | None:
+    """Module names in /proc/kallsyms (`addr type symbol\t[module]`); None when unreadable."""
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    out = set()
+    for line in text.splitlines():
+        if line.endswith("]") and "[" in line:
+            name = line[line.rindex("[") + 1 : -1]
+            if name and not name.startswith("__builtin") and name not in _KALLSYMS_NOT_MODULES:
+                out.add(name)
+    return out
+
+
+def _read_int(path: Path) -> int | None:
+    try:
+        return int(path.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return None
 
 
 def _read_tgid(proc_dir: Path) -> int | None:
@@ -891,6 +987,55 @@ class RootkitSensor:
                 )
 
 
+CALIBRATION_FILE = "rootkit-calibration.json"
+
+
+def calibrate(config: ScanConfig, passes: int, *, key: bytes) -> dict[str, object]:
+    """Measure the transient discrepancy rate p_race on a host believed clean (item 17): run
+    `passes` single cross-view snapshots (modules in every direction, PIDs, TCP sockets) and count
+    the snapshots that showed any discrepancy. p_race = (hits + 1) / (passes + 2) (Laplace), so a
+    short clean run gives a cautious (large) rate, never zero."""
+    if passes < 1:
+        raise ValueError("calibration needs at least one pass")
+    scanner = RootkitScanner(config, key=key)
+    uid = os.getuid() if config.target_uid is None else config.target_uid
+    hits = {"modules": 0, "pids": 0, "tcp": 0}
+    any_hit = 0
+    for i in range(passes):
+        if i and config.pass_interval_s > 0:
+            time.sleep(config.pass_interval_s)
+        mods, _ = scanner._snapshot_hidden_modules()
+        pids = scanner._snapshot_hidden_pids(uid)
+        g4, g6 = scanner._snapshot_hidden_tcp_Gap()
+        seen = {
+            "modules": any(mods.values()),
+            "pids": bool(pids),
+            "tcp": max(g4, g6) > config.socket_slack,
+        }
+        for view, hit in seen.items():
+            hits[view] += hit
+        any_hit += any(seen.values())
+    return {
+        "race_prob": (any_hit + 1) / (passes + 2),
+        "passes": passes,
+        "snapshots_with_a_discrepancy": any_hit,
+        "by_view": hits,
+        "pid_sweep": config.pid_sweep,
+        "measured": datetime.now(UTC).isoformat(timespec="seconds"),
+    }
+
+
+def load_calibration(path: Path) -> float | None:
+    """The calibrated p_race stored by `separ scan-rootkit --calibrate`, or None."""
+    import json
+
+    try:
+        value = float(json.loads(Path(path).read_text(encoding="utf-8"))["race_prob"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return value if 0.0 < value < 1.0 else None
+
+
 def evaluate_rootkit_scan(
     config: ScanConfig | None = None,
     *,
@@ -952,6 +1097,9 @@ def evaluate_rootkit_scan(
         self_tamper=self_tamper,
         verdicts_emitted=len(run_rep.verdicts),
         actions_emitted=len(run_rep.actions),
+        race_prob=cfg.race_prob,
+        race_prob_source=cfg.race_prob_source,
+        pid_sweep=cfg.pid_sweep,
     )
     return report, run_rep
 
@@ -963,7 +1111,8 @@ def format_scan_report(report: RootkitScanReport) -> str:
     lines = [
         f"{prog_name} Rootkit & Stealth Scanner",
         f"  scanned at             {report.scanned_at}",
-        f"  two-view passes        {report.passes}",
+        f"  two-view passes        {report.passes} (pid sweep: {report.pid_sweep}; p_race "
+        f"{report.race_prob:.3g}, {report.race_prob_source})",
         f"  own processes checked  {report.own_processes_inspected}",
         f"  kernel modules checked {report.kernel_modules_checked}",
         f"  net interfaces checked {report.network_interfaces_checked}",

@@ -403,7 +403,8 @@ class LiveBarrier:
         self.pipeline.observe.pid_sink = self.enforcer.note_pid
         self._actions_tail: deque[dict[str, Any]] = deque(maxlen=60)
         self.reporter = Reporter(self.pipeline)
-        self.last_rootkit: RootkitScanReport = self._run_rootkit_scan()
+        # at start without the PID sweep, so the daemon is up at once; the periodic scans sweep
+        self.last_rootkit: RootkitScanReport = self._run_rootkit_scan(pid_sweep="off")
         self._snapshot_existing_sandbox()
         self._log_line(
             f"Separ live barrier ready | mode={self.policy.mode.value} "
@@ -1894,12 +1895,19 @@ class LiveBarrier:
             )
             return {"hold_id": hold_id, "state": case.state.value, "undo": res.undo}
 
-    def _run_rootkit_scan(self) -> RootkitScanReport:
-        report, _ = evaluate_rootkit_scan(
-            ScanConfig(passes=2, pass_interval_s=0.01, run_external=False),
-            policy=self.policy,
-            key=self._device_key,
-        )
+    def _run_rootkit_scan(self, pid_sweep: str = "bounded") -> RootkitScanReport:
+        """The daemon's scan: the PID sweep is bounded to the PIDs allocated so far (the full
+        1..pid_max sweep takes seconds: `separ scan-rootkit`), and p_race is the calibrated one
+        when `separ scan-rootkit --calibrate N --workdir <this workdir>` stored it."""
+        from .rootkit import CALIBRATION_FILE, load_calibration
+
+        measured = load_calibration(self.workdir / CALIBRATION_FILE)
+        cfg = ScanConfig(
+            passes=2, pass_interval_s=0.01, run_external=False, pid_sweep=pid_sweep,
+            race_prob=measured if measured is not None else ScanConfig.race_prob,
+            race_prob_source="calibrated" if measured is not None else "assumed",
+        )  # fmt: skip
+        report, _ = evaluate_rootkit_scan(cfg, policy=self.policy, key=self._device_key)
         return report
 
     def trigger_rootkit_scan(self) -> dict[str, Any]:

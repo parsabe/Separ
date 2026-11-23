@@ -245,10 +245,13 @@ def test_hidden_kernel_module_caught_by_sysfs_vs_proc_modules_crossview(tmp_path
 def test_transient_single_pass_module_churn_is_suppressed_by_two_pass_intersection(tmp_path):
     proc, sys_, etc = _make_clean_tree(tmp_path)
     scanner = RootkitScanner(_cfg(proc, sys_, etc, passes=2), key=LAB_REPLAY_KEY)
-    snapshots = [({"transient_mod"}, 3), (set(), 2)]
+    snapshots = [
+        ({"hidden_kernel_module": {"transient_mod"}, "module_only_in_kallsyms": {"m2"}}, 3),
+        ({"hidden_kernel_module": set(), "module_only_in_kallsyms": set()}, 2),
+    ]
     with patch.object(scanner, "_snapshot_hidden_modules", side_effect=snapshots):
         findings, _, _, _ = scanner.scan()
-    assert [f for f in findings if f.kind == "hidden_kernel_module"] == []
+    assert [f for f in findings if f.scanner == "kernel_module_crossview"] == []
 
 
 def test_forced_kernel_module_taint_is_flagged(tmp_path):
@@ -298,7 +301,8 @@ def test_hidden_pid_detected_when_omitted_from_proc_getdents(tmp_path):
 
 
 def test_cli_scan_rootkit_runs_read_only_on_live_host(capsys):
-    code = cli_main(["scan-rootkit", "--json", "--passes", "2", "--interval-ms", "10"])
+    code = cli_main(["scan-rootkit", "--json", "--passes", "2", "--interval-ms", "10",
+                     "--pid-sweep", "bounded"])  # fmt: skip
     payload = json.loads(capsys.readouterr().out)
     assert code in (0, 1, 2)
     assert payload["passes"] == 2
