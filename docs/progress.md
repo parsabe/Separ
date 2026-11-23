@@ -596,3 +596,14 @@ Owner decisions in SEPAR_ROUND2.md (not committed). Part B (v2.5) waits for the 
    call.
 5. **Checks**: ruff clean; 2557 passed, 5 skipped, 1 xfailed, 1 failed (the content-findings test,
    item 2); privacy audit PASS; `make reproduce` identical to the committed rows on seed 335384967.
+
+**Owner decisions after Part A (applied):** the README's reference hosts and the badges are allowed,
+anchored; exactly `parsa@parsabe.com` is allowed and the guide uses it (its example target is
+`admin@example.org`); `documentation/` is skipped by the publishability scan like ruff, and
+re-included when the paper is revised; reported IPs are masked. The working tree has **no
+finding**. The history scan still reports 7: four in commit 558ef68 (already on origin/master: two
+e-mail addresses, a home path, the old campus network), one in e5574db (a test of this branch used
+a public address, since fixed), and two in 5210f89 and 123d893 (docs/results.md quoted the 558ef68 IP in
+the checker's own report, since masked). `check_publishable.py` exits 1 on them, so the CI
+publishability step, and with it the release job, still fails; see the round 2 summary. The tag
+`v2.4` was moved to the end of Part A (it was never pushed; `make reproduce` gives the same rows).
