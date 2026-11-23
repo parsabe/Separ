@@ -9,7 +9,7 @@ Configuration files live in `/etc/separ/`:
 - **`ingest.yaml`**: Configures which sensors feed into Separ (Tetragon, SSH, Shibboleth, Dovecot).
 - **`policy.yaml`**: University security policy (campus CIDR ranges, internal domains), signed.
 - **`admin.pub`**: The admin's public key. The daemon verifies `policy.yaml` with it and refuses to
-  start without both (run `sudo separ setup --server` first). Both files must be root-owned 0644;
+  start without both (run `sudo separ setup --server --campus-cidr CIDR` first). Both files must be root-owned 0644;
   the daemon refuses a policy or key that group/others can write.
 - **`mappings/`**: Ready-to-use YAML mapping definitions for external sensors.
 

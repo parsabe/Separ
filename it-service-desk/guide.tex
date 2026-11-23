@@ -195,13 +195,14 @@ Administrators and laptop users must initialize their signing keys and signed po
 Run as root to configure \texttt{/etc/separ/}, which the system daemon reads (its state lives in \texttt{/var/lib/separ}):
 \begin{lstlisting}[language=bash]
 # Start in observe mode for pilot, or block mode for active enforcement
-sudo separ setup --server --mode observe
+sudo separ setup --server --mode observe --campus-cidr <campus-network/16> \
+    --vpn-cidr <vpn-network/16> --wlan-cidr <wlan-network/16>
 \end{lstlisting}
 This creates:
 \begin{itemize}[leftmargin=1.4em,itemsep=2pt]
   \item \textbf{\texttt{\textasciitilde/.separ-admin/admin.key}:} Your private Ed25519 signing key (\texttt{0600} in a \texttt{0700} folder, or \texttt{--key PATH}). Move it to the admin's machine; it does not belong on the server. Keep backups secure.
   \item \textbf{\texttt{/etc/separ/admin.pub}:} The public key the daemon verifies with (root-owned \texttt{0644}).
-  \item \textbf{\texttt{policy.yaml}:} Pre-configured and signed with TUBAF campus subnets (\texttt{139.18/16}, campus VPN \texttt{10.0.0.0/8}, eduroam \texttt{172.16.0.0/12}), internal domain \texttt{tu-freiberg.de}, and Shibboleth SSO apps (OPAL, Moodle, Nextcloud, Zoom).
+  \item \textbf{\texttt{policy.yaml}:} Signed, with exactly the networks you name (Separ has none built in): \texttt{--campus-cidr} (required for \texttt{--server}, repeatable), optionally \texttt{--vpn-cidr} and \texttt{--wlan-cidr}, the internal mail domain (\texttt{--mail-domain}, default \texttt{tu-freiberg.de}) and the Shibboleth SSO apps (OPAL, Moodle, Nextcloud, Zoom). The command prints what it configured.
 \end{itemize}
 
 \subsection{Setup for Staff / Developer Laptops}
@@ -339,7 +340,7 @@ separ health --workdir /var/lib/separ \
 \begin{enumerate}[leftmargin=1.4em,itemsep=4pt]
   \item \textbf{Error: \texttt{PolicyRejected} on startup} \\
   \emph{Cause:} \texttt{policy.yaml} was edited manually without re-signing, or is missing its signature. \\
-  \emph{Fix:} Re-sign on the admin machine (\texttt{separ policy sign --policy policy.yaml --key \textasciitilde/.separ-admin/admin.key}), copy it to \texttt{/etc/separ/} root-owned \texttt{0644}, then \texttt{sudo separ reload}. If the daemon says ``no signed policy'', run \texttt{sudo separ setup --server} first.
+  \emph{Fix:} Re-sign on the admin machine (\texttt{separ policy sign --policy policy.yaml --key \textasciitilde/.separ-admin/admin.key}), copy it to \texttt{/etc/separ/} root-owned \texttt{0644}, then \texttt{sudo separ reload}. If the daemon says ``no signed policy'', run \texttt{sudo separ setup --server --campus-cidr CIDR} first.
 
   \item \textbf{Warning: \texttt{Degraded protection: no host sensor}} \\
   \emph{Cause:} Separ is running without any external sensors connected in \texttt{ingest.yaml}, so it only sees commands passed through \texttt{separ guard} or files in its watched sandbox. \\

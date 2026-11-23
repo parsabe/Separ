@@ -9,6 +9,7 @@ for a per-user daemon, or `--config-dir`. The private key stays with the admin (
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import os
 import shutil
 from pathlib import Path
@@ -23,6 +24,16 @@ from .config import (
     secure_dir,
 )
 from .policy import default_policy_dict
+
+
+def _cidrs(values: list[str] | None, flag: str) -> list[str]:
+    out = []
+    for value in values or []:
+        try:
+            out.append(str(ipaddress.ip_network(value.strip(), strict=True)))
+        except ValueError as exc:
+            raise ValueError(f"{flag} {value!r} is not a network in CIDR form: {exc}") from None
+    return out
 
 
 def run_setup(args: argparse.Namespace) -> int:
@@ -57,22 +68,37 @@ def run_setup(args: argparse.Namespace) -> int:
 
     policy_doc = default_policy_dict()
     policy_doc["mode"] = mode_arg
+    mail_domain = (getattr(args, "mail_domain", None) or "tu-freiberg.de").strip().lower()
+    nets = {
+        "campus": _cidrs(getattr(args, "campus_cidr", None), "--campus-cidr"),
+        "vpn": _cidrs(getattr(args, "vpn_cidr", None), "--vpn-cidr"),
+        "wlan": _cidrs(getattr(args, "wlan_cidr", None), "--wlan-cidr"),
+    }
 
     is_server_target = is_server or (is_root() and not is_laptop)
+    if is_server_target and not nets["campus"]:
+        raise ValueError(
+            "server mode needs the campus network: --campus-cidr CIDR (repeatable); "
+            "Separ ships no campus network of its own"
+        )
+    # only what the admin named: no campus network is built in (review 2026-11, item 9)
+    # internal: lateral movement is counted towards these networks. They come before the
+    # reference classes, because the first class that matches an address names it.
+    configured = [
+        {"name": name, "internal": True, "match": {"cidr": cidrs}}
+        for name, cidrs in nets.items()
+        if cidrs
+    ]
     if is_server_target:
-        print("✓ Configuring for: Server Infrastructure (TUBAF Campus / Enterprise)")
+        print("✓ Configuring for: Server Infrastructure (Campus / Enterprise)")
         policy_doc["identity"] = {
-            "internal_mail_domains": ["tu-freiberg.de"],
+            "internal_mail_domains": [mail_domain],
             "approved_apps": ["Zoom", "Moodle", "Nextcloud", "OPAL"],
             "min_logins": 20,
             "failure_burst": 10,
             "burst_window": "5m",
         }
-        policy_doc["destinations"] = [
-            {"name": "campus", "match": {"cidr": ["139.18.0.0/16"]}},
-            {"name": "vpn", "match": {"cidr": ["10.0.0.0/8"]}},
-            {"name": "eduroam", "match": {"cidr": ["172.16.0.0/12"]}},
-        ]
+        policy_doc["destinations"] = [*configured, *policy_doc.get("destinations", [])]
         ingest_path = target_dir / "ingest.yaml"
         if not ingest_path.exists():
             pkg_ingest = Path(__file__).resolve().parents[2] / "packaging/etc/separ/ingest.yaml"
@@ -83,16 +109,15 @@ def run_setup(args: argparse.Namespace) -> int:
     else:
         print("✓ Configuring for: Workstation / Laptop Endpoint")
         policy_doc["identity"] = {
-            "internal_mail_domains": ["tu-freiberg.de"],
+            "internal_mail_domains": [mail_domain],
             "approved_apps": ["Browser", "Terminal", "VSCode", "Git"],
         }
-        policy_doc["destinations"] = [
-            {
-                "name": "local",
-                "match": {"cidr": ["127.0.0.0/8", "192.168.0.0/16", "10.0.0.0/8"]},
-            },
-            {"name": "campus", "match": {"cidr": ["139.18.0.0/16"]}},
-        ]
+        local = {
+            "name": "local",
+            "internal": True,
+            "match": {"cidr": ["127.0.0.0/8", "192.168.0.0/16", "10.0.0.0/8"]},
+        }
+        policy_doc["destinations"] = [*configured, local, *policy_doc.get("destinations", [])]
 
     pol_path = target_dir / POLICY_NAME
     write_public_key(pub, pub_path)
@@ -100,8 +125,12 @@ def run_setup(args: argparse.Namespace) -> int:
     print(f"✓ Signed policy written to: {pol_path} (0644)")
     print(f"✓ Public key written to   : {pub_path} (0644; the daemon verifies with it)")
     print(f"  Mode                  : {mode_arg.upper()}")
-    print("  Campus CIDRs protected: 139.18.0.0/16, 10.0.0.0/8, 172.16.0.0/12")
-    print("  Internal domains      : tu-freiberg.de")
+    if not is_server_target:
+        print("  Local networks        : 127.0.0.0/8, 192.168.0.0/16, 10.0.0.0/8 (class local)")
+    for name, cidrs in nets.items():
+        if cidrs:
+            print(f"  {name.capitalize() + ' networks':22}: {', '.join(cidrs)}")
+    print(f"  Internal mail domain  : {mail_domain}")
     print("=" * 64)
     print(f"Keep {key_path} on the admin's machine, not on the endpoints: the daemon needs")
     print("only the public key. Later changes: separ policy set-mode MODE --key KEY; separ reload")

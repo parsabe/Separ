@@ -493,7 +493,7 @@ details summary {
   <div class="top-grid">
     <!-- Panel 1: Signed Policy, Holds, Quarantine & Rootkit -->
     <div class="panel">
-      <h2>Signed Policy &amp; Security Scope (TUBAF Campus)</h2>
+      <h2>Signed Policy &amp; Security Scope</h2>
       <div style="display:flex; gap:6px; margin-bottom:4px;">
         <button id="btn-mode-block" disabled style="flex:1;">Mode: Block</button>
         <button id="btn-mode-warn" disabled style="flex:1;">Mode: Warn</button>
@@ -508,9 +508,8 @@ details summary {
 
       <div style="margin-top:12px; padding-top:10px; border-top:1px solid var(--border-soft);">
         <strong style="font-size:12px; color:var(--fg);">Campus Network &amp; Domain Scope:</strong>
-        <div style="background:#f6f8fa; border:1px solid #d8dee4; border-radius:4px; padding:8px 10px; margin-top:4px; font-family:var(--mono); font-size:11.5px; color:#24292f;">
-          <div>• Campus Subnets : TUBAF Campus (139.18/16), 10.0.0.0/8 (VPN), 172.16.0.0/12 (eduroam)</div>
-          <div>• Campus Domains : tu-freiberg.de (SSO apps: OPAL, Moodle, Nextcloud, Zoom)</div>
+        <div id="scope-box" style="background:#f6f8fa; border:1px solid #d8dee4; border-radius:4px; padding:8px 10px; margin-top:4px; font-family:var(--mono); font-size:11.5px; color:#24292f;">
+          <div>(from the signed policy)</div>
         </div>
       </div>
 
@@ -1088,6 +1087,14 @@ async function refresh() {
       ${st.containment.recent.slice(-5).reverse().map(a =>
         `<div class="kv-row"><span>${esc(a.ts)} ${esc(a.action)}</span><span class="mono">${esc(a.target)} -> ${esc(a.detail)} (${esc(a.backend)})</span></div>`).join('')}
     `;
+
+    const sc = st.policy.scope;
+    document.getElementById('scope-box').innerHTML =
+      (sc.networks.length
+        ? sc.networks.map(n => `<div>• ${esc(n.name)} : ${esc(n.cidr.join(', '))}</div>`).join('')
+        : '<div>• no networks configured (separ setup --campus-cidr ...)</div>')
+      + `<div>• Mail domains : ${esc(sc.mail_domains.join(', ') || 'none')}</div>`
+      + `<div>• Approved apps : ${esc(sc.approved_apps.join(', ') || 'none')}</div>`;
 
     const rk = st.rootkit;
     document.getElementById('rk-summary').innerHTML =

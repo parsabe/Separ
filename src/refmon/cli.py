@@ -107,7 +107,7 @@ def main(argv: list[str] | None = None) -> int:
         "setup",
         help="guided policy and environment setup for servers or laptops",
         description=(
-            "Initialize keys, sign policy (TUBAF campus subnets, domains, apps), "
+            "Initialize keys, sign policy (the campus networks you name, mail domain, apps), "
             "and configure environment."
         ),
     )
@@ -132,6 +132,20 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="where the daemon reads policy.yaml and admin.pub (default: /etc/separ as root, "
         "else $XDG_CONFIG_HOME/separ)",
+    )
+    setup.add_argument(
+        "--campus-cidr",
+        action="append",
+        default=[],
+        metavar="CIDR",
+        help="the campus network (repeatable; required with --server). Nothing is built in",
+    )
+    setup.add_argument("--vpn-cidr", action="append", default=[], metavar="CIDR")
+    setup.add_argument("--wlan-cidr", action="append", default=[], metavar="CIDR")
+    setup.add_argument(
+        "--mail-domain",
+        default="tu-freiberg.de",
+        help="the internal mail domain (default tu-freiberg.de)",
     )
     setup.add_argument(
         "--key",

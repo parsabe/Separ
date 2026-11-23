@@ -715,7 +715,7 @@ class LiveBarrier:
         with self._lock:
             now = datetime.now(UTC)
             user = os.environ.get("USER") or "operator"
-            device = "dev-b21c" if role in self.policy.server_roles else "dev-7f3a"
+            device = self.device_pseudonym  # this host, by pseudonym (review 2026-11, item 9)
             proc_id = self._next_id("proc:guard")
             actor = self._make_actor(proc_id, role, user, parent=None)
 
@@ -916,7 +916,7 @@ class LiveBarrier:
                 if domain:
                     attrs["domain"] = domain
                 ev = RawEvent(
-                    event_id=self._next_id(), ts=datetime.now(UTC), device="dev-7f3a",
+                    event_id=self._next_id(), ts=datetime.now(UTC), device=self.device_pseudonym,
                     type=EventType.CONTENT_IN, actor=self._browser_actor,
                     object=RawObjectRef(class_="download" if source == "download" else "web_page",
                                         content=url),
@@ -1055,7 +1055,7 @@ class LiveBarrier:
             if path:
                 attrs["url_path"] = path[:256]
             ev = RawEvent(
-                event_id=self._next_id(), ts=datetime.now(UTC), device="dev-b21c",
+                event_id=self._next_id(), ts=datetime.now(UTC), device=self.device_pseudonym,
                 type=EventType.REQUEST_IN, actor=actor,
                 object=RawObjectRef(class_="decoy_session", content=line or f"connect {service}"),
                 attrs=attrs,
@@ -1239,7 +1239,7 @@ class LiveBarrier:
                     RawEvent(
                         event_id=self._next_id(),
                         ts=now,
-                        device="dev-b21c",
+                        device=self.device_pseudonym,
                         type=EventType.REQUEST_IN,
                         actor=actor,
                         object=RawObjectRef(class_="http_request", content=path.name),
@@ -1248,7 +1248,7 @@ class LiveBarrier:
                     RawEvent(
                         event_id=self._next_id(),
                         ts=now,
-                        device="dev-b21c",
+                        device=self.device_pseudonym,
                         type=EventType.FILE_WRITE,
                         actor=actor,
                         object=RawObjectRef(class_="file", content=path.name),
@@ -1303,7 +1303,7 @@ class LiveBarrier:
                     RawEvent(
                         event_id=self._next_id(),
                         ts=now,
-                        device="dev-7f3a",
+                        device=self.device_pseudonym,
                         type=EventType.FILE_WRITE,
                         actor=actor,
                         object=RawObjectRef(
@@ -1654,7 +1654,7 @@ class LiveBarrier:
                     RawEvent(
                         event_id=self._next_id(),
                         ts=now,
-                        device="dev-7f3a",
+                        device=self.device_pseudonym,
                         type=EventType.CONTENT_IN,
                         actor=actor,
                         object=RawObjectRef(class_="file", content="wheel-pkg"),
@@ -1663,7 +1663,7 @@ class LiveBarrier:
                     RawEvent(
                         event_id=self._next_id(),
                         ts=now,
-                        device="dev-7f3a",
+                        device=self.device_pseudonym,
                         type=EventType.NET_CONNECT,
                         actor=actor,
                         object=RawObjectRef(class_="net_endpoint", content="pypi.org"),
@@ -1940,6 +1940,15 @@ class LiveBarrier:
                     "protected_assets": [a.name for a in self.policy.protected_assets],
                     "canaries": [c.name for c in self.policy.canaries],
                     "contracts": contracts_summary,
+                    "scope": {
+                        "networks": [
+                            {"name": d.name, "cidr": list(d.match.get("cidr", []))}
+                            for d in self.policy.destinations
+                            if d.match.get("cidr")
+                        ],
+                        "mail_domains": list(self.policy.identity.internal_mail_domains),
+                        "approved_apps": list(self.policy.identity.approved_apps),
+                    },
                 },
                 "stories": stories,
                 "holds": holds,

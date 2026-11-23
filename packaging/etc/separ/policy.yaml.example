@@ -1,17 +1,22 @@
 # /etc/separ/policy.yaml.example
-# Separ Behavioral Reference Policy (TUBAF Server Configuration)
+# An EXAMPLE of what `separ setup --server` writes. Separ ships no campus network of its own:
+# replace every <placeholder> with your networks (or run separ setup with --campus-cidr,
+# --vpn-cidr, --wlan-cidr and --mail-domain), then sign it on the admin machine:
+#   separ policy sign --policy policy.yaml --key ~/.separ-admin/admin.key
 
 identity:
-  internal_mail_domains: [tu-freiberg.de]       # Exfiltration alert on outside mail forwarding
+  internal_mail_domains: [tu-freiberg.de]       # --mail-domain; outside forwarding is exfil
   approved_apps: [Zoom, Moodle, Nextcloud, OPAL] # Allowlisted SSO app consents
   min_logins: 20                                # Login count before baseline network profile is locked
   failure_burst: 10                             # Failed login attempts for account within burst_window
   burst_window: 5m
 
 destinations:
-  - {name: campus,  match: {cidr: [139.18.0.0/16]}}     # TUBAF campus subnets
-  - {name: vpn,     match: {cidr: [10.0.0.0/8]}}         # Campus VPN pool
-  - {name: eduroam, match: {cidr: [172.16.0.0/12]}}      # Wireless campus eduroam
+  # internal: lateral movement is counted towards these networks. The first class that matches an
+  # address names it, so your own networks come before the reference classes.
+  - {name: campus, internal: true, match: {cidr: [<campus-cidr>]}}   # --campus-cidr (required)
+  - {name: vpn,    internal: true, match: {cidr: [<vpn-cidr>]}}      # --vpn-cidr (optional)
+  - {name: wlan,   internal: true, match: {cidr: [<wlan-cidr>]}}     # --wlan-cidr (optional)
 
 rules:
   # Observe mode first for identity and mail to avoid false blocks during rollout:

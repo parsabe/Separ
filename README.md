@@ -77,8 +77,8 @@ $ separ setup --laptop
 ✓ Signed policy written to: ~/.config/separ/policy.yaml (0644)
 ✓ Public key written to   : ~/.config/separ/admin.pub (0644; the daemon verifies with it)
   Mode                  : OBSERVE
-  Campus CIDRs protected: 139.18/16, 10.0.0.0/8, 172.16.0.0/12
-  Internal domains      : tu-freiberg.de
+  Local networks        : 127.0.0.0/8, 192.168.0.0/16, 10.0.0.0/8 (class local)
+  Internal mail domain  : tu-freiberg.de
 ================================================================
 Setup complete! You can now start Separ:
   separ gui
@@ -148,7 +148,9 @@ sudo ./install.sh
 ### Configure & Launch
 ```bash
 # 1. Configure and sign policy upfront (the daemon refuses to start without a signed policy)
-sudo separ setup --server --mode observe   # system daemon: /etc/separ/policy.yaml + admin.pub
+sudo separ setup --server --mode observe --campus-cidr <campus/16> \
+     [--vpn-cidr <vpn/16>] [--wlan-cidr <wlan/16>] [--mail-domain tu-freiberg.de]
+                                           # system daemon: /etc/separ/policy.yaml + admin.pub
 separ setup --laptop --mode block          # per-user daemon: ~/.config/separ/
 # The private key (default ~/.separ-admin/admin.key, --key PATH) belongs on the admin's
 # machine, not on the endpoints: the daemon only ever gets the public key.
