@@ -130,7 +130,7 @@ def test_the_owner_decisions_of_round_2_and_nothing_more():
         "write to parsa@parsabe.com.evil.org", "https://notpython.org/",
     ):  # fmt: skip
         assert findings(line), line
-    assert cp.SKIPPED_DIRS == ("documentation/",)
+    assert cp.SKIPPED_DIRS == ()  # the paper is scanned again since its rewrite
     reported = findings("connect 8.8.8.8")
     assert reported == ["public IP 8.8.x.x"] and findings(reported[0]) == []
     assert findings(f"  {reported[0]}") == []

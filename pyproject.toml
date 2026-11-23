@@ -28,8 +28,6 @@ packages = ["src/refmon", "src/separ"]
 line-length = 100
 target-version = "py312"
 src = ["src", "tests"]
-# the paper and its figure scripts are handled separately (round 2, A1)
-extend-exclude = ["documentation"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]

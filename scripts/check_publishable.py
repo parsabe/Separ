@@ -77,9 +77,9 @@ OK_URL = re.compile(
 SYNTHETIC_MARKERS = ("zz-secret-command-zz", "zx9lab-obfuscated-payload")
 # This script and its test contain the patterns they look for, on purpose.
 SELF = {"scripts/check_publishable.py", "tests/test_reproduce.py"}
-# The paper and its scripts are skipped, as ruff skips them; they are re-included when the paper is
-# revised (round 2, owner decision).
-SKIPPED_DIRS = ("documentation/",)
+# Folders skipped by both scans. The paper was skipped until its rewrite (round 2) and is scanned
+# again; the tuple stays so a temporary skip is one visible line.
+SKIPPED_DIRS: tuple[str, ...] = ()
 SKIP_SUFFIXES = {".pyc", ".png", ".jpg", ".gif", ".ico", ".pdf", ".zip", ".gz"}
 
 
