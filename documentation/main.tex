@@ -12,6 +12,9 @@
 \usepackage{array}
 \usepackage{graphicx}
 \usepackage{xcolor}
+\usepackage{tikz}
+\usepackage{adjustbox}
+\input{diagrams/styles}  % shapes of the pipeline flowchart (diagrams/separ-flow.tex)
 \usepackage{enumitem}
 \usepackage{placeins}
 \usepackage{fontawesome5}
@@ -195,6 +198,19 @@ names an actor with a role (\texttt{interactive\_shell}, \texttt{web\_worker}, \
 \texttt{package\_installer}, \ldots). Six stages follow: Observe, Tag, Link, Judge, Gate and
 Contain. The policy that configures them is an Ed25519-signed~\cite{bernstein2012high} YAML file;
 the daemon holds only the public key and refuses to start without a valid signed policy.
+Figure~\ref{fig:flow} follows one event from the place where Separ sees it to the report.
+
+\begin{figure*}[!t]
+  \centering
+  \adjustbox{max width=\textwidth}{\input{diagrams/separ-flow}}
+  \caption{The Separ pipeline end to end (default policy of \texttt{\EvalTag}). An event from one of
+  the five mediation points is fingerprinted in Observe (nothing after the privacy wall sees raw
+  text), labelled in Tag, grouped into a story in Link and judged on the three questions. An
+  override decides at once; otherwise the score $L$ is compared with $\tau_h$ and $\tau_b$, and a
+  block needs a Contract signal (contract gate). The mode decides whether the decision is only
+  recorded, shown to the user, or acted on; containment is real only with \texttt{--enforce}.}
+  \label{fig:flow}
+\end{figure*}
 
 \subsection{Observe: keyed fingerprints and text features}
 \label{sec:privacy}

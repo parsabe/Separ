@@ -83,6 +83,26 @@ above a higher one it blocks; it never blocks on suspicion alone without a contr
 Some events always block: reading a decoy (canary) password, a labelled program touching a
 protected asset, and attempts to stop or alter Separ.
 
+\subsection{How a decision is made, step by step}
+\label{sec:flow}
+Figure~\ref{fig:flow} follows one event through Separ. The numbers in the figure are the steps:
+(1)~an event arrives from one of the places Separ watches; (2)~the command text is replaced by a
+fingerprint, so nothing after the dashed red line ever sees it; (3)~content from outside is
+labelled; (4)~related events become one story; (5)~the story is judged on the three questions;
+(6)~an override decides at once, otherwise the score decides; (7)~the mode decides whether
+anything happens; (8)~in block mode the story's own processes and files are contained; (9)~every
+decision is logged and can be notified. In the pilot (observe mode) the path ends at step~7 with
+``only recorded''.
+
+\begin{figure}[!htbp]
+  \centering
+  \adjustbox{max width=\textwidth}{\input{../documentation/diagrams/separ-flow}}
+  \caption{The Separ pipeline end to end (default policy). The thresholds $-4.94$ (hold) and
+  $-3.91$ (block) come from the costs in the signed policy; a block also needs a Contract
+  signal.}
+  \label{fig:flow}
+\end{figure}
+
 \subsection{Where it looks}
 \begin{tabularx}{\textwidth}{@{}lX@{}}
 \toprule

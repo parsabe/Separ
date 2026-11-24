@@ -24,7 +24,7 @@ diagrams:
 
 overleaf-zip:
 	rm -f separ-paper-overleaf.zip refmon-paper-overleaf.zip
-	zip -q -r separ-paper-overleaf.zip $(MAIN).tex numbers.tex references.bib figures/fig_*.pdf
+	zip -q -r separ-paper-overleaf.zip $(MAIN).tex numbers.tex references.bib figures/fig_*.pdf diagrams/styles.tex diagrams/separ-flow.tex
 
 clean:
 	latexmk -C $(MAIN).tex diagrams.tex

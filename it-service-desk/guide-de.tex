@@ -98,6 +98,28 @@ Verdacht. Einige Ereignisse blockieren immer: das Lesen eines Köder-Passworts (
 Zugriff eines markierten Programms auf ein geschütztes Gut und Versuche, Separ zu beenden oder zu
 verändern.
 
+\subsection{Wie eine Entscheidung entsteht, Schritt für Schritt}
+\label{sec:flow}
+Abbildung~\ref{fig:flow} verfolgt ein Ereignis durch Separ. Die Zahlen in der Abbildung sind die
+Schritte: (1)~ein Ereignis kommt von einer der Stellen, die Separ beobachtet; (2)~der Befehlstext
+wird durch einen Fingerabdruck ersetzt, sodass nach der gestrichelten roten Linie niemand ihn mehr
+sieht; (3)~Inhalte von außen werden markiert; (4)~zusammengehörige Ereignisse werden zu einem
+Vorgang; (5)~der Vorgang wird anhand der drei Fragen beurteilt; (6)~eine Sonderregel (Override)
+entscheidet sofort, sonst entscheidet der Wert; (7)~der Modus entscheidet, ob überhaupt etwas
+geschieht; (8)~im Blockiermodus werden die Prozesse und Dateien des Vorgangs eingedämmt; (9)~jede
+Entscheidung wird protokolliert und kann gemeldet werden. Im Pilotbetrieb (Beobachtungsmodus)
+endet der Weg bei Schritt~7 mit \glqq only recorded\grqq. Die Beschriftungen der Abbildung sind
+englisch, wie die Meldungen von Separ.
+
+\begin{figure}[!htbp]
+  \centering
+  \adjustbox{max width=\textwidth}{\input{../documentation/diagrams/separ-flow}}
+  \caption{Die Separ-Pipeline von Anfang bis Ende (Standardrichtlinie). Die Schwellen $-4{,}94$
+  (Anhalten) und $-3{,}91$ (Blockieren) ergeben sich aus den Kosten in der signierten Richtlinie;
+  eine Blockierung braucht zusätzlich ein Vertragssignal.}
+  \label{fig:flow}
+\end{figure}
+
 \subsection{Wo es hinsieht}
 \begin{tabularx}{\textwidth}{@{}lX@{}}
 \toprule

@@ -1,0 +1,86 @@
+% Separ v2.4 end to end: where events come from, the stages, the decision, what the mode does,
+% containment and reporting. One picture for the paper (main.tex) and both IT guides
+% (it-service-desk/guide*.tex). Needs \input{diagrams/styles} (tikz, xcolor). Facts from the code:
+% pipeline/pipeline.py (process), pipeline/judge.py, calculus/evidence.py (thresholds of the default
+% policy), gate.py (modes, hold flows), contain.py, enforcer_linux.py (serve --enforce).
+\begin{tikzpicture}[rm, x=1cm, y=1cm]
+  % ---- 1: where Separ looks ------------------------------------------------------------------
+  \foreach \x/\n/\t/\s in {
+      1.7/in1/{\texttt{separ guard -{}- <cmd>}}/{before the command runs},
+      5.15/in2/{Browser extension}/{clipboard writes, downloads},
+      8.6/in3/{Watched folders}/{sandbox, web root},
+      12.05/in4/{Connected sensors}/{Tetragon, Falco, sshd, IdP},
+      15.5/in5/{Rootkit scan}/{hourly, read-only}} {
+    \node[rm io, minimum width=30mm, minimum height=9mm] (\n) at (\x,0) {\t\\\tiny \s};
+  }
+  \node[rm group label] at (-0.05,0.62) {1\enspace WHERE SEPAR LOOKS};
+  \node[rm raw, minimum width=172mm, minimum height=5mm] (raw) at (8.6,-1.3)
+    {raw event, in memory only (at most 10 minutes, never written to disk)};
+  \foreach \n in {in1,in2,in3,in4,in5} { \draw[rm flow] (\n.south) -- (\n.south |- raw.north); }
+
+  % ---- 2-5: the stages ----------------------------------------------------------------------
+  \node[rm stage, minimum width=37mm, minimum height=15mm] (obs) at (2.1,-3.15)
+    {\textbf{2\enspace Observe}\\\tiny command, URL, path $\to$ keyed HMAC\\\tiny trusted host? canary? obfuscated?\\\tiny raw text dropped};
+  \node[rm stage, minimum width=37mm, minimum height=15mm] (tag) at (6.4,-3.15)
+    {\textbf{3\enspace Tag}\\\tiny outside content gets a label\\\tiny it spreads to child processes\\\tiny and files; half-life 30 min};
+  \node[rm stage, minimum width=37mm, minimum height=15mm] (lnk) at (10.7,-3.15)
+    {\textbf{4\enspace Link}\\\tiny related events $\to$ one story\\\tiny paste $\to$ curl $\to$ sh $\to$ file};
+  \node[rm stage, minimum width=37mm, minimum height=15mm] (jdg) at (15.0,-3.15)
+    {\textbf{5\enspace Judge: three questions}\\\tiny Origin: from outside?\\\tiny Contract: outside its role?\\\tiny Effect: dangerous action?};
+  \draw[rm flow] (raw.south -| obs.north) -- (obs.north);
+  \draw[rm flow] (obs) -- (tag);
+  \draw[rm flow] (tag) -- (lnk);
+  \draw[rm flow] (lnk) -- (jdg);
+  \draw[rm wall] (4.25,-2.05) -- (4.25,-4.15);
+  \node[rm note, text=rmBlockLine, anchor=north, align=center] at (4.25,-4.15)
+    {privacy wall:\\only fingerprints pass};
+
+  % ---- 6: decide ----------------------------------------------------------------------------
+  \node[rm dec, minimum width=27mm] (ovr) at (15.0,-5.45) {override?};
+  \draw[rm flow] (jdg) -- (ovr);
+  \node[rm stage, minimum width=60mm, minimum height=11mm] (scr) at (8.55,-5.45)
+    {\textbf{6\enspace Score}\enspace $L = -6.91 + {}$ strongest weight of each failed question\\
+     \tiny e.g.\ pasted \texttt{curl \ldots{} | sh}: $-6.91 + 0.8 + 1.0 + 2.5 = -2.61$};
+  \draw[rm flow] (ovr) -- node[rm no, above] {no} (scr);
+
+  % outcomes
+  \node[rm allow, minimum width=24mm] (alw) at (2.1,-7.75) {ALLOW};
+  \node[rm hold, minimum width=24mm] (hld) at (6.4,-7.75) {HOLD};
+  \node[rm block, minimum width=24mm] (blk) at (10.7,-7.75) {BLOCK};
+  \draw[rm flow] (scr.south -| blk.north) -- node[rm lbl, align=center] {$L \ge -3.91$ and a\\Contract signal} (blk.north);
+  \draw[rm flow] (scr.west) -| node[rm lbl, align=center, pos=0.75] {$L < -4.94$} (alw.north);
+  \draw[rm flow] (scr.south -| hld.north) -- node[rm lbl, align=center] {$L \ge -4.94$, or no\\Contract signal} (hld.north);
+  \draw[rm flow] (ovr.south) |- node[rm lbl, align=center, pos=0.35] {\textbf{yes}: canary, protected\\asset, attack on Separ\\(trusted source: ALLOW)} (blk.east);
+
+  % ---- 7: gate (the mode) -------------------------------------------------------------------
+  \node[rm box, minimum width=88mm, minimum height=10mm, draw=rmDecideLine, fill=rmDecide, thick] (gat) at (8.55,-9.55)
+    {\textbf{7\enspace Gate: the mode decides what happens}\\\tiny
+     \textbf{observe}: only recorded (``would block'')\quad
+     \textbf{warn}: the user is told, nothing stopped\quad
+     \textbf{block}: act as below};
+  \draw[rm flow] (hld) -- (hld |- gat.north);
+  \draw[rm flow] (blk) -- (blk |- gat.north);
+  \node[rm term, minimum width=24mm] (run) at (2.1,-9.55) {runs normally\\\tiny (still logged)};
+  \draw[rm flow] (alw) -- (run);
+
+  % ---- 8: what happens in block mode --------------------------------------------------------
+  \node[rm box, draw=rmHoldLine, fill=rmHold!40, minimum width=34mm, minimum height=12mm] (hep) at (5.3,-11.75)
+    {\textbf{hold on a workstation}\\\tiny paused; the user is asked\\\tiny no answer in 60 s = stop};
+  \node[rm box, draw=rmHoldLine, fill=rmHold!40, minimum width=34mm, minimum height=12mm] (hsv) at (8.95,-11.75)
+    {\textbf{hold on a server}\\\tiny paused and quarantined\\\tiny until the admin decides};
+  \node[rm box, draw=rmBlockLine, fill=rmBlock!50, minimum width=40mm, minimum height=12mm] (ctn) at (12.85,-11.75)
+    {\textbf{8\enspace Contain} (labelled objects only)\\\tiny kill process tree, cut its network,\\\tiny quarantine new files, undo persistence};
+  \draw[rm flow] (gat.south -| hep.north) -- (hep.north);
+  \draw[rm flow] (gat.south -| hsv.north) -- (hsv.north);
+  \draw[rm flow] (gat.south -| ctn.north) -- (ctn.north);
+  \node[rm note, anchor=north] at (10.4,-12.45) {real only with \texttt{separ serve -{}-enforce} as root, otherwise simulated};
+
+  % ---- 9: report and the signed policy ------------------------------------------------------
+  \node[rm store, minimum width=25mm, minimum height=19mm] (rep) at (16.3,-12.0)
+    {\textbf{9\enspace Report}\\\tiny every decision logged\\\tiny logs: fingerprints only\\\tiny notifications: pseudonym\\\tiny dashboard: \texttt{separ gui}\\\tiny health: \texttt{separ health}};
+  \draw[rm ctrl] (ctn.east) -- (rep.west |- ctn.east);
+  \node[rm human, minimum width=30mm, minimum height=12mm] (pol) at (15.6,-9.35)
+    {\textbf{Signed policy}\\\tiny mode, contracts, weights,\\\tiny trusted sources; signed on\\\tiny the admin workstation};
+  \draw[rm back] (pol.west) -- (gat.east |- pol.west);
+  \node[rm note, text=rmStageLine, anchor=south] at (pol.north) {read by every stage};
+\end{tikzpicture}
