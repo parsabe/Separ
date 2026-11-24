@@ -27,3 +27,6 @@ it-service-desk/*.out
 it-service-desk/*.toc
 it-service-desk/*.fdb_latexmk
 it-service-desk/*.fls
+
+# raw Falco alerts of scripts/falco_baseline.sh (command lines, paths): never committed
+.falco-baseline/
