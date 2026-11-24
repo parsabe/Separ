@@ -113,6 +113,17 @@ Rootkit scan (\cmd{separ scan-rootkit}) & periodically, read-only \\
     process ID are touched.
 \end{itemize}
 
+\subsection{Separ and Falco}
+Falco watches system calls and alerts \emph{after} an action; Separ judges the commands routed to
+it \emph{before} they run. They do different jobs and can run together: Separ can read Falco's
+alerts as a sensor (Section~\ref{sec:extras}). In a lab test on 22 harmless attack stand-ins,
+Falco 0.45.2 with its 25 default rules raised no alert, and with 81 rules (adding its experimental
+rule sets) it alerted on 3 of them and on 1 of 6 harmless commands; Separ held or blocked 21 and
+none of the harmless ones. \textbf{This test favours Separ}: its author wrote the stand-ins, Falco's
+default rules focus on containers, the stand-ins never reach a real network, and everyday commands
+were not part of it. It does not show how either tool does against real attacks (details:
+\texttt{docs/v2.4-evaluation.md} in the repository).
+
 % ============================================================================
 \section{Approvals before installing}
 \label{sec:approvals}

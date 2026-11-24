@@ -133,6 +133,19 @@ Rootkit-Prüfung (\cmd{separ scan-rootkit}) & regelmäßig, nur lesend \\
     Sensor mit Prozess-ID gemeldet hat.
 \end{itemize}
 
+\subsection{Separ und Falco}
+Falco beobachtet Systemaufrufe und meldet \emph{nach} einer Aktion; Separ beurteilt die ihm
+zugeleiteten Befehle, \emph{bevor} sie laufen. Beide erfüllen unterschiedliche Aufgaben und können
+zusammen betrieben werden: Separ kann die Meldungen von Falco als Sensor einlesen
+(Abschnitt~\ref{sec:extras}). In einem Labortest mit 22 harmlosen Angriffs-Nachbildungen meldete
+Falco 0.45.2 mit seinen 25 Standardregeln nichts; mit 81 Regeln (einschließlich seiner
+experimentellen Regelsätze) meldete es 3 davon und 1 von 6 harmlosen Befehlen. Separ hielt 21 an
+oder blockierte sie und keinen der harmlosen Befehle. \textbf{Dieser Test begünstigt Separ}: Die
+Nachbildungen stammen vom Autor von Separ, die Standardregeln von Falco zielen vor allem auf
+Container, die Nachbildungen erreichen kein echtes Netz, und alltägliche Befehle waren nicht Teil
+des Tests. Er zeigt nicht, wie sich eines der beiden Werkzeuge gegen echte Angriffe schlägt
+(Einzelheiten: \texttt{docs/v2.4-evaluation.md} im Repository).
+
 % ============================================================================
 \section{Freigaben vor der Installation}
 \label{sec:approvals}
