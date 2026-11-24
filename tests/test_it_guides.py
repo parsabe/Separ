@@ -31,3 +31,11 @@ def test_guides_use_only_the_project_contact():
         text = (ROOT / "it-service-desk" / name).read_text(encoding="utf-8")
         mails = set(re.findall(r"[\w.+-]+@[\w-]+\.[\w.]+", text))
         assert mails <= {"parsa@parsabe.com", "admin@example.org"}, name
+
+
+@pytest.mark.parametrize("preamble", ["it-service-desk/style.tex", "documentation/main.tex"])
+def test_commands_keep_double_hyphens(preamble):
+    """Typewriter fonts join "--" into one dash, so `--enforce` would print as "-enforce" and be
+    copied wrong; the preambles switch that ligature off for code text."""
+    text = (ROOT / preamble).read_text(encoding="utf-8")
+    assert "\\DisableLigatures[-]{encoding = *, family = tt*}" in text
