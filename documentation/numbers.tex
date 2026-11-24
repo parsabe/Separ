@@ -121,6 +121,26 @@
 \path{docker run hello-world} & ALLOW & $-6.91$ & \texttt{...} \\
 \path{wget https://example.org/file.tar.gz} & HOLD & $-4.41$ & \texttt{..X} \\
 \path{ssh user@login.example.org} & ALLOW & $-6.91$ & \texttt{...} \\}
+\newcommand{\FalcoVersion}{0.45.2}
+\newcommand{\FalcoRulesStable}{25}  % Falco's default (stable) rules
+\newcommand{\FalcoRulesAll}{81}  % stable + incubating + sandbox, active
+\newcommand{\FalcoRulesAllLoaded}{95}
+\newcommand{\FalcoRunAttacks}{22}  % runnable attack templates, known limit included
+\newcommand{\FalcoRunBenign}{6}
+\newcommand{\FalcoNotRunAttacks}{7}
+\newcommand{\FalcoNotRunControls}{18}
+\newcommand{\FalcoSeparAttacks}{21}
+\newcommand{\FalcoSeparBenign}{0}
+\newcommand{\FalcoStableAttacks}{0}
+\newcommand{\FalcoStableBenign}{0}
+\newcommand{\FalcoStableControl}{1}
+\newcommand{\FalcoAllAttacks}{3}
+\newcommand{\FalcoAllBenign}{1}
+\newcommand{\FalcoAllControl}{1}
+\newcommand{\FalcoHitRows}{\texttt{revshell\_bash} (attack) & System procs network activity & \texttt{bash}: connect udp/53 & BLOCK \\
+\texttt{suid\_copy} (attack) & Set Setuid or Setgid bit & \texttt{chmod}: fchmodat & BLOCK \\
+\texttt{wipe\_history} (attack) & Delete or rename shell history & \texttt{rm}: unlinkat & BLOCK \\
+\texttt{pypi} (benign) & Unexpected UDP Traffic & \texttt{curl}: connect udp/443 & ALLOW \\}
 \newcommand{\AudStrings}{304}
 \newcommand{\AudRawFindings}{0}
 \newcommand{\AudFingerprints}{497}

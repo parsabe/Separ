@@ -3,9 +3,10 @@
     python scripts/paper_numbers.py            # writes documentation/numbers.tex
 
 Inputs: the per-variant rows of the evaluated version on its seed (docs/evaluation/), the golden
-catalog replayed now, the Attack Lab reference run (docs/evaluation/lab-reference-run-<v>.json),
-the privacy audit run now, docs/variant-seeds.md and the default policy. A later version or a pilot
-only needs new data and a re-run of this script and of documentation/make_figures.py.
+catalog replayed now, the Attack Lab reference run (docs/evaluation/lab-reference-run-<v>.json), the
+measured Falco baseline (docs/evaluation/falco-baseline-<v>.json), the privacy audit run now,
+docs/variant-seeds.md and the default policy. A later version or a pilot only needs new data and a
+re-run of this script and of documentation/make_figures.py.
 """
 
 from __future__ import annotations
@@ -221,6 +222,41 @@ def lab(m: Macros) -> None:
         m.add(f"CtlRows{name}", "\n".join(lines))
 
 
+def falco(m: Macros) -> None:
+    """The measured Falco baseline (scripts/falco_baseline.py) on the runnable lab templates."""
+    doc = json.loads((DATA / f"falco-baseline-{VERSION}.json").read_text(encoding="utf-8"))
+    passes, res = doc["meta"]["passes"], doc["results"]
+    m.add("FalcoVersion", doc["meta"]["falco_version"].rsplit(" ", 1)[-1])
+    m.add("FalcoRulesStable", passes["stable"]["rules_active"], "Falco's default (stable) rules")
+    m.add("FalcoRulesAll", passes["all"]["rules_active"], "stable + incubating + sandbox, active")
+    m.add("FalcoRulesAllLoaded", passes["all"]["rules_loaded"])
+    ran = [r for r in res if r["ran"]]
+    att = [r for r in ran if r["kind"] in ("stop", "miss")]
+    ben = [r for r in ran if r["kind"] == "allow"]
+    m.add("FalcoRunAttacks", len(att), "runnable attack templates, known limit included")
+    m.add("FalcoRunBenign", len(ben))
+    m.add("FalcoNotRunAttacks", sum(r["kind"] in ("stop", "miss") for r in res if not r["ran"]))
+    m.add("FalcoNotRunControls", sum(r["kind"] == "control" for r in res if not r["ran"]))
+    m.add("FalcoSeparAttacks", sum(r["separ_decision"] in ("block", "hold") for r in att))
+    m.add("FalcoSeparBenign", sum(r["separ_decision"] in ("block", "hold") for r in ben))
+    for p, name in (("stable", "Stable"), ("all", "All")):
+        m.add(f"Falco{name}Attacks", sum(bool(r[f"falco_{p}"]) for r in att))
+        m.add(f"Falco{name}Benign", sum(bool(r[f"falco_{p}"]) for r in ben))
+        m.add(f"Falco{name}Control", passes[p]["positive_control_alerts"])
+    lines = []
+    for r in ran:
+        for h in r["falco_all"]:
+            if r["falco_stable"]:
+                raise SystemExit("a default-rule hit: the table below assumes there is none")
+            what = f"{h['event']}" + (f" {h['l4proto']}/{h['remote_port']}" if h["l4proto"] else "")
+            kind = "attack" if r["kind"] in ("stop", "miss") else "benign"
+            lines.append(
+                f"\\texttt{{{tex(r['template_id'])}}} ({kind}) & {h['rule']} & "
+                f"\\texttt{{{tex(h['process'])}}}: {tex(what)} & {r['separ_decision'].upper()} \\\\"
+            )
+    m.add("FalcoHitRows", "\n".join(lines))
+
+
 def audit(m: Macros) -> None:
     from refmon.audit import run_audit
 
@@ -284,6 +320,7 @@ def main(argv=None) -> int:
     variants(m)
     golden(m)
     lab(m)
+    falco(m)
     audit(m)
     policy_numbers(m)
     Path(args.out).write_text(m.render(), encoding="utf-8")

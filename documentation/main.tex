@@ -69,7 +69,10 @@
       neutral benign variants were blocked. The evaluation is synthetic: every scenario is a
       harmless stand-in, the weights are not fitted, and the golden catalog shaped the rules.
       In block mode Separ also blocks legitimate install instructions pasted from the web
-      (\CtlWebBlock{} of \CtlWebTotal{} everyday controls). It is not a complete reference monitor.
+      (\CtlWebBlock{} of \CtlWebTotal{} everyday controls). On the \FalcoRunAttacks{} runnable
+      Attack Lab stand-ins, written by the same author, Falco's \FalcoRulesStable{} default rules
+      raised no alert and its \FalcoRulesAll{} active rules alerted on \FalcoAllAttacks{}; Separ held
+      or blocked \FalcoSeparAttacks{}. It is not a complete reference monitor.
     \end{abstract}
     \noindent\textbf{Keywords:} command mediation, provenance, role contracts, evidence
     combination, ClickFix, keyed hashing.\par\vspace{0.8em}
@@ -451,9 +454,46 @@ v1.1, because popular hosts also serve payloads). Only a trusted \emph{source} w
 allow override that must not cover hosts where anyone can publish. Typed, the same commands are held,
 never blocked. \texttt{pip install}, \texttt{docker run} and \texttt{ssh user@host} were allowed
 because their text names no host, so the analysis sees no network use; this is a gap, not
-leniency. A Falco baseline on the same commands was not measured
-\todo{run Falco's default rules on the Attack Lab commands as a measured baseline; neither Falco
-nor a container runtime was available on the evaluation machine}.
+leniency.
+
+\paragraph{A measured Falco baseline.} Falco~\cite{falco2024cncf} judges system calls, so it can
+only judge what runs. The \FalcoRunAttacks{} attack templates (the known limit included) and the
+\FalcoRunBenign{} benign templates that the lab may execute were run in the same sandbox, each in
+its own session, while Falco~\FalcoVersion{} (modern eBPF probe) watched: once with its
+\FalcoRulesStable{} default rules and once adding its incubating and sandbox rule sets
+(\FalcoRulesAll{} of \FalcoRulesAllLoaded{} rules active, as shipped). Alerts were attributed to a
+template by its session id, and in each pass a positive control (reading \texttt{/etc/shadow}) had
+to raise an alert before any template ran (\texttt{scripts/falco\_baseline.sh}). \textbf{The
+default rules raised no alert on any template.} With all rules Falco alerted on
+\FalcoAllAttacks{} attacks and \FalcoAllBenign{} benign command (Table~\ref{tab:falco}); the
+reverse-shell alert fired on the shell's name lookups (UDP port 53), because the stand-in's host
+never resolves. Separ held or blocked \FalcoSeparAttacks{} of the same \FalcoRunAttacks{} attacks
+and \FalcoSeparBenign{} of the benign commands.
+
+This comparison favours Separ and is narrow. The templates were written by Separ's author while
+its rules were built; Falco's rules target containers and known techniques and were not tuned to
+this host; stand-ins that never reach the network cannot trigger network rules; Falco decides
+after an action and Separ before it. The other \FalcoNotRunAttacks{} attack templates and the
+\FalcoNotRunControls{} everyday controls were not run, because they would change the real system,
+so Falco's behaviour on the commands where Separ blocks legitimate pastes was not measured. The
+result says what each tool flags in its shipped configuration on this set, not how well either
+detects attacks in general.
+
+\begin{table}[t]
+\centering\footnotesize
+\caption{Every alert of Falco~\FalcoVersion{} on the runnable Attack Lab templates with all
+\FalcoRulesAll{} active rules (the \FalcoRulesStable{} default rules raised none), and Separ's
+decision on the same template.}
+\label{tab:falco}
+\begin{tabularx}{\columnwidth}{@{}>{\raggedright\arraybackslash}p{0.27\columnwidth}%
+>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}p{0.22\columnwidth}l@{}}
+\toprule
+\textbf{Template} & \textbf{Falco rule} & \textbf{Event} & \textbf{Separ} \\
+\midrule
+\FalcoHitRows
+\bottomrule
+\end{tabularx}
+\end{table}
 
 \paragraph{Ablation.} Of the \LabScored{} attack blocks that rest on the score rather than an
 override, removing any single Contract or Effect signal leaves \LabAblSilent{} allowed silently,
