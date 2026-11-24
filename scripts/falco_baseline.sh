@@ -100,12 +100,12 @@ run_pass() {  # $1 = pass name, rest = rules files
 }
 
 "$PY" - "$OUT/meta.json" "${ALL[@]}" <<'EOF'
-import json, platform, subprocess, sys, hashlib, pathlib
+import json, platform, re, subprocess, sys, hashlib, pathlib
 v = subprocess.run(["falco", "--version"], capture_output=True, text=True).stdout.splitlines()
 files = {pathlib.Path(p).name: hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()[:16]
          for p in sys.argv[2:]}
 json.dump({"falco_version": v[0] if v else "unknown", "engine": "modern_ebpf",
-           "kernel": platform.release(), "rules_sha256_16": files,
+           "kernel": re.match(r"[0-9.]+", platform.release()).group(0), "rules_sha256_16": files,
            "templates_run_as": "the invoking user, lab sandbox, 5 s timeout"},
           open(sys.argv[1], "w"), indent=1)
 EOF

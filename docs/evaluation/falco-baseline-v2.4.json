@@ -3,7 +3,7 @@
  "meta": {
   "falco_version": "Falco version: 0.45.2",
   "engine": "modern_ebpf",
-  "kernel": "7.1.5+kali-amd64",
+  "kernel": "7.1.5",
   "rules_sha256_16": {
    "falco_rules.yaml": "30a1a60263ab9765",
    "falco-incubating_rules.yaml": "47bf87041e2f39ca",
