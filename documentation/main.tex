@@ -550,54 +550,52 @@ specification. Every number in the paper is generated from the committed data by
 \section{Figures}
 \label{app:figs}
 
+% Two full-width figures per page, each placed at the size it was drawn (make_figures.py).
 \begin{figure}[!htbp]
   \centering
-  \includegraphics[width=0.95\textwidth]{figures/fig_rounds.pdf}
+  \includegraphics{figures/fig_rounds.pdf}
   \caption{Every recorded seed and the two versions it was used for (shared variants only):
-  containment of malicious variants and false blocks of neutral benign variants (the earliest seeds
-  had no benign variants).}
+  (a)~containment of malicious variants, (b)~false blocks of neutral benign variants (the earliest
+  seeds had no benign variants).}
   \label{fig:rounds}
-\end{figure}
-
-\begin{figure}[!htbp]
-  \centering
-  \includegraphics[width=0.62\textwidth]{figures/fig_scenarios.pdf}
-  \caption{Outcome per malicious scenario on seed \Seed{}. S57/S58 are login stories whose identity
-  rules are in observe mode (holds that pause nothing).}
+  \vspace{3em}
+  \includegraphics{figures/fig_scenarios.pdf}
+  \caption{Outcome per malicious scenario on seed \Seed{}, strongest first (left column, then
+  right). S57/S58 are login stories whose identity rules are in observe mode (holds that pause
+  nothing).}
   \label{fig:scenarios}
 \end{figure}
 
-\begin{figure}[!htbp]
+\begin{figure}[p]
   \centering
-  \includegraphics[width=0.62\textwidth]{figures/fig_dimensions.pdf}
-  \caption{Malicious variants by mutation dimension on seed \Seed.}
+  \includegraphics{figures/fig_dimensions.pdf}
+  \caption{Malicious variants by mutation dimension on seed \Seed{}: share contained (with its
+  Wilson 95\,\% interval) and share blocked outright.}
   \label{fig:dimensions}
-\end{figure}
-
-\begin{figure}[!htbp]
-  \centering
-  \includegraphics[width=0.62\textwidth]{figures/fig_lab_evidence.pdf}
+  \vspace{3em}
+  \includegraphics{figures/fig_lab_evidence.pdf}
   \caption{Attack Lab: posterior log-odds of every template and recorded control, with $\tau_h$ and
-  $\tau_b$.}
+  $\tau_b$: (a)~attacks and the known limit, (b)~benign commands and the recorded controls.}
   \label{fig:labevidence}
 \end{figure}
 
-\begin{figure}[!htbp]
+\begin{figure}[p]
   \centering
-  \includegraphics[width=0.62\textwidth]{figures/fig_lab_signals.pdf}
-  \caption{Attack Lab: which questions and signals caught the attacks.}
+  \includegraphics{figures/fig_lab_signals.pdf}
+  \caption{Attack Lab: (a)~which of the three questions failed for the attacks, (b)~which signals
+  they raised.}
+  \label{fig:labsignals}
+  \vspace{3em}
+  \includegraphics{figures/fig_lab_ablation_latency.pdf}
+  \caption{Attack Lab: (a)~single-signal ablation of the score-based blocks, (b)~decision latency.}
+  \label{fig:labablation}
 \end{figure}
 
-\begin{figure}[!htbp]
+\begin{figure}[!t]
   \centering
-  \includegraphics[width=0.62\textwidth]{figures/fig_lab_ablation_latency.pdf}
-  \caption{Attack Lab: single-signal ablation of the score-based blocks and decision latency.}
-\end{figure}
-
-\begin{figure}[!htbp]
-  \centering
-  \includegraphics[width=0.5\textwidth]{figures/fig_weights.pdf}
+  \includegraphics{figures/fig_weights.pdf}
   \caption{The \Weights{} signal weights of the default policy (expert-elicited, in nats).}
+  \label{fig:weights}
 \end{figure}
 
 \FloatBarrier

@@ -15,7 +15,8 @@ with a table.
 Visual system: light print surface; decisions on one blue ordinal ramp (allow light, hold mid, block
 dark), errors (an uncontained attack, a false block) in the reserved critical red and always named
 in a label; the three questions in categorical slots 1 to 3 (blue, orange, aqua) of the validated
-reference palette; recessive grid, no top or right spine, TeX Gyre Heros.
+reference palette; recessive grid, no top or right spine, TeX Gyre Heros (Helvetica). The appendix
+figures are drawn at the full text width and at most about 3.9 in tall, two to a page.
 """
 
 from __future__ import annotations
@@ -61,25 +62,24 @@ ERROR = "#d03b3b"  # status critical: an uncontained attack or a false block
 BEFORE = "#a3a29c"  # the version before a change (neutral)
 Q_COLORS = {"origin": "#2a78d6", "contract": "#eb6834", "effect": "#1baf7a"}  # slots 1-3
 COL, FULL = 3.41, 7.06  # inches: one column and the full text width of the paper
-WEIGHTS = 0.56 * FULL  # the appendix is one column wide
 
 
 def _setup() -> None:
-    tex = Path.home() / ".TinyTeX" / "texmf-dist" / "fonts" / "opentype" / "public" / "tex-gyre"
     family = "DejaVu Sans"
-    if (tex / "texgyreheros-regular.otf").is_file():
-        for name in ("regular", "bold", "italic"):
-            font_manager.fontManager.addfont(str(tex / f"texgyreheros-{name}.otf"))
-        family = "TeX Gyre Heros"
+    found = _kpsewhich([f"texgyreheros-{n}.otf" for n in ("regular", "bold", "italic")])
+    if len(found) == 3:
+        for path in found:
+            font_manager.fontManager.addfont(path)
+        family = "TeX Gyre Heros"  # Helvetica
     plt.rcParams.update(
         {
             "font.family": family,
-            "font.size": 7,
-            "axes.titlesize": 7.5,
+            "font.size": 8,
+            "axes.titlesize": 8.5,
             "axes.titleweight": "bold",
             "axes.titlelocation": "left",
-            "axes.titlepad": 6,
-            "axes.labelsize": 7,
+            "axes.titlepad": 7,
+            "axes.labelsize": 8,
             "axes.labelcolor": TEXT2,
             "axes.edgecolor": MUTED,
             "axes.linewidth": 0.6,
@@ -89,20 +89,46 @@ def _setup() -> None:
             "figure.facecolor": SURFACE,
             "xtick.color": TEXT2,
             "ytick.color": TEXT2,
-            "xtick.labelsize": 6.5,
-            "ytick.labelsize": 6.5,
+            "xtick.labelsize": 7.5,
+            "ytick.labelsize": 7.5,
             "xtick.major.width": 0.6,
             "ytick.major.width": 0,
             "xtick.major.size": 2.5,
             "ytick.major.size": 0,
-            "legend.fontsize": 6.5,
+            "legend.fontsize": 7.5,
             "legend.frameon": False,
+            "legend.handlelength": 1.1,
+            "legend.columnspacing": 1.2,
             "text.color": TEXT,
             "pdf.fonttype": 42,
             "savefig.bbox": "tight",
             "savefig.pad_inches": 0.02,
         }
     )
+
+
+def _kpsewhich(names: list[str]) -> list[str]:
+    """Paths of TeX Live font files (empty when kpsewhich or the files are missing)."""
+    import subprocess
+
+    try:
+        out = subprocess.run(["kpsewhich", *names], capture_output=True, text=True, check=False)
+    except OSError:
+        return []
+    return [line for line in out.stdout.splitlines() if line.strip()]
+
+
+def _top_legend(fig, handles, labels=None, *, titles: bool = True) -> None:
+    """One legend style for every figure: a single row at the top right, above the panel titles,
+    with the same room in inches whatever the figure's height."""
+    h = fig.get_size_inches()[1]
+    fig.subplots_adjust(top=1 - (0.5 if titles else 0.28) / h)
+    kw = {"loc": "upper right", "bbox_to_anchor": (1.0, 1.0), "ncol": len(handles),
+          "borderaxespad": 0.0}  # fmt: skip
+    if labels is None:
+        fig.legend(handles=handles, **kw)
+    else:
+        fig.legend(handles, labels, **kw)
 
 
 def _xgrid(ax) -> None:
@@ -211,7 +237,7 @@ def fig_rounds() -> Path:
             steps.append((seed, a, b, [data[a][k] for k in shared], [data[b][k] for k in shared]))
     steps.reverse()  # newest on top
     fig, (ax1, ax2) = plt.subplots(
-        1, 2, figsize=(FULL, 0.9 + 0.32 * len(steps)), sharey=True, gridspec_kw={"wspace": 0.08}
+        1, 2, figsize=(FULL, 0.8 + 0.21 * len(steps)), sharey=True, gridspec_kw={"wspace": 0.1}
     )
     ys = range(len(steps))
     lows = {0: [], 1: []}
@@ -229,20 +255,20 @@ def fig_rounds() -> Path:
             side = 0 if ax is ax1 else 1
             lows[side] += [va[1], vb[1]]
             highs[side] += [va[2], vb[2]]
-            for v, dy, color, face in ((va, 0.16, BEFORE, SURFACE), (vb, -0.16, BLOCK, BLOCK)):
+            for v, dy, color, face in ((va, 0.17, BEFORE, SURFACE), (vb, -0.17, BLOCK, BLOCK)):
                 ax.plot([v[1], v[2]], [y + dy, y + dy], color=color, linewidth=0.8, zorder=2)
                 ax.plot(v[0], y + dy, "o", ms=4.2, mfc=face, mec=color, mew=1.0, zorder=3)
             ax.annotate(
                 f"{vb[0]:.1f}%", (max(va[2], vb[2]), y), xytext=(4, 0), textcoords="offset points",
-                va="center", fontsize=6, color=TEXT,
+                va="center", fontsize=7, color=TEXT,
             )  # fmt: skip
-    labels = [f"{a} → {b}\nseed {seed}" for seed, a, b, _, _ in steps]
-    ax1.set_yticks(list(ys), labels, fontsize=6.2)
+    labels = [f"{a} → {b}   seed {seed}" for seed, a, b, _, _ in steps]
+    ax1.set_yticks(list(ys), labels)
     ax1.set_xlim(min(lows[0]) - 2, 101.5)
-    ax1.set_xlabel("malicious variants contained (block or effective hold), %")
+    ax1.set_xlabel("malicious variants contained, %")
     ax1.set_title("(a) Containment of attacks")
     ax2.set_xlim(-0.4, max(highs[1]) + 2.5)
-    ax2.set_xlabel("neutral benign variants blocked (false blocks), %")
+    ax2.set_xlabel("neutral benign variants blocked, %")
     ax2.set_title("(b) False blocks on harmless work")
     for ax in (ax1, ax2):
         _xgrid(ax)
@@ -252,7 +278,8 @@ def fig_rounds() -> Path:
         _dot(BLOCK, BLOCK, "version after the change"),
         Line2D([], [], color=TEXT2, lw=0.8, label="Wilson 95% interval"),
     ]  # fmt: skip
-    fig.legend(handles=handles, loc="upper center", ncol=3, bbox_to_anchor=(0.5, -0.06))
+    ax1.set_ylim(-0.6, len(steps) - 0.4)
+    _top_legend(fig, handles)
     return _save(fig, "fig_rounds", FULL)
 
 
@@ -346,36 +373,40 @@ def fig_scenarios() -> Path:
         n = sum(c.values())
         return ((c["block"] + c["effective hold"]) / n, c["block"] / n)
 
-    order = sorted(per, key=lambda s: (share(s), s))  # weakest at the bottom
-    fig, ax = plt.subplots(figsize=(COL, 0.6 + 0.135 * len(order)))
-    for y, sid in enumerate(order):
-        c = per[sid]
-        n = sum(c.values())
-        left = 0.0
-        unc = c["allow"] + c["hold pauses nothing"]
-        for value, color in ((c["block"], BLOCK), (c["effective hold"], HOLD), (unc, ERROR)):
-            w = 100 * value / n
-            if w:
-                ax.barh(y, w, left=left, height=0.68, color=color, edgecolor=SURFACE, linewidth=0.6)
-            left += w
-        if unc:
-            ax.text(101.5, y, f"{unc}/{n} missed", va="center", fontsize=5.8, color=ERROR)
+    order = sorted(per, key=lambda s: (-share(s)[0], -share(s)[1], s))  # strongest first
+    half = (len(order) + 1) // 2
+    columns = [order[:half], order[half:]]
     titles = scenario_titles()
-    short = {k: (v if len(v) <= 34 else v[:33].rstrip() + "…") for k, v in titles.items()}
-    ax.set_yticks(range(len(order)), [f"{s}  {short.get(s, s)}" for s in order], fontsize=5.6)
-    ax.set_xlim(0, 100)
-    ax.set_xticks([0, 25, 50, 75, 100])
-    ax.set_xlabel(f"share of mutated variants, % ({version}, seed {seed})")
-    ax.spines["left"].set_visible(False)
-    ax.set_title("Outcome per malicious scenario", loc="left", pad=16)
-    ax.legend(
-        [Patch(color=BLOCK), Patch(color=HOLD), Patch(color=ERROR)],
-        ["Block", "Effective hold", "Uncontained"],
-        loc="lower right", bbox_to_anchor=(1.02, 0.995), ncol=3, handlelength=1.0,
-        borderaxespad=0.2,
-    )  # fmt: skip
-    ax.set_ylim(-0.6, len(order) - 0.4)
-    return _save(fig, "fig_scenarios", COL)
+    short = {k: (v if len(v) <= 31 else v[:30].rstrip() + "…") for k, v in titles.items()}
+    fig, axes = plt.subplots(1, 2, figsize=(FULL, 0.75 + 0.158 * half), gridspec_kw={"wspace": 1.8})
+    for ax, part in zip(axes, columns, strict=True):
+        for i, sid in enumerate(part):
+            y = len(part) - 1 - i  # first at the top
+            c = per[sid]
+            n = sum(c.values())
+            left = 0.0
+            unc = c["allow"] + c["hold pauses nothing"]
+            for value, color in ((c["block"], BLOCK), (c["effective hold"], HOLD), (unc, ERROR)):
+                w = 100 * value / n
+                if w:
+                    ax.barh(y, w, left=left, height=0.7, color=color, edgecolor=SURFACE,
+                            linewidth=0.6)  # fmt: skip
+                left += w
+            if unc:
+                ax.text(102, y, f"{unc}/{n} missed", va="center", fontsize=7, color=ERROR,
+                        clip_on=False)  # fmt: skip
+        ax.set_yticks(
+            [len(part) - 1 - i for i in range(len(part))],
+            [f"{s}  {short.get(s, s)}" for s in part],
+        )
+        ax.set_ylim(-0.6, half - 0.4)
+        ax.set_xlim(0, 100)
+        ax.set_xticks([0, 25, 50, 75, 100])
+        ax.set_xlabel("share of mutated variants, %")
+        ax.spines["left"].set_visible(False)
+    _top_legend(fig, [Patch(color=BLOCK), Patch(color=HOLD), Patch(color=ERROR)],
+                ["Block", "Effective hold", "Uncontained"], titles=False)  # fmt: skip
+    return _save(fig, "fig_scenarios", FULL)
 
 
 # -- figure 4: robustness per mutation dimension -------------------------------------------------
@@ -405,7 +436,7 @@ def fig_dimensions() -> Path:
             n, _pct(sum(map(contained, rs)), n), _pct(sum(r["decision"] == "block" for r in rs), n)
         )  # fmt: skip
     order = sorted(stats, key=lambda d: (stats[d][1][0], stats[d][2][0]))
-    fig, ax = plt.subplots(figsize=(COL, 2.55))
+    fig, ax = plt.subplots(figsize=(FULL, 2.7))
     for y, dim in enumerate(order):
         n, cont, blk = stats[dim]
         ax.plot(
@@ -415,23 +446,18 @@ def fig_dimensions() -> Path:
         ax.plot(blk[0], y, "o", ms=4.2, mfc=SURFACE, mec=HOLD, mew=1.0, zorder=3)
         ax.plot(cont[0], y, "o", ms=4.4, mfc=BLOCK, mec=BLOCK, zorder=3)
         ax.annotate(f"{cont[0]:.0f}%", (cont[0], y), xytext=(6, 0), textcoords="offset points",
-                    va="center", fontsize=6)  # fmt: skip
-    ax.set_yticks(range(len(order)), [f"{d}  (n={stats[d][0]})" for d in order], fontsize=6.2)
-    floor = 10 * int(min(stats[d][2][0] for d in stats) // 10)
+                    va="center", fontsize=7)  # fmt: skip
+    ax.set_yticks(range(len(order)), [f"{d}  (n={stats[d][0]})" for d in order])
+    floor = 10 * int(min(min(stats[d][2][0], stats[d][1][1]) for d in stats) // 10)
     ax.set_xlim(floor, 106)
     ax.set_xticks(list(range(floor, 101, 10)))
     ax.set_xlabel(f"malicious variants, % ({version}, seed {seed})")
     _xgrid(ax)
     ax.spines["left"].set_visible(False)
-    ax.set_title("Robustness by mutation dimension", loc="left")
-    ax.legend(
-        handles=[
-            _dot(BLOCK, BLOCK, "contained (95% CI)"),
-            _dot(SURFACE, HOLD, "blocked outright"),
-        ],
-        loc="upper center", bbox_to_anchor=(0.4, -0.2), ncol=2,
-    )  # fmt: skip
-    return _save(fig, "fig_dimensions", COL)
+    ax.set_ylim(-0.6, len(order) - 0.4)
+    _top_legend(fig, [_dot(BLOCK, BLOCK, "contained, with Wilson 95% interval"),
+                      _dot(SURFACE, HOLD, "blocked outright")], titles=False)  # fmt: skip
+    return _save(fig, "fig_dimensions", FULL)
 
 
 # -- figure 5: attack lab evidence ---------------------------------------------------------------
@@ -444,23 +470,13 @@ def _lab_kind(r: dict) -> str:
     return {"stop": "attack", "miss": "limit", "allow": "benign"}[r["kind"]]
 
 
-def fig_lab_evidence() -> Path:
-    meta, res = lab()
-    prior, tb, th = meta["prior"], meta["tau_block"], meta["tau_hold"]
-    names = {"attack": "Attacks", "limit": "Known limit", "benign": "Benign (typed, no network)",
-             "control-web": "Everyday commands pasted from the web",
-             "control-typed": "Everyday network commands typed"}  # fmt: skip
-    count = Counter(_lab_kind(r) for r in res)
-    groups = [(k, f"{names[k]} ({count[k]})") for k in names if count[k]]
-    # top to bottom: a heading row, then the group sorted by evidence (strongest first)
+def _evidence_panel(ax, groups, res, prior, tb, th, lo_x, hi_x, rows_max) -> None:
     lines: list[tuple[str, dict | None]] = []
     for kind, name in groups:
         lines.append((name, None))
         part = sorted((r for r in res if _lab_kind(r) == kind), key=lambda r: -r["log_odds"])
         lines.extend((r["template_id"].replace("_", " "), r) for r in part)
-    lines.reverse()  # y grows upward
-    fig, ax = plt.subplots(figsize=(COL, 0.9 + 0.088 * len(lines)))
-    lo_x, hi_x = prior - 0.25, max(r["log_odds"] for r in res) + 1.15
+    top = rows_max - 1  # every panel is aligned at the top
     ax.axvspan(lo_x, th, color=TRACK, lw=0, zorder=0)
     ax.axvspan(th, tb, color="#e7f0fb", lw=0, zorder=0)
     ax.axvspan(tb, hi_x, color="#dbe7f7", lw=0, zorder=0)
@@ -468,10 +484,11 @@ def fig_lab_evidence() -> Path:
     ax.axvline(tb, color=BLOCK, lw=0.7, zorder=1)
     colors = {"allow": ALLOW, "hold": HOLD, "block": BLOCK}
     ticks, names = [], []
-    for y, (name, r) in enumerate(lines):
+    for i, (name, r) in enumerate(lines):
+        y = top - i
         if r is None:
-            ax.text(lo_x + 0.08, y, name, va="center", ha="left", fontsize=6.4, fontweight="bold",
-                    color=TEXT)  # fmt: skip
+            ax.text(lo_x + 0.08, y, name, va="center", ha="left", fontsize=7.5,
+                    fontweight="bold", color=TEXT)  # fmt: skip
             continue
         ticks.append(y)
         names.append(name)
@@ -481,35 +498,48 @@ def fig_lab_evidence() -> Path:
         color = ERROR if (missed or false_alarm) else colors[dec]
         ax.plot([prior, r["log_odds"]], [y, y], color=color, lw=1.0, zorder=2)
         marker = "D" if r["override"] else "o"
-        ax.plot(r["log_odds"], y, marker, ms=3.7 if marker == "D" else 4.1, color=color, zorder=3)
+        ax.plot(r["log_odds"], y, marker, ms=3.8 if marker == "D" else 4.3, color=color, zorder=3)
         note = r["override"].replace("_", " ") if r["override"] else ("missed" if missed else "")
         if note:
             ax.annotate(note, (r["log_odds"], y), xytext=(5, 0), textcoords="offset points",
-                        va="center", fontsize=5.4, color=ERROR if missed else TEXT2)  # fmt: skip
-    ax.set_yticks(ticks, names, fontsize=5.9)
+                        va="center", fontsize=6.5, color=ERROR if missed else TEXT2)  # fmt: skip
+    ax.set_yticks(ticks, names, fontsize=7)
     ax.set_xlim(lo_x, hi_x)
-    ax.set_ylim(-0.8, len(lines) - 0.3)
-    top = len(lines) - 0.3
-    ax.text(
-        th - 0.06, top, f"HOLD \u2265 {th:.2f}", ha="right", va="bottom", fontsize=5.8, color=HOLD
-    )
-    ax.text(tb + 0.06, top, f"BLOCK \u2265 {tb:.2f}", ha="left", va="bottom", fontsize=5.8,
+    ax.set_ylim(top - rows_max + 0.3, top + 0.7)
+    ax.text(th - 0.06, top + 0.7, f"HOLD ≥ {th:.2f}", ha="right", va="bottom", fontsize=7,
+            color=HOLD)  # fmt: skip
+    ax.text(tb + 0.06, top + 0.7, f"BLOCK ≥ {tb:.2f}", ha="left", va="bottom", fontsize=7,
             color=BLOCK)  # fmt: skip
-    ax.set_xlabel(f"posterior log-odds L (nats); each stem starts at the prior {prior:.2f}")
+    ax.set_xlabel(f"posterior log-odds L (nats), from the prior {prior:.2f}")
     ax.spines["left"].set_visible(False)
-    ax.set_title("Attack lab: evidence per command", loc="left", pad=22)
-    ax.legend(
-        handles=[
-            Line2D([], [], marker="o", color=BLOCK, lw=1, ms=4, label="Block"),
-            Line2D([], [], marker="o", color=HOLD, lw=1, ms=4, label="Hold"),
-            Line2D([], [], marker="o", color=ALLOW, lw=1, ms=4, label="Allow"),
-            Line2D([], [], marker="o", color=ERROR, lw=1, ms=4, label="Missed"),
-            Line2D([], [], marker="D", color=TEXT2, lw=0, ms=3.6, label="override"),
-        ],
-        loc="lower left", bbox_to_anchor=(-0.02, 1.012), ncol=5, handlelength=1.3,
-        columnspacing=0.8, borderaxespad=0.1,
-    )  # fmt: skip
-    return _save(fig, "fig_lab_evidence", COL)
+
+
+def fig_lab_evidence() -> Path:
+    meta, res = lab()
+    prior, tb, th = meta["prior"], meta["tau_block"], meta["tau_hold"]
+    names = {"attack": "Attacks", "limit": "Known limit", "benign": "Benign (typed, no network)",
+             "control-web": "Everyday commands pasted from the web",
+             "control-typed": "Everyday network commands typed"}  # fmt: skip
+    count = Counter(_lab_kind(r) for r in res)
+    panels = [["attack", "limit"], ["benign", "control-web", "control-typed"]]
+    groups = [[(k, f"{names[k]} ({count[k]})") for k in p if count[k]] for p in panels]
+    rows_max = max(len(g) + sum(count[k] for k, _ in g) for g in groups)
+    lo_x, hi_x = prior - 0.25, max(r["log_odds"] for r in res) + 1.3
+    fig, axes = plt.subplots(
+        1, 2, figsize=(FULL, 0.85 + 0.105 * rows_max), gridspec_kw={"wspace": 0.42}
+    )
+    for ax, g in zip(axes, groups, strict=True):
+        _evidence_panel(ax, g, res, prior, tb, th, lo_x, hi_x, rows_max)
+    axes[0].set_title("(a) Attacks and the known limit", pad=16)
+    axes[1].set_title("(b) Benign commands and recorded controls", pad=16)
+    _top_legend(fig, [
+        Line2D([], [], marker="o", color=BLOCK, lw=1, ms=4, label="Block"),
+        Line2D([], [], marker="o", color=HOLD, lw=1, ms=4, label="Hold"),
+        Line2D([], [], marker="o", color=ALLOW, lw=1, ms=4, label="Allow"),
+        Line2D([], [], marker="o", color=ERROR, lw=1, ms=4, label="Missed attack"),
+        Line2D([], [], marker="D", color=TEXT2, lw=0, ms=3.6, label="Override"),
+    ])  # fmt: skip
+    return _save(fig, "fig_lab_evidence", FULL)
 
 
 # -- figure 6: which questions and signals caught the lab attacks --------------------------------
@@ -519,9 +549,12 @@ def fig_lab_signals() -> Path:
     _, res = lab()
     attacks = [r for r in res if _lab_kind(r) == "attack"]
     n = len(attacks)
+    freq = Counter(s for r in attacks for s in r["signals"])
+    top = freq.most_common(14)[::-1]
     fig, (ax1, ax2) = plt.subplots(
-        2, 1, figsize=(COL, 3.9), gridspec_kw={"height_ratios": [1.0, 2.6], "hspace": 0.55}
-    )
+        1, 2, figsize=(FULL, 0.8 + 0.17 * len(top)), gridspec_kw={"wspace": 0.45,
+                                                                 "width_ratios": [1, 1.35]}
+    )  # fmt: skip
     qs = [("Origin", "origin"), ("Contract", "contract"), ("Effect", "effect")]
     vals = [sum(r[f"{q}_failed"] for r in attacks) for _, q in qs]
     extra = [("all three", sum(r["fails"] == 3 for r in attacks)),
@@ -529,34 +562,33 @@ def fig_lab_signals() -> Path:
     names = [name for name, _ in qs] + [name for name, _ in extra]
     values = vals + [v for _, v in extra]
     colors = [Q_COLORS[q] for _, q in qs] + [MUTED, MUTED]
-    ys = list(range(len(names)))[::-1]
-    ax1.barh(ys, values, height=0.62, color=colors)
-    for y, v in zip(ys, values, strict=True):
-        ax1.text(v + 0.4, y, f"{v}/{n}", va="center", fontsize=6)
-    ax1.set_yticks(ys, names, fontsize=6.3)
-    ax1.set_xlim(0, n + 3.5)
-    ax1.set_xlabel(f"lab attacks (of {n}) in which the question failed")
-    _xgrid(ax1)
-    ax1.spines["left"].set_visible(False)
-    ax1.set_title("(a) Which of the three questions caught the attacks")
-    freq = Counter(s for r in attacks for s in r["signals"])
-    top = freq.most_common(14)[::-1]
+    xs = range(len(names))
+    ax1.bar(list(xs), values, width=0.62, color=colors)
+    for x, v in zip(xs, values, strict=True):
+        ax1.text(x, v + 0.5, f"{v}/{n}", ha="center", va="bottom", fontsize=7)
+    ax1.set_xticks(list(xs), [nm.replace(" outside ", "\noutside ") for nm in names])
+    ax1.tick_params(axis="x", length=0)
+    ax1.tick_params(axis="y", length=2.5, width=0.6)
+    ax1.set_ylim(0, n + 3)
+    ax1.set_ylabel(f"lab attacks (of {n}) where it failed")
+    ax1.grid(axis="y", color=GRID, linewidth=0.5)
+    ax1.set_axisbelow(True)
+    ax1.set_title("(a) Which questions caught the attacks")
     ys2 = range(len(top))
     ax2.barh(list(ys2), [c for _, c in top], height=0.62,
              color=[Q_COLORS[s.split("_", 1)[0]] for s, _ in top])  # fmt: skip
     for y, (_, c) in zip(ys2, top, strict=True):
-        ax2.text(c + 0.25, y, str(c), va="center", fontsize=6)
-    ax2.set_yticks(list(ys2), [s.split("_", 1)[1].replace("_", " ") for s, _ in top], fontsize=6.2)
+        ax2.text(c + 0.25, y, str(c), va="center", fontsize=7)
+    ax2.set_yticks(list(ys2), [s.split("_", 1)[1].replace("_", " ") for s, _ in top])
     ax2.set_xlabel(f"lab attacks (of {n}) raising the signal")
     ax2.set_xlim(0, max(c for _, c in top) + 2)
+    ax2.set_ylim(-0.6, len(top) - 0.4)
     _xgrid(ax2)
     ax2.spines["left"].set_visible(False)
-    ax2.set_title("(b) Signals raised, by question")
-    ax2.legend(
-        [Patch(color=Q_COLORS["contract"]), Patch(color=Q_COLORS["effect"])],
-        ["Contract signal", "Effect signal"], loc="lower right", handlelength=1.0,
-    )  # fmt: skip
-    return _save(fig, "fig_lab_signals", COL)
+    ax2.set_title("(b) Signals raised")
+    _top_legend(fig, [Patch(color=Q_COLORS[q]) for q in ("origin", "contract", "effect")],
+                ["Origin", "Contract", "Effect"])  # fmt: skip
+    return _save(fig, "fig_lab_signals", FULL)
 
 
 # -- figure 7: ablation and latency --------------------------------------------------------------
@@ -573,24 +605,19 @@ def fig_lab_ablation_latency() -> Path:
         out = _worst_single_removal(SimpleNamespace(signals=r["signals"], log_odds=r["log_odds"]),
                                     weights, tb, th)  # fmt: skip
         worst[out[0] if out else "BLOCK"] += 1
-    fig, (ax1, ax2) = plt.subplots(
-        2, 1, figsize=(COL, 2.75), gridspec_kw={"height_ratios": [0.62, 1.6], "hspace": 0.95}
-    )
-    left = 0
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(FULL, 2.3), gridspec_kw={"wspace": 0.45})
     total = len(blocks)
-    for key, color, name in (("ALLOW", ERROR, "silently allowed"), ("HOLD", HOLD, "held"),
-                             ("BLOCK", BLOCK, "still blocked")):  # fmt: skip
-        v = worst[key]
-        ax1.barh(0, v, left=left, height=0.62, color=color, edgecolor=SURFACE, linewidth=1.0)
-        text = f"{v} {name}" if v >= 3 else str(v)
-        ax1.text(left + v / 2, 0, text, ha="center", va="center", fontsize=6.3,
-                 color=SURFACE, fontweight="bold")  # fmt: skip
-        left += v
-    ax1.set_xlim(0, total)
-    ax1.set_yticks([])
-    ax1.set_xticks(sorted({*range(0, total, 5), total}))
+    cats = [("BLOCK", BLOCK, "still blocked"), ("HOLD", HOLD, "held"),
+            ("ALLOW", ERROR, "silently allowed")]  # fmt: skip
+    ys = list(range(len(cats)))[::-1]
+    for y, (key, color, _) in zip(ys, cats, strict=True):
+        ax1.barh(y, worst[key], height=0.5, color=color)
+        ax1.text(worst[key] + 0.3, y, f"{worst[key]}/{total}", va="center", fontsize=7)
+    ax1.set_yticks(ys, [name for _, _, name in cats])
+    ax1.set_xlim(0, total + 2.5)
+    ax1.set_xlabel(f"score-based lab blocks (of {total}), worst single signal removed")
+    _xgrid(ax1)
     ax1.spines["left"].set_visible(False)
-    ax1.set_xlabel(f"score-based lab blocks (of {total}), worst case with one signal removed")
     ax1.set_title("(a) Single-signal ablation (contract gate applied)")
     ms = sorted(r["judge_ms"] for r in res if _lab_kind(r) in ("attack", "limit", "benign"))
     med = statistics.median(ms)
@@ -598,15 +625,16 @@ def fig_lab_ablation_latency() -> Path:
     ax2.hist(ms, bins=edges, color=HOLD, edgecolor=SURFACE, linewidth=0.6)
     ax2.set_xscale("log")
     ax2.axvline(med, color=BLOCK, lw=0.9)
-    ax2.text(med * 1.08, ax2.get_ylim()[1] * 0.92, f"median {med:.1f} ms", fontsize=6, color=BLOCK,
-             va="top")  # fmt: skip
-    ax2.set_xlabel("decision time per command, ms (log scale; before the command starts)")
+    ax2.text(med * 1.08, ax2.get_ylim()[1] * 0.95, f"median {med:.1f} ms", fontsize=7,
+             color=BLOCK, va="top")  # fmt: skip
+    ax2.set_xlabel("decision time per command, ms (log scale)")
     ax2.set_ylabel("commands")
     ax2.grid(axis="y", color=GRID, linewidth=0.5)
     ax2.set_axisbelow(True)
     ax2.set_title(f"(b) Decision latency, {len(ms)} lab templates")
     ax2.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:g}"))
-    return _save(fig, "fig_lab_ablation_latency", COL)
+    fig.subplots_adjust(top=1 - 0.3 / fig.get_size_inches()[1])
+    return _save(fig, "fig_lab_ablation_latency", FULL)
 
 
 # -- figure 8: the signal weights ----------------------------------------------------------------
@@ -614,29 +642,35 @@ def fig_lab_ablation_latency() -> Path:
 
 def fig_weights() -> Path:
     weights = dict(default_policy().math.weights)
-    order = []
-    for q in ("origin", "contract", "effect"):
-        part = sorted((s for s in weights if s.startswith(q + "_")), key=lambda s: weights[s])
-        order.extend(part)
-    order = order[::-1]
-    fig, ax = plt.subplots(figsize=(COL, 3.9))
-    ys = range(len(order))[::-1]
-    for y, s in zip(ys, order, strict=True):
-        ax.barh(y, weights[s], height=0.64, color=Q_COLORS[s.split("_", 1)[0]])
-    names = [s.split("_", 1)[1].replace("_", " ") for s in order]
-    ax.set_yticks(
-        list(ys), ["external origin" if n == "external" else n for n in names], fontsize=6.1
+
+    def part(*qs: str) -> list[str]:
+        out = []
+        for q in qs:
+            out += sorted((s for s in weights if s.startswith(q + "_")), key=lambda s: -weights[s])
+        return out
+
+    panels = [part("origin", "contract"), part("effect")]
+    n_rows = max(map(len, panels))
+    fig, axes = plt.subplots(
+        1, 2, figsize=(FULL, 0.8 + 0.175 * n_rows), sharex=True, gridspec_kw={"wspace": 0.6}
     )
-    ax.set_xlabel("weight w (nats) = ln P(signal | attack) / P(signal | benign)")
-    ax.set_xlim(0, max(weights.values()) + 0.5)
-    _xgrid(ax)
-    ax.spines["left"].set_visible(False)
-    ax.set_title("Signal weights of the default policy (expert-elicited)", loc="left")
-    ax.legend(
-        [Patch(color=Q_COLORS[q]) for q in ("origin", "contract", "effect")],
-        ["Origin", "Contract", "Effect"], loc="lower right", handlelength=1.0,
-    )  # fmt: skip
-    return _save(fig, "fig_weights", WEIGHTS)
+    for ax, order, title in zip(axes, panels, ("(a) Origin and Contract", "(b) Effect"),
+                                strict=True):  # fmt: skip
+        ys = [n_rows - 1 - i for i in range(len(order))]
+        for y, sig in zip(ys, order, strict=True):
+            ax.barh(y, weights[sig], height=0.64, color=Q_COLORS[sig.split("_", 1)[0]])
+            ax.text(weights[sig] + 0.06, y, f"{weights[sig]:g}", va="center", fontsize=7)
+        names = [sig.split("_", 1)[1].replace("_", " ") for sig in order]
+        ax.set_yticks(ys, ["external origin" if n == "external" else n for n in names])
+        ax.set_ylim(-0.6, n_rows - 0.4)
+        ax.set_xlim(0, max(weights.values()) + 0.6)
+        ax.set_xlabel("weight w (nats)")
+        _xgrid(ax)
+        ax.spines["left"].set_visible(False)
+        ax.set_title(title)
+    _top_legend(fig, [Patch(color=Q_COLORS[q]) for q in ("origin", "contract", "effect")],
+                ["Origin", "Contract", "Effect"])  # fmt: skip
+    return _save(fig, "fig_weights", FULL)
 
 
 FIGURES = [
