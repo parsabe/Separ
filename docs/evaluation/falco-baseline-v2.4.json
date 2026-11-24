@@ -1,0 +1,552 @@
+{
+ "source": "scripts/falco_baseline.py with scripts/falco_baseline.sh; rule names and priorities only, Falco's raw alerts are not committed",
+ "meta": {
+  "falco_version": "Falco version: 0.45.2",
+  "engine": "modern_ebpf",
+  "kernel": "7.1.5+kali-amd64",
+  "rules_sha256_16": {
+   "falco_rules.yaml": "30a1a60263ab9765",
+   "falco-incubating_rules.yaml": "47bf87041e2f39ca",
+   "falco-sandbox_rules.yaml": "f05ad34f07c43930"
+  },
+  "templates_run_as": "the invoking user, lab sandbox, 5 s timeout",
+  "passes": {
+   "stable": {
+    "alerts_total": 1,
+    "positive_control_alerts": 1,
+    "alerts_outside_the_templates": 0,
+    "rules_loaded": 25,
+    "rules_active": 25
+   },
+   "all": {
+    "alerts_total": 17,
+    "positive_control_alerts": 1,
+    "alerts_outside_the_templates": 3,
+    "rules_loaded": 95,
+    "rules_active": 81
+   }
+  },
+  "separ_reference": "lab-reference-run-v2.4.json"
+ },
+ "results": [
+  {
+   "template_number": 1,
+   "template_id": "clickfix",
+   "kind": "stop",
+   "ran": true,
+   "separ_decision": "block",
+   "falco_stable": [],
+   "exit_stable": 0,
+   "falco_all": [],
+   "exit_all": 0
+  },
+  {
+   "template_number": 2,
+   "template_id": "clickfix_obf",
+   "kind": "stop",
+   "ran": true,
+   "separ_decision": "block",
+   "falco_stable": [],
+   "exit_stable": 0,
+   "falco_all": [],
+   "exit_all": 0
+  },
+  {
+   "template_number": 3,
+   "template_id": "mail_b64",
+   "kind": "stop",
+   "ran": true,
+   "separ_decision": "block",
+   "falco_stable": [],
+   "exit_stable": 0,
+   "falco_all": [],
+   "exit_all": 0
+  },
+  {
+   "template_number": 4,
+   "template_id": "ai_injection",
+   "kind": "stop",
+   "ran": true,
+   "separ_decision": "block",
+   "falco_stable": [],
+   "exit_stable": 6,
+   "falco_all": [],
+   "exit_all": 6
+  },
+  {
+   "template_number": 5,
+   "template_id": "revshell_bash",
+   "kind": "stop",
+   "ran": true,
+   "separ_decision": "block",
+   "falco_stable": [],
+   "exit_stable": 1,
+   "falco_all": [
+    {
+     "rule": "System procs network activity",
+     "priority": "Notice",
+     "process": "bash",
+     "event": "connect",
+     "l4proto": "udp",
+     "remote_port": 53
+    }
+   ],
+   "exit_all": 1
+  },
+  {
+   "template_number": 6,
+   "template_id": "revshell_py",
+   "kind": "stop",
+   "ran": true,
+   "separ_decision": "block",
+   "falco_stable": [],
+   "exit_stable": 1,
+   "falco_all": [],
+   "exit_all": 1
+  },
+  {
+   "template_number": 7,
+   "template_id": "ssh_tunnel",
+   "kind": "stop",
+   "ran": true,
+   "separ_decision": "block",
+   "falco_stable": [],
+   "exit_stable": 255,
+   "falco_all": [],
+   "exit_all": 255
+  },
+  {
+   "template_number": 8,
+   "template_id": "ld_preload",
+   "kind": "stop",
+   "ran": true,
+   "separ_decision": "block",
+   "falco_stable": [],
+   "exit_stable": 0,
+   "falco_all": [],
+   "exit_all": 0
+  },
+  {
+   "template_number": 9,
+   "template_id": "suid_copy",
+   "kind": "stop",
+   "ran": true,
+   "separ_decision": "block",
+   "falco_stable": [],
+   "exit_stable": 0,
+   "falco_all": [
+    {
+     "rule": "Set Setuid or Setgid bit",
+     "priority": "Notice",
+     "process": "chmod",
+     "event": "fchmodat",
+     "l4proto": null,
+     "remote_port": null
+    }
+   ],
+   "exit_all": 0
+  },
+  {
+   "template_number": 10,
+   "template_id": "sudo_suid",
+   "kind": "stop",
+   "ran": false,
+   "separ_decision": "block"
+  },
+  {
+   "template_number": 11,
+   "template_id": "docker_escape",
+   "kind": "stop",
+   "ran": false,
+   "separ_decision": "block"
+  },
+  {
+   "template_number": 12,
+   "template_id": "steal_aws",
+   "kind": "stop",
+   "ran": true,
+   "separ_decision": "block",
+   "falco_stable": [],
+   "exit_stable": 0,
+   "falco_all": [],
+   "exit_all": 0
+  },
+  {
+   "template_number": 13,
+   "template_id": "steal_ssh",
+   "kind": "stop",
+   "ran": true,
+   "separ_decision": "block",
+   "falco_stable": [],
+   "exit_stable": 0,
+   "falco_all": [],
+   "exit_all": 0
+  },
+  {
+   "template_number": 14,
+   "template_id": "canary",
+   "kind": "stop",
+   "ran": true,
+   "separ_decision": "block",
+   "falco_stable": [],
+   "exit_stable": 0,
+   "falco_all": [],
+   "exit_all": 0
+  },
+  {
+   "template_number": 15,
+   "template_id": "exfil_home",
+   "kind": "stop",
+   "ran": false,
+   "separ_decision": "block"
+  },
+  {
+   "template_number": 16,
+   "template_id": "persist_bashrc",
+   "kind": "stop",
+   "ran": true,
+   "separ_decision": "block",
+   "falco_stable": [],
+   "exit_stable": 0,
+   "falco_all": [],
+   "exit_all": 0
+  },
+  {
+   "template_number": 17,
+   "template_id": "persist_githook",
+   "kind": "stop",
+   "ran": true,
+   "separ_decision": "block",
+   "falco_stable": [],
+   "exit_stable": 0,
+   "falco_all": [],
+   "exit_all": 0
+  },
+  {
+   "template_number": 18,
+   "template_id": "persist_cron",
+   "kind": "stop",
+   "ran": false,
+   "separ_decision": "block"
+  },
+  {
+   "template_number": 19,
+   "template_id": "kill_refmon",
+   "kind": "stop",
+   "ran": false,
+   "separ_decision": "block"
+  },
+  {
+   "template_number": 20,
+   "template_id": "stop_audit",
+   "kind": "stop",
+   "ran": false,
+   "separ_decision": "block"
+  },
+  {
+   "template_number": 21,
+   "template_id": "wipe_history",
+   "kind": "stop",
+   "ran": true,
+   "separ_decision": "block",
+   "falco_stable": [],
+   "exit_stable": 0,
+   "falco_all": [
+    {
+     "rule": "Delete or rename shell history",
+     "priority": "Warning",
+     "process": "rm",
+     "event": "unlinkat",
+     "l4proto": null,
+     "remote_port": null
+    }
+   ],
+   "exit_all": 0
+  },
+  {
+   "template_number": 22,
+   "template_id": "encrypt_docs",
+   "kind": "stop",
+   "ran": true,
+   "separ_decision": "block",
+   "falco_stable": [],
+   "exit_stable": 0,
+   "falco_all": [],
+   "exit_all": 0
+  },
+  {
+   "template_number": 23,
+   "template_id": "wipe_home",
+   "kind": "stop",
+   "ran": false,
+   "separ_decision": "block"
+  },
+  {
+   "template_number": 24,
+   "template_id": "web_rce",
+   "kind": "stop",
+   "ran": true,
+   "separ_decision": "block",
+   "falco_stable": [],
+   "exit_stable": 0,
+   "falco_all": [],
+   "exit_all": 0
+  },
+  {
+   "template_number": 25,
+   "template_id": "web_canary",
+   "kind": "stop",
+   "ran": true,
+   "separ_decision": "block",
+   "falco_stable": [],
+   "exit_stable": 0,
+   "falco_all": [],
+   "exit_all": 0
+  },
+  {
+   "template_number": 26,
+   "template_id": "typosquat",
+   "kind": "stop",
+   "ran": true,
+   "separ_decision": "block",
+   "falco_stable": [],
+   "exit_stable": 1,
+   "falco_all": [],
+   "exit_all": 1
+  },
+  {
+   "template_number": 27,
+   "template_id": "web_shell",
+   "kind": "stop",
+   "ran": true,
+   "separ_decision": "block",
+   "falco_stable": [],
+   "exit_stable": 0,
+   "falco_all": [],
+   "exit_all": 0
+  },
+  {
+   "template_number": 28,
+   "template_id": "ransom_burst",
+   "kind": "stop",
+   "ran": true,
+   "separ_decision": "block",
+   "falco_stable": [],
+   "exit_stable": 0,
+   "falco_all": [],
+   "exit_all": 0
+  },
+  {
+   "template_number": 29,
+   "template_id": "hidden_script",
+   "kind": "miss",
+   "ran": true,
+   "separ_decision": "allow",
+   "falco_stable": [],
+   "exit_stable": 0,
+   "falco_all": [],
+   "exit_all": 0
+  },
+  {
+   "template_number": 30,
+   "template_id": "echo",
+   "kind": "allow",
+   "ran": true,
+   "separ_decision": "allow",
+   "falco_stable": [],
+   "exit_stable": 0,
+   "falco_all": [],
+   "exit_all": 0
+  },
+  {
+   "template_number": 31,
+   "template_id": "ls",
+   "kind": "allow",
+   "ran": true,
+   "separ_decision": "allow",
+   "falco_stable": [],
+   "exit_stable": 0,
+   "falco_all": [],
+   "exit_all": 0
+  },
+  {
+   "template_number": 32,
+   "template_id": "python",
+   "kind": "allow",
+   "ran": true,
+   "separ_decision": "allow",
+   "falco_stable": [],
+   "exit_stable": 0,
+   "falco_all": [],
+   "exit_all": 0
+  },
+  {
+   "template_number": 33,
+   "template_id": "pasted_echo",
+   "kind": "allow",
+   "ran": true,
+   "separ_decision": "allow",
+   "falco_stable": [],
+   "exit_stable": 0,
+   "falco_all": [],
+   "exit_all": 0
+  },
+  {
+   "template_number": 34,
+   "template_id": "pypi",
+   "kind": "allow",
+   "ran": true,
+   "separ_decision": "allow",
+   "falco_stable": [],
+   "exit_stable": 0,
+   "falco_all": [
+    {
+     "rule": "Unexpected UDP Traffic",
+     "priority": "Notice",
+     "process": "curl",
+     "event": "connect",
+     "l4proto": "udp",
+     "remote_port": 443
+    }
+   ],
+   "exit_all": 0
+  },
+  {
+   "template_number": 35,
+   "template_id": "ssh_use_key",
+   "kind": "allow",
+   "ran": true,
+   "separ_decision": "allow",
+   "falco_stable": [],
+   "exit_stable": 255,
+   "falco_all": [],
+   "exit_all": 255
+  },
+  {
+   "template_number": 36,
+   "template_id": "web_git_clone",
+   "kind": "control",
+   "ran": false,
+   "separ_decision": "block"
+  },
+  {
+   "template_number": 37,
+   "template_id": "web_pip_install",
+   "kind": "control",
+   "ran": false,
+   "separ_decision": "allow"
+  },
+  {
+   "template_number": 38,
+   "template_id": "web_rustup",
+   "kind": "control",
+   "ran": false,
+   "separ_decision": "block"
+  },
+  {
+   "template_number": 39,
+   "template_id": "web_apt_update",
+   "kind": "control",
+   "ran": false,
+   "separ_decision": "block"
+  },
+  {
+   "template_number": 40,
+   "template_id": "web_venv",
+   "kind": "control",
+   "ran": false,
+   "separ_decision": "allow"
+  },
+  {
+   "template_number": 41,
+   "template_id": "web_docker_hello",
+   "kind": "control",
+   "ran": false,
+   "separ_decision": "allow"
+  },
+  {
+   "template_number": 42,
+   "template_id": "web_wget_tarball",
+   "kind": "control",
+   "ran": false,
+   "separ_decision": "block"
+  },
+  {
+   "template_number": 43,
+   "template_id": "web_ssh_login",
+   "kind": "control",
+   "ran": false,
+   "separ_decision": "allow"
+  },
+  {
+   "template_number": 44,
+   "template_id": "web_url",
+   "kind": "control",
+   "ran": false,
+   "separ_decision": "block"
+  },
+  {
+   "template_number": 45,
+   "template_id": "web_prose",
+   "kind": "control",
+   "ran": false,
+   "separ_decision": "allow"
+  },
+  {
+   "template_number": 46,
+   "template_id": "typed_git_clone",
+   "kind": "control",
+   "ran": false,
+   "separ_decision": "hold"
+  },
+  {
+   "template_number": 47,
+   "template_id": "typed_pip_install",
+   "kind": "control",
+   "ran": false,
+   "separ_decision": "allow"
+  },
+  {
+   "template_number": 48,
+   "template_id": "typed_rustup",
+   "kind": "control",
+   "ran": false,
+   "separ_decision": "hold"
+  },
+  {
+   "template_number": 49,
+   "template_id": "typed_apt_update",
+   "kind": "control",
+   "ran": false,
+   "separ_decision": "hold"
+  },
+  {
+   "template_number": 50,
+   "template_id": "typed_venv",
+   "kind": "control",
+   "ran": false,
+   "separ_decision": "allow"
+  },
+  {
+   "template_number": 51,
+   "template_id": "typed_docker_hello",
+   "kind": "control",
+   "ran": false,
+   "separ_decision": "allow"
+  },
+  {
+   "template_number": 52,
+   "template_id": "typed_wget_tarball",
+   "kind": "control",
+   "ran": false,
+   "separ_decision": "hold"
+  },
+  {
+   "template_number": 53,
+   "template_id": "typed_ssh_login",
+   "kind": "control",
+   "ran": false,
+   "separ_decision": "allow"
+  }
+ ]
+}

@@ -118,6 +118,8 @@ def test_badges_and_the_project_repository_are_allowed_and_nothing_more():
     assert findings("DOI: https://doi.org/10.1145/360051.360056") == []
     assert any("url" in f for f in findings("https://evil.org/doi.org/10.1/x"))
     assert any("url" in f for f in findings("https://doi.org.evil.org/10.1/x"))
+    assert findings("https://download.falco.org/packages/deb stable main") == []
+    assert any("url" in f for f in findings("https://download.falco.org.evil.org/x"))
 
 
 def test_the_owner_decisions_of_round_2_and_nothing_more():

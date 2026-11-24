@@ -14,8 +14,9 @@ Started by scripts/falco_baseline.sh (which runs Falco as root); the two steps h
     python scripts/falco_baseline.py analyse --dir <dir> \
         --out docs/evaluation/falco-baseline-v2.4.json
 
-Only template ids, rule names and priorities are written to the committed file; Falco's raw alerts
-(command lines, paths) stay in <dir>, which git ignores.
+Only template ids, rule names, priorities, program names, event types, protocols and remote ports
+are written to the committed file; Falco's raw alerts (command lines, paths, addresses) stay in
+<dir>, which git ignores.
 """
 
 from __future__ import annotations
@@ -111,6 +112,19 @@ def _alerts(path: Path) -> list[dict]:
     return out
 
 
+def _rules(config: Path) -> dict:
+    """How many rules the pass loaded and how many were active (rule files can ship rules off)."""
+    import yaml
+
+    loaded = active = 0
+    for path in yaml.safe_load(config.read_text(encoding="utf-8"))["rules_files"]:
+        for item in yaml.safe_load(Path(path).read_text(encoding="utf-8")) or []:
+            if isinstance(item, dict) and "rule" in item:
+                loaded += 1
+                active += item.get("enabled", True) is not False
+    return {"rules_loaded": loaded, "rules_active": active}
+
+
 def analyse(d: Path, out: Path) -> int:
     reference = json.loads(REFERENCE.read_text(encoding="utf-8"))["results"]
     ref = {r["template_id"]: r for r in reference}
@@ -130,14 +144,20 @@ def analyse(d: Path, out: Path) -> int:
             f = a.get("output_fields", {})
             tid = by_sid.get(f.get("proc.sid"))
             if tid is not None:
-                hit = {"rule": a.get("rule"), "priority": a.get("priority")}
+                # no addresses, paths or command lines: the program, the event and, for a
+                # network event, the protocol and the remote port
+                hit = {"rule": a.get("rule"), "priority": a.get("priority"),
+                       "process": f.get("proc.name"), "event": f.get("evt.type"),
+                       "l4proto": f.get("fd.l4proto"),
+                       "remote_port": f.get("fd.rport")}  # fmt: skip
                 hits.setdefault(tid, []).append(hit)
             elif f.get("fd.name") == "/etc/shadow" and f.get("proc.name") == "cat":
                 control += 1
             else:
                 outside += 1
         passes[p] = {"alerts_total": len(alerts), "positive_control_alerts": control,
-                     "alerts_outside_the_templates": outside}  # fmt: skip
+                     "alerts_outside_the_templates": outside,
+                     **_rules(d / f"falco-{p}.yaml")}  # fmt: skip
         for r in runs:
             row = per.setdefault(r["template_id"], {
                 "template_number": r["template_number"], "template_id": r["template_id"],
@@ -145,8 +165,9 @@ def analyse(d: Path, out: Path) -> int:
                 "separ_decision": ref.get(r["template_id"], {}).get("decision"),
             })  # fmt: skip
             if r["ran"]:
-                rules = sorted({(h["rule"], h["priority"]) for h in hits.get(r["template_id"], [])})
-                row[f"falco_{p}"] = [{"rule": a, "priority": b} for a, b in rules]
+                keys = ("rule", "priority", "process", "event", "l4proto", "remote_port")
+                seen = {tuple(h[k] for k in keys) for h in hits.get(r["template_id"], [])}
+                row[f"falco_{p}"] = [dict(zip(keys, t, strict=True)) for t in sorted(seen, key=str)]
                 row[f"exit_{p}"] = r.get("exit")
     doc = {
         "source": "scripts/falco_baseline.py with scripts/falco_baseline.sh; rule names and "

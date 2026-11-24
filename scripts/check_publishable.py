@@ -72,6 +72,8 @@ OK_URL = re.compile(
     r"^https?://(?:www\.)?(?:doi\.org|arxiv\.org|csrc\.nist\.gov|valgrind\.org|usenix\.org"
     r"|web\.archive\.org|linuxjournal\.com|attack\.mitre\.org|rkhunter\.sourceforge\.net"
     r"|chkrootkit\.org|lwn\.net|docs\.kernel\.org|learn\.microsoft\.com)(?:[/?#:]|$)|"
+    # Falco's official package host, in the install steps of scripts/falco_baseline.sh
+    r"^https?://download\.falco\.org(?:[/?#:]|$)|"
     # the verbatim GPL-3.0 text in LICENSE
     r"//fsf\.org/|//www\.gnu\.org/licenses/"
 )
