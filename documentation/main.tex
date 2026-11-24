@@ -17,6 +17,8 @@
 \usepackage[numbers,sort&compress]{natbib}
 \PassOptionsToPackage{obeyspaces,spaces}{url}  % command text in tables keeps its spaces
 \usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+% every DOI in the references is a link to its doi.org resolver
+\newcommand{\doi}[1]{DOI:~\href{https://doi.org/#1}{\nolinkurl{#1}}}
 
 \setlength{\parskip}{2pt}
 \setlength{\emergencystretch}{2.5em}
@@ -37,7 +39,7 @@ for Linux Hosts with Provenance Labels and Role Contracts}
   \textbf{Parsa Besharat}\\
   \href{mailto:parsa@parsabe.com}{\faEnvelope\ \texttt{parsa@parsabe.com}} \quad|\quad
   \href{https://github.com/parsabe/Separ}{\faGithub\ \texttt{github.com/parsabe/Separ}}\\
-  \small Student research project; version \Version{} (tag \texttt{\EvalTag}), November 2026
+  \small Individual research project; version \Version{} (tag \texttt{\EvalTag}), November 2026
 }
 \date{}
 

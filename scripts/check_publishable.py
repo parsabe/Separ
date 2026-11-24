@@ -67,6 +67,11 @@ OK_URL = re.compile(
     r"|falco\.org|systemd\.io|shibboleth\.net|kubernetes\.io|postfix\.org|keycloak\.org"
     r"|matplotlib\.org|latex-project\.org|python\.org|docs\.pytest\.org"
     r"|hypothesis\.readthedocs\.io|docs\.astral\.sh)(?:[/?#:]|$)|"
+    # owner request 2026-11-24: the links of the paper's references (each checked to resolve to
+    # the cited work), anchored the same way
+    r"^https?://(?:www\.)?(?:doi\.org|arxiv\.org|csrc\.nist\.gov|valgrind\.org|usenix\.org"
+    r"|web\.archive\.org|linuxjournal\.com|attack\.mitre\.org|rkhunter\.sourceforge\.net"
+    r"|chkrootkit\.org|lwn\.net|docs\.kernel\.org|learn\.microsoft\.com)(?:[/?#:]|$)|"
     # the verbatim GPL-3.0 text in LICENSE
     r"//fsf\.org/|//www\.gnu\.org/licenses/"
 )

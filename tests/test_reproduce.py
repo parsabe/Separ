@@ -112,7 +112,12 @@ def test_badges_and_the_project_repository_are_allowed_and_nothing_more():
     assert any("url" in f for f in findings("https://img.shields.io.evil.org/badge/x"))
     assert any("url" in f for f in findings("https://evil.org/github.com/parsabe/x"))
     assert any("url" in f for f in findings("https://img.shields.io/endpoint?url=x"))
-    assert any("url" in f for f in findings("https://lwn.net/Articles/1/"))  # not on any list
+    # a host on no list
+    assert any("url" in f for f in findings("https://news.ycombinator.com/item?id=1"))
+    # the paper's reference hosts (owner request 2026-11-24) are anchored like the others
+    assert findings("DOI: https://doi.org/10.1145/360051.360056") == []
+    assert any("url" in f for f in findings("https://evil.org/doi.org/10.1/x"))
+    assert any("url" in f for f in findings("https://doi.org.evil.org/10.1/x"))
 
 
 def test_the_owner_decisions_of_round_2_and_nothing_more():

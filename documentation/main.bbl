@@ -10,22 +10,27 @@ James~P. Anderson.
 \newblock Computer security technology planning study.
 \newblock Technical Report ESD-TR-73-51, Vol. II, Electronic Systems Division,
   Air Force Systems Command, 1972.
+\newblock URL
+  \url{https://csrc.nist.gov/files/pubs/conference/1998/10/08/proceedings-of-the-21st-nissc-1998/final/docs/early-cs-papers/ande72.pdf}.
 
 \bibitem[{Aqua Security}(2024)]{aqua2024tracee}
 {Aqua Security}.
 \newblock {Tracee}: Runtime security and forensics using {eBPF}.
-\newblock \url{https://github.com/aquasecurity/tracee}, 2024.
+\newblock GitHub repository, 2024.
+\newblock URL \url{https://github.com/aquasecurity/tracee}.
 
 \bibitem[Bauer(2006)]{bauer2006paranoid}
 Mick Bauer.
 \newblock Paranoid penguin: An introduction to {Novell AppArmor}.
 \newblock \emph{Linux Journal}, 2006\penalty0 (148):\penalty0 13, 2006.
+\newblock URL \url{https://www.linuxjournal.com/article/9036}.
 
 \bibitem[Bellare et~al.(1996)Bellare, Canetti, and Krawczyk]{bellare1996keying}
 Mihir Bellare, Ran Canetti, and Hugo Krawczyk.
 \newblock Keying hash functions for message authentication.
 \newblock In \emph{Advances in Cryptology --- CRYPTO '96}, pages 1--15.
   Springer, 1996.
+\newblock \doi{10.1007/3-540-68697-5_1}.
 
 \bibitem[Bernstein et~al.(2012)Bernstein, Duif, Lange, Schwabe, and
   Yang]{bernstein2012high}
@@ -33,12 +38,14 @@ Daniel~J. Bernstein, Niels Duif, Tanja Lange, Peter Schwabe, and Bo-Yin Yang.
 \newblock High-speed high-security signatures.
 \newblock \emph{Journal of Cryptographic Engineering}, 2\penalty0 (2):\penalty0
   77--89, 2012.
+\newblock \doi{10.1007/s13389-012-0027-1}.
 
 \bibitem[Bloom(1970)]{bloom1970space}
 Burton~H. Bloom.
 \newblock Space/time trade-offs in hash coding with allowable errors.
 \newblock \emph{Communications of the ACM}, 13\penalty0 (7):\penalty0 422--426,
   1970.
+\newblock \doi{10.1145/362686.362692}.
 
 \bibitem[Cheng et~al.(2024)Cheng, Lv, Liang, Wang, Sun, Pasquier, and
   Han]{cheng2024kairos}
@@ -47,11 +54,13 @@ Zijun Cheng, Qiujian Lv, Jinyuan Liang, Yan Wang, Degang Sun, Thomas Pasquier,
 \newblock {Kairos}: Practical intrusion detection and investigation using
   whole-system provenance.
 \newblock In \emph{Proc. IEEE Symposium on Security and Privacy (S\&P)}, 2024.
+\newblock \doi{10.1109/SP54263.2024.00005}.
 
 \bibitem[{Cloud Native Computing Foundation (CNCF)}(2024)]{falco2024cncf}
 {Cloud Native Computing Foundation (CNCF)}.
 \newblock {Falco}: Cloud-native runtime security and syscall rule engine.
 \newblock CNCF Graduated Project Documentation, 2024.
+\newblock URL \url{https://falco.org/}.
 
 \bibitem[Costa et~al.(2025)Costa, K{\"o}pf, Kolluri, Paverd, Russinovich,
   Salem, Tople, Wutschitz, and Zanella-B{\'e}guelin]{costa2025fides}
@@ -59,8 +68,8 @@ Manuel Costa, Boris K{\"o}pf, Aashish Kolluri, Andrew Paverd, Mark Russinovich,
   Ahmed Salem, Shruti Tople, Lukas Wutschitz, and Santiago
   Zanella-B{\'e}guelin.
 \newblock Securing {AI} agents with information-flow control.
-\newblock arXiv:2505.23643, 2025.
-\newblock TODO verify.
+\newblock arXiv preprint arXiv:2505.23643, 2025.
+\newblock URL \url{https://arxiv.org/abs/2505.23643}.
 
 \bibitem[Debenedetti et~al.(2025)Debenedetti, Shumailov, Fan, Hayes, Carlini,
   Fabian, Kern, Shi, Terzis, and Tram{\`e}r]{debenedetti2025camel}
@@ -68,19 +77,22 @@ Edoardo Debenedetti, Ilia Shumailov, Tianqi Fan, Jamie Hayes, Nicholas Carlini,
   Daniel Fabian, Christoph Kern, Chongyang Shi, Andreas Terzis, and Florian
   Tram{\`e}r.
 \newblock Defeating prompt injections by design.
-\newblock arXiv:2503.18813, 2025.
+\newblock arXiv preprint arXiv:2503.18813, 2025.
+\newblock URL \url{https://arxiv.org/abs/2503.18813}.
 
 \bibitem[Denning(1976)]{denning1976lattice}
 Dorothy~E. Denning.
 \newblock A lattice model of secure information flow.
 \newblock \emph{Communications of the ACM}, 19\penalty0 (5):\penalty0 236--243,
   1976.
+\newblock \doi{10.1145/360051.360056}.
 
 \bibitem[Good(1953)]{good1953population}
 I.~J. Good.
 \newblock The population frequencies of species and the estimation of
   population parameters.
 \newblock \emph{Biometrika}, 40\penalty0 (3/4):\penalty0 237--264, 1953.
+\newblock \doi{10.1093/biomet/40.3-4.237}.
 
 \bibitem[Greshake et~al.(2023)Greshake, Abdelnabi, Mishra, Endres, Holz, and
   Fritz]{greshake2023not}
@@ -90,6 +102,7 @@ Kai Greshake, Sahar Abdelnabi, Shailesh Mishra, Christoph Endres, Thorsten
   {LLM}-integrated applications with indirect prompt injection.
 \newblock In \emph{Proc. ACM Workshop on Artificial Intelligence and Security
   (AISec)}, pages 79--90, 2023.
+\newblock \doi{10.1145/3605764.3623985}.
 
 \bibitem[Han et~al.(2020)Han, Pasquier, Bates, Mickens, and
   Seltzer]{han2020unicorn}
@@ -98,6 +111,7 @@ Xueyuan Han, Thomas Pasquier, Adam Bates, James Mickens, and Margo Seltzer.
   threats.
 \newblock In \emph{Proc. Network and Distributed System Security Symposium
   (NDSS)}, 2020.
+\newblock \doi{10.14722/ndss.2020.24046}.
 
 \bibitem[Hossain et~al.(2017)Hossain, Milajerdi, Wang, Eshete, Gjomemo, Sekar,
   Stolper, and Venkatakrishnan]{hossain2017sleuth}
@@ -106,12 +120,15 @@ Md~Nahid Hossain, Sadegh~M. Milajerdi, Junao Wang, Birhanu Eshete, Rigel
 \newblock {SLEUTH}: Real-time attack scenario reconstruction from {COTS} audit
   data.
 \newblock In \emph{Proc. USENIX Security Symposium}, pages 487--504, 2017.
+\newblock URL
+  \url{https://www.usenix.org/conference/usenixsecurity17/technical-sessions/presentation/hossain}.
 
 \bibitem[{Isovalent / Cilium Project}(2024)]{tetragon2024cilium}
 {Isovalent / Cilium Project}.
 \newblock {Tetragon}: {eBPF}-based security observability and runtime
   enforcement.
 \newblock Cilium Documentation, 2024.
+\newblock URL \url{https://tetragon.io/}.
 
 \bibitem[Li et~al.(2024)Li, Dong, Xiao, Wang, Shao, Chen, Guo, Chen, and
   Li]{li2024nodlink}
@@ -121,21 +138,21 @@ Shaofei Li, Feng Dong, Xusheng Xiao, Haoyu Wang, Fei Shao, Jiedong Chen, Yao
   and investigation.
 \newblock In \emph{Proc. Network and Distributed System Security Symposium
   (NDSS)}, 2024.
-\newblock TODO verify author list.
+\newblock \doi{10.14722/ndss.2024.23204}.
 
 \bibitem[McNemar(1947)]{mcnemar1947note}
 Quinn McNemar.
 \newblock Note on the sampling error of the difference between correlated
   proportions or percentages.
 \newblock \emph{Psychometrika}, 12\penalty0 (2):\penalty0 153--157, 1947.
+\newblock \doi{10.1007/BF02295996}.
 
-\bibitem[{Microsoft}(2024)]{microsoft2024motw}
+\bibitem[{Microsoft}(2025)]{microsoft2024motw}
 {Microsoft}.
-\newblock {Mark of the Web}: the {Zone.Identifier} alternate data stream of
-  downloaded files.
-\newblock Microsoft documentation, 2024.
-\newblock TODO verify title and year; no URL (the publishability check allows
-  no Microsoft host).
+\newblock [{MS-FSCC}]: {Zone.Identifier} stream name ({Mark of the Web}).
+\newblock Microsoft Open Specifications, File System Control Codes, 2025.
+\newblock URL
+  \url{https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-fscc/6e3f7352-d11c-4d76-8c39-2516a9df36e8}.
 
 \bibitem[Milajerdi et~al.(2019)Milajerdi, Gjomemo, Eshete, Sekar, and
   Venkatakrishnan]{milajerdi2019holmes}
@@ -145,12 +162,14 @@ Sadegh~M. Milajerdi, Rigel Gjomemo, Birhanu Eshete, R.~Sekar, and V.~N.
   information flows.
 \newblock In \emph{Proc. IEEE Symposium on Security and Privacy (S\&P)}, pages
   1137--1152, 2019.
+\newblock \doi{10.1109/SP.2019.00026}.
 
 \bibitem[{MITRE Corporation}(2026)]{mitre2024attack}
 {MITRE Corporation}.
 \newblock {MITRE ATT\&CK} enterprise matrix ({T1204.004} user execution:
   Malicious copy and paste).
 \newblock Technical Knowledge Base, 2026.
+\newblock URL \url{https://attack.mitre.org/techniques/T1204/004/}.
 
 \bibitem[Newsome and Song(2005)]{newsome2005dynamic}
 James Newsome and Dawn~Xiaodong Song.
@@ -158,11 +177,13 @@ James Newsome and Dawn~Xiaodong Song.
   signature generation of exploits on commodity software.
 \newblock In \emph{Proc. Network and Distributed System Security Symposium
   (NDSS)}, 2005.
+\newblock URL \url{https://valgrind.org/docs/newsome2005.pdf}.
 
 \bibitem[Page(1954)]{page1954continuous}
 E.~S. Page.
 \newblock Continuous inspection schemes.
 \newblock \emph{Biometrika}, 41\penalty0 (1/2):\penalty0 100--115, 1954.
+\newblock \doi{10.1093/biomet/41.1-2.100}.
 
 \bibitem[Pasquier et~al.(2017)Pasquier, Han, Goldstein, Moyer, Eyers, Seltzer,
   and Bacon]{pasquier2017practical}
@@ -171,36 +192,45 @@ Thomas Pasquier, Xueyuan Han, Mark Goldstein, Thomas Moyer, David Eyers, Margo
 \newblock Practical whole-system provenance capture.
 \newblock In \emph{Proc. ACM Symposium on Cloud Computing (SoCC)}, pages
   405--418, 2017.
+\newblock \doi{10.1145/3127479.3129249}.
 
 \bibitem[Pearl(1988)]{pearl1988probabilistic}
 Judea Pearl.
 \newblock \emph{Probabilistic Reasoning in Intelligent Systems: Networks of
   Plausible Inference}.
 \newblock Morgan Kaufmann, 1988.
+\newblock \doi{10.1016/C2009-0-27609-4}.
 
 \bibitem[Rehman et~al.(2024)Rehman, Ahmadi, and Hassan]{rehman2024flash}
 Mati~Ur Rehman, Hadi Ahmadi, and Wajih~Ul Hassan.
 \newblock {FLASH}: A comprehensive approach to intrusion detection via
   provenance graph representation learning.
 \newblock In \emph{Proc. IEEE Symposium on Security and Privacy (S\&P)}, 2024.
+\newblock \doi{10.1109/SP54263.2024.00139}.
 
 \bibitem[{Rootkit Hunter Project}(2018)]{rkhunter2018}
 {Rootkit Hunter Project}.
 \newblock {rkhunter} and {chkrootkit}: Signature-based host rootkit scanners.
 \newblock Open-Source Security Utilities, 2018.
+\newblock URL \url{https://rkhunter.sourceforge.net/}.
+\newblock chkrootkit: \url{https://www.chkrootkit.org/}.
 
 \bibitem[Singh(2019)]{singh2019krsi}
 KP~Singh.
 \newblock Kernel runtime security instrumentation.
-\newblock Linux Security Summit North America, 2019.
-\newblock TODO verify; the mechanism is documented as ``LSM BPF Programs'' in
-  the Linux kernel documentation.
+\newblock Talk at the Linux Security Summit North America; report in LWN.net,
+  2019.
+\newblock URL \url{https://lwn.net/Articles/798157/}.
+\newblock Kernel documentation:
+  \url{https://docs.kernel.org/bpf/prog_lsm.html}.
 
 \bibitem[Smalley et~al.(2001)Smalley, Vance, and
   Salamon]{smalley2001implementing}
 Stephen Smalley, Chris Vance, and Wayne Salamon.
 \newblock Implementing {SELinux} as a {Linux} security module.
 \newblock Technical Report 01-043, NAI Labs, 2001.
+\newblock URL
+  \url{https://web.archive.org/web/20090103092550/https://www.nsa.gov/selinux/papers/module.pdf}.
 
 \bibitem[Wang et~al.(2020)Wang, Hassan, Li, Jee, Yu, Zou, Rhee, Chen, Cheng,
   Gunter, and Chen]{wang2020provdetector}
@@ -210,6 +240,7 @@ Qi~Wang, Wajih~Ul Hassan, Ding Li, Kangkook Jee, Xiao Yu, Kexuan Zou, Junghwan
   analysis.
 \newblock In \emph{Proc. Network and Distributed System Security Symposium
   (NDSS)}, 2020.
+\newblock \doi{10.14722/ndss.2020.24167}.
 
 \bibitem[Wang et~al.(2005)Wang, Beck, Vo, Roussev, and
   Verbowski]{wang2005strider}
@@ -217,11 +248,13 @@ Yi-Min Wang, Doug Beck, Binh Vo, Roussi Roussev, and Chad Verbowski.
 \newblock Detecting stealth software with {Strider GhostBuster}.
 \newblock In \emph{Proc. IEEE/IFIP International Conference on Dependable
   Systems and Networks (DSN)}, pages 368--377, 2005.
+\newblock \doi{10.1109/DSN.2005.39}.
 
 \bibitem[Wilson(1927)]{wilson1927probable}
 Edwin~B. Wilson.
 \newblock Probable inference, the law of succession, and statistical inference.
 \newblock \emph{Journal of the American Statistical Association}, 22\penalty0
   (158):\penalty0 209--212, 1927.
+\newblock \doi{10.1080/01621459.1927.10502953}.
 
 \end{thebibliography}
