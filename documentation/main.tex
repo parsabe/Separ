@@ -103,6 +103,55 @@ weights are expert estimates, and it stops legitimate pasted install commands
 (\S\ref{sec:lab}).
 
 % ============================================================================
+\section{Related Work}
+\label{sec:related}
+
+\paragraph{Information flow and taint.} Separ's origin labels are a coarse, decaying form of
+information-flow control~\cite{denning1976lattice} and dynamic taint
+tracking~\cite{newsome2005dynamic}, tracked per process and file rather than per byte. Windows'
+Mark of the Web~\cite{microsoft2024motw} labels downloaded files with their zone, a static
+cousin of a persistent label. CaMeL~\cite{debenedetti2025camel} and FIDES~\cite{costa2025fides}
+apply information-flow control to LLM agents, deciding a tool call by the provenance of its
+arguments, which is Separ's Origin question for the \texttt{agent} role.
+
+\paragraph{Provenance capture and detection.} CamFlow~\cite{pasquier2017practical} captures
+whole-system provenance in the kernel. SLEUTH~\cite{hossain2017sleuth} and
+HOLMES~\cite{milajerdi2019holmes} tag and correlate audit events into attack scenarios;
+UNICORN~\cite{han2020unicorn}, ProvDetector~\cite{wang2020provdetector},
+Kairos~\cite{cheng2024kairos}, Flash~\cite{rehman2024flash} and NODLINK~\cite{li2024nodlink}
+detect intrusions in provenance graphs, several with learned models, at much larger scale and
+completeness than Separ. They observe after the fact; Separ adds a pre-execution decision on the
+paths routed to it and a small explainable score.
+
+\paragraph{Runtime security and access control.} SELinux~\cite{smalley2001implementing} and
+AppArmor~\cite{bauer2006paranoid} enforce per-domain policy in the kernel without input
+provenance. Falco~\cite{falco2024cncf}, Tetragon~\cite{tetragon2024cilium} and
+Tracee~\cite{aqua2024tracee} observe system calls through eBPF or a kernel driver and alert (Tetragon
+can also enforce in the kernel); BPF-LSM (KRSI)~\cite{singh2019krsi} makes LSM hooks programmable,
+the mechanism complete mediation would need. Cross-view rootkit detection goes back to
+GhostBuster~\cite{wang2005strider}; signature scanners include rkhunter~\cite{rkhunter2018}.
+
+\begin{table*}[t]
+\centering\small
+\caption{Qualitative comparison of design focus, from the cited descriptions. \emph{Nothing in
+this table was measured}; it states what each approach is built to do, not how well.}
+\label{tab:qualitative}
+\begin{tabularx}{\textwidth}{@{}lXXXX@{}}
+\toprule
+\textbf{Approach} & \textbf{Where it observes} & \textbf{Decides before the action?} & \textbf{Uses input provenance?} & \textbf{Model of normal behaviour} \\
+\midrule
+SELinux, AppArmor & kernel LSM hooks (complete for its hooks) & yes (access check) & no & per-domain policy \\
+Falco, Tracee & system calls (eBPF / driver) & no (alerts) & no & rules / signatures \\
+Tetragon & system calls (eBPF) & can enforce in kernel & no & tracing policies \\
+Provenance IDS (SLEUTH \ldots{} NODLINK) & audit or provenance graph & no (detection) & yes (graph lineage) & tags, rules or learned models \\
+CaMeL, FIDES & LLM agent tool calls & yes & yes & capability / IFC policy \\
+Mark of the Web & downloaded files & at open time & yes (zone) & none \\
+\textbf{Separ} & commands routed to it, browser, sandbox, ingested sensors & yes, on mediated paths only & yes (decaying labels) & signed role contracts \\
+\bottomrule
+\end{tabularx}
+\end{table*}
+
+% ============================================================================
 \section{Threat Model and Scope}
 \label{sec:threat}
 
@@ -425,55 +474,6 @@ protection for low-entropy commands such as \texttt{sudo apt update}, which a di
 Identifiers are another matter: the local logs keep login names, sensor host names and quarantined
 file names raw (Appendix~\ref{app:ids}); pseudonyms are applied only when a verdict is exported,
 which the daemon does not do.
-
-% ============================================================================
-\section{Related Work}
-\label{sec:related}
-
-\paragraph{Information flow and taint.} Separ's origin labels are a coarse, decaying form of
-information-flow control~\cite{denning1976lattice} and dynamic taint
-tracking~\cite{newsome2005dynamic}, tracked per process and file rather than per byte. Windows'
-Mark of the Web~\cite{microsoft2024motw} labels downloaded files with their zone, a static
-cousin of a persistent label. CaMeL~\cite{debenedetti2025camel} and FIDES~\cite{costa2025fides}
-apply information-flow control to LLM agents, deciding a tool call by the provenance of its
-arguments, which is Separ's Origin question for the \texttt{agent} role.
-
-\paragraph{Provenance capture and detection.} CamFlow~\cite{pasquier2017practical} captures
-whole-system provenance in the kernel. SLEUTH~\cite{hossain2017sleuth} and
-HOLMES~\cite{milajerdi2019holmes} tag and correlate audit events into attack scenarios;
-UNICORN~\cite{han2020unicorn}, ProvDetector~\cite{wang2020provdetector},
-Kairos~\cite{cheng2024kairos}, Flash~\cite{rehman2024flash} and NODLINK~\cite{li2024nodlink}
-detect intrusions in provenance graphs, several with learned models, at much larger scale and
-completeness than Separ. They observe after the fact; Separ adds a pre-execution decision on the
-paths routed to it and a small explainable score.
-
-\paragraph{Runtime security and access control.} SELinux~\cite{smalley2001implementing} and
-AppArmor~\cite{bauer2006paranoid} enforce per-domain policy in the kernel without input
-provenance. Falco~\cite{falco2024cncf}, Tetragon~\cite{tetragon2024cilium} and
-Tracee~\cite{aqua2024tracee} observe system calls through eBPF or a kernel driver and alert (Tetragon
-can also enforce in the kernel); BPF-LSM (KRSI)~\cite{singh2019krsi} makes LSM hooks programmable,
-the mechanism complete mediation would need. Cross-view rootkit detection goes back to
-GhostBuster~\cite{wang2005strider}; signature scanners include rkhunter~\cite{rkhunter2018}.
-
-\begin{table*}[t]
-\centering\small
-\caption{Qualitative comparison of design focus, from the cited descriptions. \emph{Nothing in
-this table was measured}; it states what each approach is built to do, not how well.}
-\label{tab:qualitative}
-\begin{tabularx}{\textwidth}{@{}lXXXX@{}}
-\toprule
-\textbf{Approach} & \textbf{Where it observes} & \textbf{Decides before the action?} & \textbf{Uses input provenance?} & \textbf{Model of normal behaviour} \\
-\midrule
-SELinux, AppArmor & kernel LSM hooks (complete for its hooks) & yes (access check) & no & per-domain policy \\
-Falco, Tracee & system calls (eBPF / driver) & no (alerts) & no & rules / signatures \\
-Tetragon & system calls (eBPF) & can enforce in kernel & no & tracing policies \\
-Provenance IDS (SLEUTH \ldots{} NODLINK) & audit or provenance graph & no (detection) & yes (graph lineage) & tags, rules or learned models \\
-CaMeL, FIDES & LLM agent tool calls & yes & yes & capability / IFC policy \\
-Mark of the Web & downloaded files & at open time & yes (zone) & none \\
-\textbf{Separ} & commands routed to it, browser, sandbox, ingested sensors & yes, on mediated paths only & yes (decaying labels) & signed role contracts \\
-\bottomrule
-\end{tabularx}
-\end{table*}
 
 % ============================================================================
 \section{Discussion and Limitations}
