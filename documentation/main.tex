@@ -2,12 +2,10 @@
 
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
-\usepackage{lmodern}  % typewriter text (commands, paths) stays Latin Modern Mono
-\usepackage[sfdefault]{inter}  % body text: Inter (SIL Open Font License)
 \usepackage{microtype}
 \usepackage[margin=0.7in,columnsep=0.25in]{geometry}
-\usepackage{amsmath,amssymb,mathtools}
-\usepackage{sansmathfonts}  % sans-serif math, to match Inter
+\usepackage{amsmath,mathtools}
+\usepackage{newtxtext,newtxmath}  % Times text and math, as in IEEE, USENIX and ACM SIGSAC papers
 \usepackage{booktabs}
 \usepackage{tabularx}
 \usepackage{array}
@@ -20,6 +18,7 @@
 \PassOptionsToPackage{obeyspaces,spaces}{url}  % command text in tables keeps its spaces
 \usepackage{xurl}  % long reference URLs break anywhere in the narrow column
 \usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+\hypersetup{pdftitle={Separ: A Fire Shield Against Network Attacks},pdfauthor={Parsa Besharat}}
 % every DOI in the references is a link to its doi.org resolver
 \newcommand{\doi}[1]{DOI:~\href{https://doi.org/#1}{\nolinkurl{#1}}}
 
@@ -36,8 +35,7 @@
 \newcommand{\nats}{\,\text{nats}}
 \newcommand{\ci}[2]{[#1, #2]}
 
-\title{\Large\bfseries Separ: Pre-Execution Command Mediation and Behavioural Monitoring\\
-for Linux Hosts with Provenance Labels and Role Contracts}
+\title{\Large\bfseries Separ: A Fire Shield Against Network Attacks}
 \author{
   \textbf{Parsa Besharat}\\
   \href{mailto:parsa@parsabe.com}{\faEnvelope\ \texttt{parsa@parsabe.com}} \quad|\quad
