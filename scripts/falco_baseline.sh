@@ -55,14 +55,16 @@ import sys, yaml
 cfg = yaml.safe_load(open("/etc/falco/falco.yaml"))
 out, alerts, rules = sys.argv[1], sys.argv[2], sys.argv[3:]
 cfg.update({
-    "rules_files": rules, "config_files": [], "priority": "debug",
+    # config_files and load_plugins stay as installed: the default rules need the container
+    # plugin that /etc/falco/config.d loads (Falco >= 0.41), even on a host without containers
+    "rules_files": rules, "priority": "debug",
     "json_output": True, "json_include_output_property": True,
     "stdout_output": {"enabled": False},
     "file_output": {"enabled": True, "keep_alive": True, "filename": alerts},
     "append_output": [{"suggested_output": True},
                       {"match": {"source": "syscall"},
                        "extra_fields": ["proc.sid", "proc.pid", "proc.ppid"]}],
-    "webserver": {"enabled": False}, "load_plugins": [],
+    "webserver": {"enabled": False},
 })
 cfg.setdefault("engine", {})["kind"] = "modern_ebpf"
 if isinstance(cfg.get("metrics"), dict):
