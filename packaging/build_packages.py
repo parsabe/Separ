@@ -252,7 +252,11 @@ def stage_browser(stage_root: Path) -> None:
                     (share / "extension" / f.name).chmod(0o644)
                     zf.write(f, f.name)
         xpi.chmod(0o644)
-        for name in ("firefox-policies.json", "chromium-policy.json"):
+        for name in (
+            "firefox-policies.json",
+            "firefox-policies-esr-unsigned.json",
+            "chromium-policy.json",
+        ):
             shutil.copy2(PACKAGING_DIR / "browser" / name, share / name)
             (share / name).chmod(0o644)
         readme = ROOT_DIR / "browser" / "README.md"

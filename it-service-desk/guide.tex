@@ -343,13 +343,7 @@ local address with its token; open it on the machine itself (or through an SSH t
 \label{sec:extras}
 Each extra has its own requirement and is not needed for the pilot.
 \begin{description}
-  \item[Browser extension.] Requires Firefox ESR 128+ or Chromium/Chrome 121+ and a per-user daemon.
-    As root (for Chromium add \cmd{--chromium-extension-id <id>}):
-\begin{lstlisting}
-sudo separ browser-install --system
-\end{lstlisting}
-    then roll out the extension with the enterprise policy templates in
-    \path{/usr/share/separ/browser/}.
+  \item[Browser extension.] See Section~\ref{sec:browser}.
   \item[Real enforcement.] Requires the system service as root, cgroup v2 and \cmd{nft} for the
     network cut, and a sensor that reports process IDs (Tetragon or Falco). Add \cmd{--enforce} to
     the \cmd{ExecStart} line of the unit with \cmd{sudo systemctl edit separ}. \cmd{separ health}
@@ -370,6 +364,60 @@ separ ingest check /etc/separ/mappings/<mapping>.yaml --input <sample> --judge
 --notify-command "mail -s Separ admin@example.org"
 \end{lstlisting}
 \end{description}
+
+\subsection{The browser extension}
+\label{sec:browser}
+The extension judges a command at the moment a web page puts it on the clipboard, before anyone
+can paste it, and checks downloads against the threat lists. It needs Firefox ESR 128+ or
+Chromium/Chrome 121+.
+
+\paragraph{Where.} On the machines people \emph{browse on}: workstations, a PC pool, a shared login
+server. The extension talks only to a Separ daemon on the same machine (native messaging, no
+network), so it is pointless on a server nobody browses on. A policy file applies to every user
+account of that machine and to no other machine; roll it out per machine with your usual
+configuration management.
+
+\paragraph{Who.} IT, as root, once per machine. Users install nothing. The browser policy
+force-installs the extension, so every user of the machine sees it in the toolbar and cannot remove
+or disable it.
+
+\paragraph{Firefox needs a signed extension.} The file \path{/usr/share/separ/browser/separ-browser.xpi}
+in the package is \textbf{not signed}. Firefox installs only add-ons signed by Mozilla, also when a
+policy forces them; Firefox ESR does the same unless the signature check is switched off (tested on
+Firefox ESR 153: the unsigned file is rejected by default and runs with the check off). Two ways:
+\begin{itemize}
+  \item \textbf{Signed (recommended, any Firefox):} the project owner signs the file once as an
+    \emph{unlisted} add-on on addons.mozilla.org. Copy the signed file to
+    \path{/usr/local/share/separ/separ-browser-signed.xpi} and use the template
+    \path{firefox-policies.json}.
+  \item \textbf{Unsigned (Firefox ESR only):} use the template
+    \path{firefox-policies-esr-unsigned.json}. It also switches the signature check off for that
+    machine's Firefox, which lets \emph{any} unsigned add-on run there.
+\end{itemize}
+
+\paragraph{Steps on each machine} (Firefox; templates in \path{/usr/share/separ/browser/}):
+\begin{lstlisting}
+sudo separ browser-install --system                # the local bridge for every user
+sudo systemctl --global enable separ-user.service  # one daemon per user, started at login
+sudo install -D -m 0644 /usr/share/separ/browser/firefox-policies.json \
+     /etc/firefox/policies/policies.json           # or firefox-policies-esr-unsigned.json
+\end{lstlisting}
+\texttt{/etc/firefox/policies/policies.json} is also the right path for the Debian and Kali
+\texttt{firefox-esr} package. If it exists, Firefox ignores the policy file shipped with the
+browser (Debian and Kali ship one), so merge any policies you rely on into it. For Chromium or
+Chrome: pack the extension, host it with an update manifest on an internal web server, put
+\path{chromium-policy.json} (with the extension ID and your URL) in
+\path{/etc/chromium/policies/managed/}, and add \cmd{--chromium-extension-id <id>} to
+\cmd{separ browser-install}.
+
+\paragraph{What users see.} In observe mode (the pilot): nothing. In warn mode: a banner when a page
+puts a dangerous command on the clipboard. In block mode the clipboard is also replaced by a
+warning sentence, so pasting does nothing; on a hold the banner asks \emph{Keep it} or \emph{Remove
+it} (no answer within 60 seconds = remove). A \texttt{!} on the toolbar icon means the user's daemon
+is not running: nothing is checked, and copying and pasting work as usual.
+
+\paragraph{Check.} After a user logs in again: \texttt{about:policies} lists the policy as active
+with no errors, \texttt{about:addons} shows the extension, and its icon shows no \texttt{!}.
 
 % ============================================================================
 \section{Operations}

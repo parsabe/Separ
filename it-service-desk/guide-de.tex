@@ -385,13 +385,7 @@ IT-Sicherheitsbeauftragten festzulegen):
 \label{sec:extras}
 Jede Erweiterung hat eigene Voraussetzungen und wird für den Pilotbetrieb nicht benötigt.
 \begin{description}
-  \item[Browsererweiterung.] Erfordert Firefox ESR 128+ oder Chromium/Chrome 121+ und einen Dienst
-    je Benutzer. Als root (für Chromium zusätzlich \cmd{--chromium-extension-id <id>}):
-\begin{lstlisting}
-sudo separ browser-install --system
-\end{lstlisting}
-    anschließend die Erweiterung mit den Vorlagen für Unternehmensrichtlinien in
-    \path{/usr/share/separ/browser/} verteilen.
+  \item[Browsererweiterung.] Siehe Abschnitt~\ref{sec:browser}.
   \item[Echte Durchsetzung.] Erfordert den Systemdienst als root, cgroup v2 und \cmd{nft} für die
     Netztrennung sowie einen Sensor, der Prozess-IDs meldet (Tetragon oder Falco). Ergänzen Sie
     \cmd{--enforce} in der Zeile \cmd{ExecStart} der Unit mit \cmd{sudo systemctl edit separ}.
@@ -414,6 +408,65 @@ separ ingest check /etc/separ/mappings/<mapping>.yaml --input <sample> --judge
 --notify-command "mail -s Separ admin@example.org"
 \end{lstlisting}
 \end{description}
+
+\subsection{Die Browsererweiterung}
+\label{sec:browser}
+Die Erweiterung beurteilt einen Befehl in dem Moment, in dem eine Webseite ihn in die
+Zwischenablage legt, also bevor ihn jemand einfügen kann, und prüft Downloads gegen die
+Bedrohungslisten. Sie erfordert Firefox ESR 128+ oder Chromium/Chrome 121+.
+
+\paragraph{Wo.} Auf den Rechnern, an denen Menschen \emph{im Web surfen}: Arbeitsplatzrechner,
+PC-Pools, gemeinsam genutzte Anmeldeserver. Die Erweiterung spricht nur mit einem Separ-Dienst auf
+demselben Rechner (Native Messaging, kein Netz); auf einem Server, an dem niemand surft, ist sie
+nutzlos. Eine Richtliniendatei gilt für alle Benutzerkonten dieses Rechners und für keinen anderen
+Rechner; verteilen Sie sie je Rechner mit Ihrem üblichen Konfigurationsmanagement.
+
+\paragraph{Wer.} Die IT, als root, einmal je Rechner. Benutzerinnen und Benutzer installieren
+nichts. Die Browserrichtlinie erzwingt die Installation, sodass alle Benutzer des Rechners die
+Erweiterung in der Symbolleiste sehen und sie weder entfernen noch abschalten können.
+
+\paragraph{Firefox braucht eine signierte Erweiterung.} Die Datei
+\path{/usr/share/separ/browser/separ-browser.xpi} im Paket ist \textbf{nicht signiert}. Firefox
+installiert nur von Mozilla signierte Erweiterungen, auch wenn eine Richtlinie sie erzwingt;
+Firefox ESR ebenso, solange die Signaturprüfung nicht abgeschaltet ist (getestet mit Firefox ESR
+153: die unsignierte Datei wird standardmäßig abgewiesen und läuft bei abgeschalteter Prüfung).
+Zwei Wege:
+\begin{itemize}
+  \item \textbf{Signiert (empfohlen, jeder Firefox):} Der Projektverantwortliche signiert die Datei
+    einmalig als \emph{nicht gelistete} Erweiterung auf addons.mozilla.org. Kopieren Sie die
+    signierte Datei nach \path{/usr/local/share/separ/separ-browser-signed.xpi} und verwenden Sie
+    die Vorlage \path{firefox-policies.json}.
+  \item \textbf{Unsigniert (nur Firefox ESR):} Verwenden Sie die Vorlage
+    \path{firefox-policies-esr-unsigned.json}. Sie schaltet zusätzlich die Signaturprüfung für den
+    Firefox dieses Rechners ab, wodurch dort \emph{jede} unsignierte Erweiterung laufen kann.
+\end{itemize}
+
+\paragraph{Schritte auf jedem Rechner} (Firefox; Vorlagen in \path{/usr/share/separ/browser/}):
+\begin{lstlisting}
+sudo separ browser-install --system                # the local bridge for every user
+sudo systemctl --global enable separ-user.service  # one daemon per user, started at login
+sudo install -D -m 0644 /usr/share/separ/browser/firefox-policies.json \
+     /etc/firefox/policies/policies.json           # or firefox-policies-esr-unsigned.json
+\end{lstlisting}
+\texttt{/etc/firefox/policies/policies.json} ist auch für das Debian- und Kali-Paket
+\texttt{firefox-esr} der richtige Pfad. Ist die Datei vorhanden, ignoriert Firefox die mit dem
+Browser ausgelieferte Richtliniendatei (Debian und Kali liefern eine mit); übernehmen Sie daher
+Richtlinien, auf die Sie angewiesen sind, in Ihre Datei. Für Chromium oder Chrome: die Erweiterung
+packen, mit einem Update-Manifest auf einem internen Webserver bereitstellen,
+\path{chromium-policy.json} (mit der Erweiterungs-ID und Ihrer Adresse) nach
+\path{/etc/chromium/policies/managed/} legen und \cmd{separ browser-install} um
+\cmd{--chromium-extension-id <id>} ergänzen.
+
+\paragraph{Was Benutzer sehen.} Im Beobachtungsmodus (Pilotbetrieb): nichts. Im Warnmodus: einen
+Hinweis, wenn eine Seite einen gefährlichen Befehl in die Zwischenablage legt. Im Blockiermodus wird
+zusätzlich die Zwischenablage durch einen Warnsatz ersetzt, sodass Einfügen nichts bewirkt; beim
+Anhalten fragt der Hinweis \glqq Keep it\grqq{} oder \glqq Remove it\grqq{} (keine Antwort in 60
+Sekunden = entfernen). Ein \texttt{!} am Symbol bedeutet, dass der Dienst des Benutzers nicht läuft:
+dann wird nichts geprüft, und Kopieren und Einfügen funktionieren wie gewohnt.
+
+\paragraph{Prüfung.} Nach einer erneuten Anmeldung: \texttt{about:policies} zeigt die Richtlinie
+als aktiv und ohne Fehler, \texttt{about:addons} zeigt die Erweiterung, und ihr Symbol zeigt kein
+\texttt{!}.
 
 % ============================================================================
 \section{Betrieb}

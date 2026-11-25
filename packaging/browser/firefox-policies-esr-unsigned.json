@@ -1,0 +1,24 @@
+{
+  "policies": {
+    "Preferences": {
+      "xpinstall.signatures.required": {
+        "Value": false,
+        "Status": "locked"
+      }
+    },
+    "ExtensionSettings": {
+      "refmon-browser@refmon.invalid": {
+        "installation_mode": "force_installed",
+        "install_url": "file:///usr/share/separ/browser/separ-browser.xpi"
+      }
+    },
+    "3rdparty": {
+      "Extensions": {
+        "refmon-browser@refmon.invalid": {
+          "checkDownloads": true,
+          "checkNavigation": false
+        }
+      }
+    }
+  }
+}

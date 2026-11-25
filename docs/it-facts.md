@@ -534,6 +534,26 @@ attached, it is every ingested event, so it shows other accounts' names and the 
   a guarded command in the dashboard does not run the command afterwards.
 - **Browser extension holds**: the clipboard is held and the user is asked *Keep it* / *Remove it*;
   no answer within the endpoint hold timeout (60 s) removes it.
+- **Browser extension deployment** (checked 2026-11-24 on Kali, Firefox ESR 153.4, Chromium 154):
+  - the `.xpi` in the package (`/usr/share/separ/browser/separ-browser.xpi`) is not signed. In a
+    test profile Firefox ESR rejected it and removed it with the default setting, and loaded it
+    (`active`, `signedState` 0) with `xpinstall.signatures.required` false. Firefox release builds
+    cannot turn the check off (`MOZ_REQUIRE_SIGNING`); ESR can, also through the `Preferences`
+    policy, which accepts that preference only when signing is not required by the build;
+  - Firefox reads `/etc/<application name, lower case>/policies/policies.json` first
+    (`SysConfD` in the Firefox source); the Debian and Kali `firefox-esr` package has
+    `Name=Firefox`, so the path is `/etc/firefox/policies/policies.json`. When that file exists,
+    the `policies.json` in the browser's `distribution/` folder is not read (Kali ships one);
+  - `separ browser-install --system` writes the launcher `/usr/libexec/separ/refmon-browser-host`
+    and the manifest `org.refmon.browser.json` under `/usr/lib/mozilla/native-messaging-hosts/`
+    (and `/usr/lib64/...`), for Chromium under `/etc/chromium/native-messaging-hosts/` and
+    `/etc/opt/chrome/native-messaging-hosts/` when an extension ID is given;
+  - templates in `/usr/share/separ/browser/`: `firefox-policies.json` (a signed copy at
+    `/usr/local/share/separ/separ-browser-signed.xpi`), `firefox-policies-esr-unsigned.json` (the
+    package's file, with the signature check locked off) and `chromium-policy.json`;
+  - the extension's Firefox ID is `refmon-browser@refmon.invalid`;
+  - not tested here: installing through `/etc/firefox/policies/policies.json` (needs root) and the
+    clipboard path end to end in a real browser session.
 - **Packages and `/etc/separ`**: no file is marked as a configuration file (conffile). Removing the
   package removes the files it installed there (`ingest.yaml`, the examples, `mappings/`) and the
   venv; the `policy.yaml` and `admin.pub` that `separ setup` wrote, and `/var/lib/separ`, stay.
@@ -551,5 +571,7 @@ Standard tools of the target distributions, not part of Separ; the guides use on
 `sudo install -o root -g root -m 0644 <file> /etc/separ/<file>`, `sudo systemctl enable --now
 separ.service`, `sudo systemctl status separ.service`, `sudo systemctl reload separ`,
 `sudo systemctl restart separ`, `sudo systemctl edit separ` (a drop-in with `[Service]` and
-`UMask=0077`), `sudo systemctl --global enable separ-user.service`, `crontab -e`,
+`UMask=0077`), `sudo systemctl --global enable separ-user.service`,
+`sudo install -D -m 0644 /usr/share/separ/browser/<template> /etc/firefox/policies/policies.json`,
+`crontab -e`,
 `grep -c '<text>' <file>`, `scp <file> <host>:` and `uname -m`.
